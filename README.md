@@ -1,82 +1,379 @@
-# 中国房地产与城市政策研究数据库
+# 中国房地产政策数据库
 
-本项目把原始 Excel、标准化实体、论文研究面板和正式发布快照严格分层。原始文件只读保存并登记 SHA-256；所有 Curated 记录都保留来源文件、工作表和原行号。
+## China Real Estate Policy Database
 
-## 十分钟快速开始
+一个面向**房地产政策研究、城市治理分析和宏观政策评估**的开放式政策数据库系统。
+
+本项目旨在将分散于政府网站、政策文件和 Excel 台账中的房地产政策信息，转化为**结构化、可追溯、可查询、可用于实证研究的数据基础设施**。
+
+通过统一的数据标准、政策分类体系和研究接口，本项目支持：
+
+* 房地产政策检索与追踪
+* 城市政策环境比较
+* 政策事件研究（Event Study）
+* 城市—月份/年份面板构建
+* 房地产调控政策量化分析
+* 城市更新、住房保障、土地政策等专题研究
+
+---
+
+## 🌟 项目特点
+
+### 1. 从政策文本到研究数据库
+
+传统房地产政策资料通常存在：
+
+* 来源分散
+* 格式不统一
+* 政策分类标准不一致
+* 难以直接用于计量分析
+
+本项目构建完整的数据处理链：
+
+```
+政策原始文件
+      ↓
+结构化解析
+      ↓
+政策实体标准化
+      ↓
+主题分类与关系构建
+      ↓
+研究型数据库
+      ↓
+分析与应用
+```
+
+实现从“政策资料库”到“政策研究数据库”的转换。
+
+---
+
+## 🏗️ 数据架构
+
+项目采用分层数据架构，保证数据可追溯性和可扩展性。
+
+```
+data/
+
+├── raw/
+│   └── 原始政策文件
+│       （Excel、网页、PDF快照）
+
+├── staging/
+│   └── 数据解析层
+│       （单元格级数据、字段血缘）
+
+├── curated/
+│   └── 标准化政策实体库
+
+├── research/
+│   └── 研究型数据集
+│       （城市-月份、城市-年份面板）
+
+└── releases/
+    └── 数据发布版本
+```
+
+数据处理过程中：
+
+* Raw 层保持只读
+* 所有记录保留来源信息
+* 标准化数据可重新生成
+* 支持版本化发布
+
+---
+
+# 📚 数据内容
+
+数据库围绕中国房地产政策体系进行组织，覆盖：
+
+## 房地产调控政策
+
+包括：
+
+* 限购政策
+* 限贷政策
+* 限售政策
+* 限价政策
+* 公积金政策
+
+## 土地与开发政策
+
+包括：
+
+* 土地供应
+* 土地市场管理
+* 开发建设管理
+* 房地产企业监管
+
+## 住房保障政策
+
+包括：
+
+* 保障性住房
+* 租赁住房
+* 人才住房
+* 共有产权住房
+
+## 城市更新与空间治理
+
+包括：
+
+* 城市更新
+* 老旧小区改造
+* 城中村改造
+* 城市空间治理
+
+## 金融与市场稳定政策
+
+包括：
+
+* 房地产金融监管
+* 信贷支持
+* 风险防范
+* 市场稳定措施
+
+---
+
+# 🔍 核心功能
+
+## 1. 政策检索
+
+支持按照：
+
+* 关键词
+* 地区
+* 时间
+* 政策主题
+* 发布主体
+
+快速查询政策。
+
+示例：
+
+```bash
+policydb search \
+--keyword "城市更新" \
+--region "武汉市" \
+--from 2020-01-01
+```
+
+---
+
+## 2. 政策统计分析
+
+支持：
+
+* 年度政策数量变化
+* 地区政策差异
+* 政策主题演化
+* 发布主体分析
+
+示例：
+
+```bash
+policydb stats \
+--group-by year,province,topic
+```
+
+---
+
+## 3. 研究数据生成
+
+自动生成适用于实证研究的数据：
+
+例如：
+
+```
+城市 × 月份 × 政策事件
+
+城市 × 年份 × 政策环境
+```
+
+示例：
+
+```python
+panel = db.research.city_month_panel(
+    "2015-01-01",
+    "2026-12-31"
+)
+```
+
+可用于：
+
+* DID
+* 事件研究
+* 空间计量
+* 政策冲击分析
+
+---
+
+## 4. 可视化分析平台
+
+提供网页端数据库浏览：
+
+支持：
+
+* 政策体系浏览
+* 数据查询
+* 人工审核
+* 数据下载
+
+运行：
+
+```bash
+policydb dashboard
+```
+
+---
+
+# 🚀 快速开始
+
+## 安装
 
 ```bash
 uv sync --all-extras
+```
+
+## 初始化数据库
+
+```bash
 uv run policydb init
-uv run policydb import-excel "data/raw/seed/【中金不动产与空间服务】政策数据库 20260705.xlsx"
+```
+
+## 导入政策数据
+
+```bash
+uv run policydb import-excel \
+"data/raw/seed/政策数据库.xlsx"
+```
+
+## 数据验证
+
+```bash
 uv run policydb validate
+```
+
+## 启动分析平台
+
+```bash
 uv run policydb dashboard
 ```
 
-按七大政策体系重新生成可查询组织层（不会修改 Raw）：
+---
 
-```bash
-uv run policydb organize-collections
-uv run policydb validate
+# 🧪 数据质量控制
+
+项目包含完整的数据审核机制：
+
+```
+自动解析
+
+↓
+
+人工审核
+
+↓
+
+修正记录
+
+↓
+
+正式发布
 ```
 
-网页左侧“政策体系”可按七大库和细分类浏览、下载。DuckDB 用户可查询
-`v_policy_collection_long`、`v_policy_library_summary`；全部 28 个工作表的原始单元格可通过
-`staging_excel_cells` 追溯。
+人工修改不会覆盖原始数据，而是通过：
 
-常用命令：
+* manual corrections
+* review history
 
-```bash
-uv run policydb search --keyword "城市更新" --region "武汉市" --from 2020-01-01 --official-only
-uv run policydb stats --group-by year,province,topic
-uv run policydb export --view v_city_month_policy_panel --format parquet --output outputs/city_month_panel.parquet
-uv run policydb release --version 0.1.0
+进行记录和追踪。
+
+---
+
+# 🧑‍🔬 适用场景
+
+## 学术研究
+
+适用于：
+
+* 房地产政策效果评价
+* 城市治理研究
+* 土地财政研究
+* 住房市场研究
+
+## 政策分析
+
+适用于：
+
+* 政策周期分析
+* 地方政府政策比较
+* 房地产市场监测
+
+## 数据产品开发
+
+可作为：
+
+* 房地产政策知识库
+* 城市政策数据库
+* AI 政策问答系统基础数据
+
+---
+
+# 📂 项目结构
+
+```
+China-Real-Estate-Policy-Database
+
+├── policydb/
+│   └── 数据库核心代码
+
+├── data/
+│   ├── raw/
+│   ├── curated/
+│   ├── research/
+│   └── releases/
+
+├── docs/
+│   └── 项目文档
+
+├── tests/
+│   └── 自动测试
+
+└── README.md
 ```
 
-人工审核：
+---
 
-```bash
-uv run policydb review generate
-uv run policydb dashboard
-# 在“人工审核中心”完成审核后：
-uv run policydb review apply
-uv run policydb validate
-```
+# 🛠️ 技术栈
 
-网页审核会自动追加 `data/reference/manual_corrections.csv` 和
-`data/logs/review_history.csv`。只有 `review apply` 会把已确认修正应用到 Curated 层；
-Raw 数据不会被修改。重复生成任务或重复应用修正都是幂等操作。
+* Python
+* DuckDB
+* Parquet
+* Streamlit
+* Pandas
+* PyArrow
 
-Python：
+---
 
-```python
-from policydb import PolicyDB
-db = PolicyDB.open()
-results = db.search(keyword="城市更新", region="武汉市", start_date="2020-01-01")
-timeline = db.timeline(region="北京市", topic="限购")
-panel = db.research.city_month_panel("2015-01-01", "2026-12-31")
-db.export(results, "outputs/search.xlsx")
-```
+# 📌 Roadmap
 
-数据库为 `database/policydb.duckdb`，核心表为 `data/curated/*.parquet`。DuckDB 只承担查询与视图，不是唯一存储。外部来源默认禁用，只有审核并启用后才会刷新。
+未来计划：
 
-## 数据分层
+* [ ] 扩展全国城市政策持续更新
+* [ ] 接入政策文本自动抽取模型
+* [ ] 构建房地产政策知识图谱
+* [ ] 支持政策影响自动评估
+* [ ] 发布标准化研究数据集
 
-- `data/raw`：不可变源文件、网页/PDF 快照和哈希。
-- `data/staging/excel`：每个工作表一个单元格级 Parquet，包含公式、合并区域、隐藏状态和血缘。
-- `data/curated`：统一实体与关系表。
-- `data/research`：城市—月份、城市—年份、事件研究数据。
-- `data/releases`：不可变发布包。
+---
 
-详见 `docs/`。运行 `uv run pytest` 和 `uv run ruff check .` 复核系统。
+# 📖 项目愿景
 
-## GitHub 发布版
+房地产政策是理解中国城市发展、住房市场变化和地方治理逻辑的重要窗口。
 
-GitHub Pages 无法直接运行 Streamlit。本项目已准备为“GitHub 仓库 + Streamlit Community Cloud”部署：
+本项目希望构建一个：
 
-- 云端使用精简的 `requirements.txt`；
-- 审核任务分页加载，每页 50 条，避免一次渲染 5,000 条任务；
-- `POLICYDB_READ_ONLY=1` 可将公开网站设为只读；
-- Raw Excel、审核日志、人工修正和虚拟环境不会进入 GitHub；
-- 推送后由 GitHub Actions 自动运行测试与数据验证。
+> **开放、持续更新、可验证、可用于科研与决策分析的中国房地产政策基础数据库。**
 
-完整步骤见 [GitHub 发布说明](docs/github_deployment.md)。
+欢迎研究者、开发者和政策分析人员共同完善。
