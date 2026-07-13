@@ -1,0 +1,4 @@
+interface:
+  display_name: "构建研究面板"
+  short_description: "Build city-month, city-year, and event datasets"
+  default_prompt: "Use $build-research-panel to build reproducible city-month, city-year, and event-study datasets."

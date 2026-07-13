@@ -1,0 +1,26 @@
+{
+  "created_at": "2026-07-13T09:09:47.490822+00:00",
+  "collection_count": 7,
+  "subcollection_count": 34,
+  "staging_sheet_count": 28,
+  "mapped_sheet_count": 28,
+  "staging_cell_count": 91793,
+  "catalog_cell_count": 91793,
+  "unmapped_sheet_count": 0,
+  "unmapped_cell_count": 0,
+  "record_count": 3568,
+  "classified_record_count": 3568,
+  "subclassified_record_count": 3568,
+  "unclassified_record_count": 0,
+  "record_collection_relation_count": 18974,
+  "collection_record_counts": {
+    "central_party_state": 458,
+    "financial_regulation": 1693,
+    "housing_urban_rural_development": 1744,
+    "local_government": 3128,
+    "natural_resources": 493,
+    "risk_support": 528,
+    "tracking_statistics": 3150
+  },
+  "passed": true
+}

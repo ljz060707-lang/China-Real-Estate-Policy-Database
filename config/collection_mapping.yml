@@ -1,0 +1,329 @@
+sheet_mappings:
+  "T2 城市房地产政策现状":
+    source_kind: manual_coding
+    primary: {collection: tracking_statistics, subcollection: city_policy_status}
+    secondary:
+      - {collection: local_government, subcollection: null}
+    rationale: 城市政策状态横向矩阵；原单元格完整保留。
+  "T3.1 2020年楼市政策变动":
+    source_kind: manual_coding
+    primary: {collection: tracking_statistics, subcollection: policy_changes}
+    secondary:
+      - {collection: local_government, subcollection: null}
+    rationale: 记录地方政策调整前后变化。
+  "T4 分城市政策统计表":
+    source_kind: derived_statistics
+    primary: {collection: tracking_statistics, subcollection: policy_statistics}
+    secondary: []
+    rationale: 分城市统计与展示数据。
+  "T3 2021年末官方表态":
+    source_kind: manual_coding
+    primary: {collection: central_party_state, subcollection: market_regulation}
+    secondary:
+      - {collection: tracking_statistics, subcollection: policy_changes}
+    rationale: 2021年末中央和官方房地产政策表态。
+  "能级划分":
+    source_kind: reference
+    primary: {collection: tracking_statistics, subcollection: city_policy_status}
+    secondary: []
+    rationale: 城市能级研究属性参考表。
+  "T1 房地产政策目录":
+    source_kind: master_directory
+    primary: {collection: tracking_statistics, subcollection: policy_statistics}
+    secondary: []
+    rationale: 跨部门主政策目录；具体制度归属由记录级规则多标签识别。
+  "T4 2023年城市需求支持政策":
+    source_kind: manual_coding
+    primary: {collection: local_government, subcollection: home_purchase_support}
+    secondary:
+      - {collection: tracking_statistics, subcollection: policy_statistics}
+      - {collection: local_government, subcollection: purchase_restriction}
+      - {collection: local_government, subcollection: loan_restriction}
+      - {collection: local_government, subcollection: sale_restriction}
+      - {collection: local_government, subcollection: provident_fund}
+    rationale: 城市需求侧支持政策及人工编码特征。
+  "T4 2023年数量统计图表":
+    source_kind: derived_statistics
+    primary: {collection: tracking_statistics, subcollection: policy_statistics}
+    secondary: []
+    rationale: 由政策数据派生的数量统计和图表辅助数据。
+  "T5 供给侧措施":
+    source_kind: manual_coding
+    primary: {collection: housing_urban_rural_development, subcollection: housing_supply}
+    secondary:
+      - {collection: housing_urban_rural_development, subcollection: risk_resolution}
+      - {collection: local_government, subcollection: developer_support}
+    rationale: 房地产供给侧、风险化解及房企支持措施。
+  "T6 城市限售政策汇总":
+    source_kind: manual_coding
+    primary: {collection: local_government, subcollection: sale_restriction}
+    secondary:
+      - {collection: tracking_statistics, subcollection: city_policy_status}
+    rationale: 城市限售条款和状态汇总。
+  "T7 中央经济工作会议":
+    source_kind: official_event
+    primary: {collection: central_party_state, subcollection: macroeconomic_policy}
+    secondary:
+      - {collection: central_party_state, subcollection: market_regulation}
+    rationale: 中央经济工作会议房地产及宏观表述。
+  "T7 简版":
+    source_kind: derived_display
+    primary: {collection: central_party_state, subcollection: macroeconomic_policy}
+    secondary: []
+    rationale: 中央经济工作会议派生简版。
+  "T8 中央政治局会议":
+    source_kind: official_event
+    primary: {collection: central_party_state, subcollection: market_regulation}
+    secondary:
+      - {collection: central_party_state, subcollection: macroeconomic_policy}
+      - {collection: central_party_state, subcollection: development_strategy}
+    rationale: 中央政治局会议房地产和宏观政策表述。
+  "T8 横版":
+    source_kind: derived_display
+    primary: {collection: central_party_state, subcollection: market_regulation}
+    secondary: []
+    rationale: 中央政治局会议派生横版。
+  "T9 全国住建工作会议":
+    source_kind: official_event
+    primary: {collection: housing_urban_rural_development, subcollection: market_supervision}
+    secondary:
+      - {collection: housing_urban_rural_development, subcollection: housing_supply}
+      - {collection: housing_urban_rural_development, subcollection: risk_resolution}
+      - {collection: housing_urban_rural_development, subcollection: urban_renewal}
+    rationale: 全国住房城乡建设工作会议政策部署。
+  "T10 政府工作报告":
+    source_kind: official_event
+    primary: {collection: central_party_state, subcollection: development_strategy}
+    secondary:
+      - {collection: central_party_state, subcollection: housing_security}
+      - {collection: central_party_state, subcollection: urban_renewal}
+      - {collection: central_party_state, subcollection: macroeconomic_policy}
+    rationale: 国务院政府工作报告房地产相关内容。
+  "T10 政府工作报告-视频":
+    source_kind: derived_display
+    primary: {collection: central_party_state, subcollection: development_strategy}
+    secondary: []
+    rationale: 政府工作报告派生视频展示表。
+  "T11 2007年以来历届全国党代会":
+    source_kind: official_event
+    primary: {collection: central_party_state, subcollection: development_strategy}
+    secondary:
+      - {collection: central_party_state, subcollection: macroeconomic_policy}
+    rationale: 历届全国党代会房地产和住房发展战略表述。
+  "T12 央行、银保监会、证监会、住建部2014年至今政策梳理":
+    source_kind: manual_coding
+    primary: {collection: financial_regulation, subcollection: financial_support_tools}
+    secondary:
+      - {collection: financial_regulation, subcollection: resident_housing_credit}
+      - {collection: financial_regulation, subcollection: developer_financing}
+      - {collection: financial_regulation, subcollection: risk_disposal}
+      - {collection: financial_regulation, subcollection: capital_market_support}
+      - {collection: housing_urban_rural_development, subcollection: risk_resolution}
+    rationale: 金融监管部门与住建部政策联合梳理。
+  "房地产项目白名单（城市情况）":
+    source_kind: programme_tracking
+    primary: {collection: risk_support, subcollection: whitelist}
+    secondary:
+      - {collection: financial_regulation, subcollection: financial_support_tools}
+    rationale: 房地产项目白名单城市进展。
+  "房地产项目白名单（企业情况）":
+    source_kind: programme_tracking
+    primary: {collection: risk_support, subcollection: whitelist}
+    secondary:
+      - {collection: risk_support, subcollection: developer_relief}
+    rationale: 房地产项目白名单企业进展。
+  "PSL专项贷款":
+    source_kind: programme_tracking
+    primary: {collection: risk_support, subcollection: psl}
+    secondary:
+      - {collection: financial_regulation, subcollection: financial_support_tools}
+    rationale: PSL专项贷款授信、发放和项目进展。
+  "T11 政治局会议和中央经济工作会议汇总":
+    source_kind: derived_display
+    primary: {collection: central_party_state, subcollection: macroeconomic_policy}
+    secondary:
+      - {collection: tracking_statistics, subcollection: policy_statistics}
+    rationale: 中央重要会议房地产表述派生汇总。
+  "T12 二手房参考价":
+    source_kind: manual_coding
+    primary: {collection: housing_urban_rural_development, subcollection: market_supervision}
+    secondary:
+      - {collection: local_government, subcollection: null}
+    rationale: 地方二手房参考价及市场监管政策。
+  "T13 2021年楼市政策变动":
+    source_kind: manual_coding
+    primary: {collection: tracking_statistics, subcollection: policy_changes}
+    secondary:
+      - {collection: local_government, subcollection: null}
+    rationale: 2021年地方楼市政策变化。
+  "T14 禁马甲土拍限制":
+    source_kind: manual_coding
+    primary: {collection: natural_resources, subcollection: land_transactions}
+    secondary:
+      - {collection: natural_resources, subcollection: land_supervision}
+      - {collection: local_government, subcollection: land_policy}
+    rationale: 土地竞拍主体和交易监管限制。
+  "T8 政治局会议":
+    source_kind: manual_coding
+    primary: {collection: central_party_state, subcollection: market_regulation}
+    secondary:
+      - {collection: central_party_state, subcollection: macroeconomic_policy}
+    rationale: 政治局会议房地产政策表述专题表。
+  "附录1 疫情期间政策跟踪":
+    source_kind: special_period_tracking
+    primary: {collection: tracking_statistics, subcollection: special_periods}
+    secondary:
+      - {collection: local_government, subcollection: home_purchase_support}
+    rationale: 疫情期间房地产政策跟踪。
+
+record_rules:
+  - rule_id: central_strategy
+    collection: central_party_state
+    subcollection: development_strategy
+    keywords: [发展战略, 新发展模式, 长效机制, 房住不炒, 房地产发展]
+    confidence: 0.86
+  - rule_id: central_market_regulation
+    collection: central_party_state
+    subcollection: market_regulation
+    keywords: [市场调控, 稳房价, 稳地价, 稳预期, 因城施策, 房地产市场平稳]
+    confidence: 0.84
+  - rule_id: central_housing_security
+    collection: central_party_state
+    subcollection: housing_security
+    keywords: [住房保障, 保障性住房, 保障房, 保障性租赁住房]
+    confidence: 0.90
+  - rule_id: central_urban_renewal
+    collection: central_party_state
+    subcollection: urban_renewal
+    keywords: [城市更新, 城中村改造, 老旧小区改造, 危旧房改造]
+    confidence: 0.90
+  - rule_id: central_macro
+    collection: central_party_state
+    subcollection: macroeconomic_policy
+    keywords: [宏观经济, 经济工作会议, 货币政策, 财政政策, 扩大内需]
+    confidence: 0.84
+  - rule_id: housing_transactions
+    collection: housing_urban_rural_development
+    subcollection: housing_transactions
+    keywords: [住房交易, 商品房交易, 二手房交易, 网签, 预售许可]
+    confidence: 0.86
+  - rule_id: housing_market_supervision
+    collection: housing_urban_rural_development
+    subcollection: market_supervision
+    keywords: [市场监管, 预售资金监管, 二手房参考价, 住房品质, 物业管理]
+    confidence: 0.88
+  - rule_id: housing_supply
+    collection: housing_urban_rural_development
+    subcollection: housing_supply
+    keywords: [住房供应, 增加供给, 商品房收储, 保障性住房供给, 租赁住房]
+    confidence: 0.86
+  - rule_id: housing_risk_resolution
+    collection: housing_urban_rural_development
+    subcollection: risk_resolution
+    keywords: [风险化解, 保交楼, 保交房, 房地产风险, 项目处置]
+    confidence: 0.90
+  - rule_id: housing_urban_renewal
+    collection: housing_urban_rural_development
+    subcollection: urban_renewal
+    keywords: [城市更新, 城中村改造, 老旧小区改造, 危旧房改造]
+    confidence: 0.90
+  - rule_id: resident_credit
+    collection: financial_regulation
+    subcollection: resident_housing_credit
+    keywords: [住房贷款, 房贷利率, 首付比例, 商业住房贷款, 认房不认贷, 限贷]
+    confidence: 0.90
+  - rule_id: developer_financing
+    collection: financial_regulation
+    subcollection: developer_financing
+    keywords: [房企融资, 房地产融资, 开发贷, 融资协调机制, 三支箭, 银行授信]
+    confidence: 0.90
+  - rule_id: financial_risk_disposal
+    collection: financial_regulation
+    subcollection: risk_disposal
+    keywords: [债务风险, 风险处置, 出险房企, 金融风险, 债务重组]
+    confidence: 0.88
+  - rule_id: financial_support_tools
+    collection: financial_regulation
+    subcollection: financial_support_tools
+    keywords: [PSL, 抵押补充贷款, 专项借款, 再贷款, 金融支持, 融资担保]
+    confidence: 0.92
+  - rule_id: capital_market_support
+    collection: financial_regulation
+    subcollection: capital_market_support
+    keywords: [REITs, 资本市场, 股权融资, 债券融资, 并购重组]
+    confidence: 0.90
+  - rule_id: land_supply
+    collection: natural_resources
+    subcollection: land_supply
+    keywords: [土地供应, 供地, 住宅用地供应, 存量土地盘活]
+    confidence: 0.90
+  - rule_id: land_transactions
+    collection: natural_resources
+    subcollection: land_transactions
+    keywords: [土地交易, 土地竞拍, 土拍, 集中供地, 招拍挂]
+    confidence: 0.90
+  - rule_id: land_supervision
+    collection: natural_resources
+    subcollection: land_supervision
+    keywords: [土地监管, 闲置土地, 马甲土拍, 竞买资格, 土地用途管制]
+    confidence: 0.90
+  - rule_id: land_prices
+    collection: natural_resources
+    subcollection: land_prices
+    keywords: [土地价格, 地价, 限地价, 土地出让价, 楼面价]
+    confidence: 0.88
+  - rule_id: local_purchase_restriction
+    collection: local_government
+    subcollection: purchase_restriction
+    keywords: [限购, 取消限购, 放松限购, 购房资格]
+    confidence: 0.94
+  - rule_id: local_loan_restriction
+    collection: local_government
+    subcollection: loan_restriction
+    keywords: [限贷, 首付比例, 认房不认贷, 贷款套数]
+    confidence: 0.92
+  - rule_id: local_sale_restriction
+    collection: local_government
+    subcollection: sale_restriction
+    keywords: [限售, 取消限售, 放松限售, 转让年限]
+    confidence: 0.94
+  - rule_id: local_provident_fund
+    collection: local_government
+    subcollection: provident_fund
+    keywords: [公积金, 公积金贷款, 公积金额度]
+    confidence: 0.94
+  - rule_id: local_purchase_support
+    collection: local_government
+    subcollection: home_purchase_support
+    keywords: [购房补贴, 购房支持, 以旧换新, 房票, 人才购房, 契税补贴]
+    confidence: 0.90
+  - rule_id: local_developer_support
+    collection: local_government
+    subcollection: developer_support
+    keywords: [房企支持, 房企纾困, 企业纾困, 支持房地产企业, 房地产企业融资]
+    confidence: 0.88
+  - rule_id: local_land_policy
+    collection: local_government
+    subcollection: land_policy
+    keywords: [土地政策, 土地供应, 土地竞拍, 土拍, 供地]
+    confidence: 0.86
+  - rule_id: risk_whitelist
+    collection: risk_support
+    subcollection: whitelist
+    keywords: [白名单, 融资协调机制]
+    confidence: 0.96
+  - rule_id: risk_delivery
+    collection: risk_support
+    subcollection: delivery_guarantee
+    keywords: [保交楼, 保交房, 交付保障]
+    confidence: 0.96
+  - rule_id: risk_developer_relief
+    collection: risk_support
+    subcollection: developer_relief
+    keywords: [房企纾困, 出险房企, 企业纾困, 债务重组]
+    confidence: 0.92
+  - rule_id: risk_psl
+    collection: risk_support
+    subcollection: psl
+    keywords: [PSL, 抵押补充贷款]
+    confidence: 0.98

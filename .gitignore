@@ -1,0 +1,15 @@
+.venv*/
+__pycache__/
+.pytest_cache/
+.test-tmp-*/
+.ruff_cache/
+.env
+.streamlit/secrets.toml
+*.pyc
+data/raw/
+data/releases/
+data/curated/history/
+data/logs/*.csv
+data/reference/manual_corrections.csv
+database/*.duckdb.wal
+outputs/

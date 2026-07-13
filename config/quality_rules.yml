@@ -1,0 +1,18 @@
+source_quality:
+  government_original: 5
+  official_reprint: 4
+  authoritative_media: 3
+  general_media: 2
+  self_media: 1
+  unverified: 0
+intensity_weights:
+  strength: {0: 0.0, 1: 1.0, 2: 2.0, 3: 3.0}
+  direction: {tightening: -1.0, loosening: 1.0, supportive: 1.0, neutral: 0.0, mixed: 0.0, unknown: 0.0}
+  official_multiplier: 1.0
+sensitivity:
+  conservative: {official_multiplier: 1.2, source_quality_floor: 4}
+  inclusive: {official_multiplier: 1.0, source_quality_floor: 0}
+thresholds:
+  classification_low_confidence: 0.65
+  geography_low_confidence: 0.80
+  duplicate_similarity: 92

@@ -1,0 +1,4 @@
+interface:
+  display_name: "导入政策数据"
+  short_description: "Import immutable and traceable policy source data"
+  default_prompt: "Use $import-policy-data to ingest a new source with immutable raw storage."

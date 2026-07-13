@@ -1,0 +1,117 @@
+dimensions:
+  topic:
+    - 宏观政策
+    - 房地产市场
+    - 城市更新
+    - 住房保障
+    - 保障性租赁住房
+    - 城中村改造
+    - 老旧小区改造
+    - 危旧房改造
+    - 土地供应
+    - 存量土地盘活
+    - 商品房收储
+    - 住房以旧换新
+    - 项目白名单
+    - 保交楼
+    - 预售资金监管
+    - 房企融资
+    - 房地产债务
+    - 住房租赁
+    - REITs
+    - 公积金
+    - 商业住房贷款
+    - 购房补贴
+    - 人才住房
+    - 税费政策
+    - 落户政策
+    - 限购
+    - 限售
+    - 限贷
+    - 限价
+    - 二手房参考价
+    - 土地竞拍
+    - 住房品质
+    - 物业管理
+    - 其他
+  instrument:
+    - 法律监管
+    - 行政管制
+    - 财政补贴
+    - 税收优惠
+    - 信贷支持
+    - 利率工具
+    - 公积金工具
+    - 土地工具
+    - 规划工具
+    - 公共投资
+    - 政府采购或收储
+    - 融资担保
+    - 信息披露
+    - 人才激励
+    - 组织协调
+    - 试点示范
+    - 市场化工具
+  policy_stage: [需求侧, 供给侧, 金融侧, 土地侧, 企业侧, 项目侧, 居民侧, 综合性]
+  strength:
+    0: 无明确措施或仅原则表态
+    1: 弱措施
+    2: 中等措施
+    3: 强措施
+
+research_collections:
+  central_party_state:
+    name: 党中央国务院政策
+    subcollections:
+      development_strategy: 房地产发展战略
+      market_regulation: 市场调控
+      housing_security: 住房保障
+      urban_renewal: 城市更新
+      macroeconomic_policy: 宏观经济政策
+  housing_urban_rural_development:
+    name: 住房城乡建设部门政策
+    subcollections:
+      housing_transactions: 住房交易政策
+      market_supervision: 市场监管政策
+      housing_supply: 住房供应政策
+      risk_resolution: 风险化解政策
+      urban_renewal: 城市更新政策
+  financial_regulation:
+    name: 金融监管部门政策
+    subcollections:
+      resident_housing_credit: 居民住房信贷
+      developer_financing: 房企融资
+      risk_disposal: 风险处置
+      financial_support_tools: 金融支持工具
+      capital_market_support: 资本市场支持
+  natural_resources:
+    name: 自然资源部门政策
+    subcollections:
+      land_supply: 土地供应
+      land_transactions: 土地交易
+      land_supervision: 土地监管
+      land_prices: 土地价格
+  local_government:
+    name: 地方政府房地产政策
+    subcollections:
+      purchase_restriction: 限购
+      loan_restriction: 限贷
+      sale_restriction: 限售
+      provident_fund: 公积金
+      home_purchase_support: 购房支持
+      developer_support: 房企支持
+      land_policy: 土地政策
+  risk_support:
+    name: 房地产风险支持专项库
+    subcollections:
+      whitelist: 白名单
+      delivery_guarantee: 保交楼
+      developer_relief: 房企纾困
+      psl: PSL专项贷款
+  tracking_statistics:
+    name: 政策跟踪与统计库
+    subcollections:
+      city_policy_status: 城市政策状态
+      policy_changes: 政策变化
+      policy_statistics: 政策数量统计
+      special_periods: 特殊时期政策

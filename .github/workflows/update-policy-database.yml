@@ -1,0 +1,14 @@
+name: update-policy-database
+on:
+  workflow_dispatch:
+  schedule: [{cron: "0 2 * * 1"}]
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions: {contents: read}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --all-extras
+      - run: uv run policydb validate
+      - run: uv run pytest

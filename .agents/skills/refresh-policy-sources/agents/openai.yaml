@@ -1,0 +1,4 @@
+interface:
+  display_name: "刷新政策来源"
+  short_description: "Refresh reviewed sources with immutable snapshots"
+  default_prompt: "Use $refresh-policy-sources to refresh reviewed policy sources without overwriting history."

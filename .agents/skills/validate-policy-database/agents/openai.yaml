@@ -1,0 +1,4 @@
+interface:
+  display_name: "验证政策数据库"
+  short_description: "Validate policy data quality, lineage, counts, and views"
+  default_prompt: "Use $validate-policy-database to validate record counts, lineage, quality rules, and research views."

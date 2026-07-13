@@ -1,0 +1,4 @@
+interface:
+  display_name: "发布政策数据"
+  short_description: "Publish validated, hashed, citable data snapshots"
+  default_prompt: "Use $publish-policy-release to validate and publish a hashed, citable policy database release."

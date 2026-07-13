@@ -1,0 +1,4 @@
+interface:
+  display_name: "标准化政策记录"
+  short_description: "Normalize policy entities while retaining evidence"
+  default_prompt: "Use $normalize-policy-records to normalize records and preserve evidence."
