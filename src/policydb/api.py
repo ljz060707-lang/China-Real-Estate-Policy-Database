@@ -21,6 +21,12 @@ class ResearchAPI:
     def city_year_panel(self, start_date=None, end_date=None) -> pl.DataFrame:
         return self.db._dated_view("v_city_year_policy_panel", start_date, end_date)
 
+    def city_month_panel_105(self, start_date=None, end_date=None) -> pl.DataFrame:
+        return self.db._dated_view("v_city_month_policy_panel_105", start_date, end_date)
+
+    def city_year_panel_105(self, start_date=None, end_date=None) -> pl.DataFrame:
+        return self.db._dated_view("v_city_year_policy_panel_105", start_date, end_date)
+
     def event_window(self, event_type: str, window=(-12, 24), unit="month") -> pl.DataFrame:
         frame = self.db._query("SELECT * FROM v_city_month_policy_panel")
         return frame.with_columns(
@@ -123,14 +129,23 @@ class PolicyDB:
 
     def _dated_view(self, view: str, start_date=None, end_date=None) -> pl.DataFrame:
         clauses, params = ["1=1"], []
+        year_only = "_year_" in view
         if start_date:
             y, m = map(int, str(start_date)[:7].split("-"))
-            clauses.append("(year>? OR (year=? AND month>=?))")
-            params += [y, y, m]
+            if year_only:
+                clauses.append("year>=?")
+                params.append(y)
+            else:
+                clauses.append("(year>? OR (year=? AND month>=?))")
+                params += [y, y, m]
         if end_date:
             y, m = map(int, str(end_date)[:7].split("-"))
-            clauses.append("(year<? OR (year=? AND month<=?))")
-            params += [y, y, m]
+            if year_only:
+                clauses.append("year<=?")
+                params.append(y)
+            else:
+                clauses.append("(year<? OR (year=? AND month<=?))")
+                params += [y, y, m]
         return self._query(f"SELECT * FROM {view} WHERE {' AND '.join(clauses)}", params)
 
     def export(self, data: pl.DataFrame | str, path: str | Path) -> Path:

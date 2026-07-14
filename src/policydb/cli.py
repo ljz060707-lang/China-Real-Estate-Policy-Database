@@ -2,22 +2,36 @@ from __future__ import annotations
 
 import json
 import subprocess
+from datetime import date, timedelta
 from pathlib import Path
+from typing import Annotated
 
 import typer
 
 from policydb.api import PolicyDB
+from policydb.crawl.pipeline import CrawlPipeline
+from policydb.enrich.glm import GLMEnricher
+from policydb.export.excel_compatible import export_excel_compatible
 from policydb.export.release import create_release
 from policydb.ingest.excel import import_excel, inventory_excel
 from policydb.query.database import build_database
 from policydb.review import apply_corrections, generate_review_tasks
+from policydb.scope import materialize_city_scope
 from policydb.settings import Settings
+from policydb.sources import bootstrap_sources_from_excel
 from policydb.transform.collections import build_collection_layer
+from policydb.transform.t4_matching import build_t4_match_candidates
 from policydb.validate.quality import validate as validate_db
 
 app = typer.Typer(no_args_is_help=True, help="中国房地产与城市政策研究数据库")
 review_app = typer.Typer(no_args_is_help=True, help="生成、处理和应用人工审核任务")
+sources_app = typer.Typer(no_args_is_help=True, help="管理政策来源注册表")
+crawl_app = typer.Typer(no_args_is_help=True, help="断点续跑的政策网页抓取")
+enrich_app = typer.Typer(no_args_is_help=True, help="可选的结构化模型辅助提取")
 app.add_typer(review_app, name="review")
+app.add_typer(sources_app, name="sources")
+app.add_typer(crawl_app, name="crawl")
+app.add_typer(enrich_app, name="enrich")
 
 
 @app.command()
@@ -135,6 +149,102 @@ def organize_collections():
     typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
 
 
+@app.command("build-city-scope")
+def build_city_scope():
+    """校验105城市范围并生成适用城市关系及研究视图。"""
+    result = materialize_city_scope()
+    build_database()
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@app.command("match-t4")
+def match_t4():
+    """生成T4到T1的精确/模糊匹配候选；模糊结果不自动应用。"""
+    result = build_t4_match_candidates()
+    build_database()
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@sources_app.command("bootstrap-from-excel")
+def sources_bootstrap_from_excel(
+    workbook: Annotated[Path | None, typer.Argument()] = None,
+):
+    """从Excel单元格级Staging提取所有有效URL并生成来源注册表。"""
+    result = bootstrap_sources_from_excel(workbook)
+    build_database()
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+def _date(value: str) -> date:
+    return date.today() if value == "today" else date.fromisoformat(value)
+
+
+@crawl_app.command("backfill")
+def crawl_backfill(
+    scope: str = typer.Option("large-cities-105", "--scope"),
+    from_: str = typer.Option("2018-01-01", "--from"),
+    to: str = typer.Option("today", "--to"),
+    official_first: bool = typer.Option(True, "--official-first/--no-official-first"),
+):
+    """按已审核并启用的来源规划和执行历史回溯。"""
+    if scope != "large-cities-105":
+        raise typer.BadParameter("Only large-cities-105 is configured")
+    pipeline = CrawlPipeline()
+    plan = pipeline.plan(
+        run_type="backfill",
+        start_date=_date(from_),
+        end_date=_date(to),
+        official_first=official_first,
+    )
+    result = pipeline.run(plan["run_id"])
+    build_database()
+    typer.echo(json.dumps({**plan, **result}, ensure_ascii=False, indent=2))
+
+
+@crawl_app.command("update")
+def crawl_update(scope: str = typer.Option("large-cities-105", "--scope")):
+    """只抓取注册表中已启用来源的增量入口。"""
+    if scope != "large-cities-105":
+        raise typer.BadParameter("Only large-cities-105 is configured")
+    pipeline = CrawlPipeline()
+    plan = pipeline.plan(
+        run_type="incremental",
+        start_date=date.today() - timedelta(days=7),
+        end_date=date.today(),
+    )
+    result = pipeline.run(plan["run_id"])
+    build_database()
+    typer.echo(json.dumps({**plan, **result}, ensure_ascii=False, indent=2))
+
+
+@crawl_app.command("audit")
+def crawl_audit(scope: str = typer.Option("large-cities-105", "--scope")):
+    if scope != "large-cities-105":
+        raise typer.BadParameter("Only large-cities-105 is configured")
+    typer.echo(json.dumps(CrawlPipeline().audit(), ensure_ascii=False, indent=2))
+
+
+@enrich_app.command("glm")
+def enrich_glm(pending_only: bool = typer.Option(True, "--pending-only/--all")):
+    """处理待提取正文；无GLM_API_KEY时仅建立待处理缓存。"""
+    _ = pending_only
+    result = GLMEnricher().enrich_pending()
+    build_database()
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@app.command("export-excel")
+def export_excel(
+    template: Annotated[Path, typer.Option("--template")],
+    output: Annotated[Path, typer.Option("--output")],
+):
+    typer.echo(
+        json.dumps(
+            export_excel_compatible(template, output), ensure_ascii=False, indent=2
+        )
+    )
+
+
 @review_app.command("generate")
 def review_generate():
     """扫描当前数据库并生成待审核任务；已审核任务不会被覆盖。"""
@@ -148,6 +258,7 @@ def review_generate():
         "unmatched_t4",
         "unexplained_t2",
         "duplicate_record",
+        "other",
     ):
         typer.echo(f"  {review_type}: {result['discovered'].get(review_type, 0)}")
     typer.echo(f"本次新增任务：{result['created_total']}")

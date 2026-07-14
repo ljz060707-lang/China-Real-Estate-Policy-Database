@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import re
 import shutil
 from collections import Counter
 from datetime import UTC, datetime
@@ -258,6 +259,77 @@ def generate_review_tasks(settings: Settings | None = None) -> dict:
             ).fetchall()
             if value[0]
         }
+        available = {
+            row[0]
+            for row in con.execute(
+                "SELECT table_name FROM information_schema.tables"
+            ).fetchall()
+        }
+        if "policy_applicable_cities" in available:
+            for relation_id, record_id, city_id, evidence, confidence in con.execute(
+                """SELECT policy_applicable_city_id,record_id,city_id,evidence,confidence
+                   FROM policy_applicable_cities WHERE needs_review"""
+            ).fetchall():
+                tasks.append(
+                    _make_task(
+                        "other",
+                        record_id=record_id,
+                        field_name="policy_applicable_cities.city_id",
+                        source_sheet="105城市适用范围",
+                        source_cell=relation_id,
+                        old_value=city_id,
+                        confidence=confidence,
+                        evidence_url=evidence,
+                    )
+                )
+        if "policy_sources" in available:
+            for source_relation_id, record_id, url, status in con.execute(
+                """SELECT policy_source_id,record_id,source_url,official_status
+                   FROM policy_sources WHERE needs_review"""
+            ).fetchall():
+                tasks.append(
+                    _make_task(
+                        "other",
+                        record_id=record_id,
+                        field_name="policy_sources.canonical_source",
+                        source_sheet="Excel来源注册表",
+                        source_cell=source_relation_id,
+                        old_value=status,
+                        evidence_url=url,
+                    )
+                )
+        if "llm_extractions" in available:
+            for extraction_id, confidence, status in con.execute(
+                """SELECT extraction_id,confidence,status FROM llm_extractions
+                   WHERE needs_review"""
+            ).fetchall():
+                tasks.append(
+                    _make_task(
+                        "other",
+                        field_name="llm_extractions.output_json",
+                        source_sheet="GLM结构化提取",
+                        source_cell=extraction_id,
+                        old_value=status,
+                        confidence=confidence,
+                    )
+                )
+        if "t4_match_candidates" in available:
+            for row_number, candidate_id, _title, score, evidence in con.execute(
+                """SELECT source_row,candidate_record_id,policy_title_raw,match_score,evidence
+                   FROM t4_match_candidates WHERE review_status='pending'"""
+            ).fetchall():
+                tasks.append(
+                    _make_task(
+                        "unmatched_t4",
+                        field_name="t4_match_candidates.candidate_record_id",
+                        source_sheet="T4 2023年城市需求支持政策",
+                        source_cell=f"ROW:{row_number}:{candidate_id}",
+                        old_value=candidate_id,
+                        suggested_value=candidate_id,
+                        confidence=(score or 0) / 100,
+                        evidence_url=evidence,
+                    )
+                )
         existing_ids = {
             value[0] for value in con.execute("SELECT task_id FROM manual_review_tasks").fetchall()
         }
@@ -489,10 +561,14 @@ def apply_corrections(settings: Settings | None = None) -> dict:
     terms_path = settings.curated / "record_terms.parquet"
     features_path = settings.curated / "policy_features.parquet"
     rules_path = settings.curated / "city_policy_rules.parquet"
+    t4_candidates_path = settings.curated / "t4_match_candidates.parquet"
     records = pl.read_parquet(records_path)
     terms = pl.read_parquet(terms_path)
     features = pl.read_parquet(features_path)
     rules = pl.read_parquet(rules_path)
+    t4_candidates = (
+        pl.read_parquet(t4_candidates_path) if t4_candidates_path.exists() else None
+    )
     changed = Counter()
 
     for correction in latest.values():
@@ -603,6 +679,41 @@ def apply_corrections(settings: Settings | None = None) -> dict:
                 )
                 rules = pl.concat([rules, addition])
                 changed["city_policy_rules"] += 1
+        elif (
+            decision in {"approved", "corrected"}
+            and base_field == "t4_match_candidates.candidate_record_id"
+            and locator
+            and t4_candidates is not None
+        ):
+            row_match = re.search(r"ROW:(\d+)", locator)
+            if row_match:
+                source_row = int(row_match.group(1))
+                candidate_id = new_value
+                feature_matches = (
+                    pl.col("source_sheet") == "T4 2023年城市需求支持政策"
+                ) & (
+                    pl.col("source_cell").str.extract(r"(\d+)", 1).cast(pl.Int64)
+                    == source_row
+                )
+                if features.filter(feature_matches).height:
+                    features = features.with_columns(
+                        pl.when(feature_matches)
+                        .then(pl.lit(candidate_id))
+                        .otherwise(pl.col("record_id"))
+                        .alias("record_id")
+                    )
+                    changed["policy_features"] += 1
+                candidate_matches = (
+                    (pl.col("source_row") == source_row)
+                    & (pl.col("candidate_record_id") == candidate_id)
+                )
+                t4_candidates = t4_candidates.with_columns(
+                    pl.when(candidate_matches)
+                    .then(pl.lit(decision))
+                    .otherwise(pl.col("review_status"))
+                    .alias("review_status")
+                )
+                changed["t4_match_candidates"] += 1
 
     with duckdb.connect(str(settings.database), read_only=True) as con:
         reviewed_ids = {
@@ -631,6 +742,7 @@ def apply_corrections(settings: Settings | None = None) -> dict:
         "record_terms": (terms_path, terms),
         "policy_features": (features_path, features),
         "city_policy_rules": (rules_path, rules),
+        "t4_match_candidates": (t4_candidates_path, t4_candidates),
     }
     affected = [frames[name][0] for name in changed if name in frames]
     history_path = None

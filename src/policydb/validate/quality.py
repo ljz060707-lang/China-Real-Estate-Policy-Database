@@ -52,6 +52,27 @@ def validate(settings: Settings | None = None) -> dict:
             "SELECT count(DISTINCT collection_code || '.' || subcollection_code) "
             "FROM record_collections WHERE subcollection_code IS NOT NULL"
         ).fetchone()[0]
+        available = {
+            row[0]
+            for row in con.execute(
+                "SELECT table_name FROM information_schema.tables"
+            ).fetchall()
+        }
+        city_scope_count = (
+            con.execute("SELECT count(*) FROM cities_105").fetchone()[0]
+            if "cities_105" in available
+            else 0
+        )
+        city_scope_unique_count = (
+            con.execute("SELECT count(DISTINCT city_id) FROM cities_105").fetchone()[0]
+            if "cities_105" in available
+            else 0
+        )
+        applicable_city_relation_count = (
+            con.execute("SELECT count(*) FROM policy_applicable_cities").fetchone()[0]
+            if "policy_applicable_cities" in available
+            else 0
+        )
     report = {
         "created_at": datetime.now(UTC).isoformat(),
         "sheet_count": sheet_count,
@@ -83,10 +104,15 @@ def validate(settings: Settings | None = None) -> dict:
         "record_collection_relation_count": completeness[5],
         "collection_unmapped_sheet_count": completeness[0] - completeness[2],
         "collection_unclassified_record_count": completeness[3] - completeness[4],
+        "large_city_scope_count": city_scope_count,
+        "large_city_scope_unique_count": city_scope_unique_count,
+        "policy_applicable_city_relation_count": applicable_city_relation_count,
         "passed": sheet_count == 28
         and main_count == 3011
         and completeness[0] == completeness[2]
-        and completeness[3] == completeness[4],
+        and completeness[3] == completeness[4]
+        and city_scope_count == 105
+        and city_scope_unique_count == 105,
     }
     out = settings.root / "data" / "staging" / "validation_report.json"
     out.parent.mkdir(parents=True, exist_ok=True)

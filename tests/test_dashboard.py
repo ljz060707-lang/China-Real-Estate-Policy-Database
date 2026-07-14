@@ -9,6 +9,6 @@ def test_dashboard_pages_render_without_exceptions(root):
     labels = [option.value for option in app.radio]
     assert "数据总览" in labels
 
-    for page in ("政策体系", "时间趋势", "地区比较", "数据质量"):
+    for page in ("政策体系", "105城市", "时间趋势", "地区比较", "数据质量"):
         app.radio[0].set_value(page).run()
         assert not app.exception

@@ -1,0 +1,67 @@
+name: update-policy-database
+
+on:
+  schedule:
+    - cron: "17 2 * * *"
+      timezone: "Asia/Shanghai"
+  workflow_dispatch:
+
+concurrency:
+  group: policy-database-update
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    env:
+      GLM_API_KEY: ${{ secrets.GLM_API_KEY }}
+      GLM_MODEL: ${{ vars.GLM_MODEL || 'glm-4-flash' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --all-extras
+      - uses: actions/cache@v4
+        with:
+          path: data/staging/crawl_cache
+          key: crawl-cache-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: crawl-cache-${{ runner.os }}-
+      - name: Incremental discovery and fetch
+        run: uv run policydb crawl update --scope large-cities-105
+      - name: Deterministic parsing and optional GLM enrichment
+        run: uv run policydb enrich glm --pending-only
+      - name: Normalize, classify and build research panels
+        run: |
+          uv run policydb organize-collections
+          uv run policydb match-t4
+          uv run policydb build-city-scope
+      - name: Validate data and run tests
+        run: |
+          uv run policydb validate
+          uv run pytest
+          uv run ruff check .
+      - name: Generate update reports
+        run: uv run python scripts/generate_update_reports.py
+      - name: Guard secrets
+        shell: bash
+        run: |
+          if [ -n "$GLM_API_KEY" ] && git grep -F "$GLM_API_KEY" -- . ':!data/raw/**'; then
+            echo "GLM_API_KEY was found in tracked output" >&2
+            exit 1
+          fi
+      - name: Update rolling pull request only when data changed
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: automation/policy-updates
+          delete-branch: false
+          commit-message: "data: daily policy update"
+          title: "自动更新：中国105个大城市房地产政策"
+          body: |
+            每日增量更新。Raw快照、Curated数据、研究面板和验证报告均经过测试后写入。
+            该PR滚动更新，不自动合并。
+          labels: automated-update,data

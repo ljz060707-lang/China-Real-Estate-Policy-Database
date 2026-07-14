@@ -34,6 +34,23 @@
 | staging_cell_catalog | source_sheet / source_cell / source_row / source_column | string/int | 否 | 原工作表、坐标及行列血缘 |
 | record_collections | record_id + collection_code + subcollection_code | string | 否/是 | 政策记录与七大库、34 个细分类的多对多关系 |
 | record_collections | classification_source / confidence / evidence_excerpt / review_status | string/double | 否 | 自动或来源分类的方法、置信度、证据和审核状态 |
+| cities_105 | city_id | string | 否 | `CITY_`加六位行政区代码；105城市范围主键 |
+| cities_105 | city_name / province_name / city_code | string | 否 | 标准城市、省份及行政代码 |
+| cities_105 | city_tier_existing | string | 是 | 与原298城市四级能级的连接；县级大城市无定义时为空 |
+| cities_105 | scope_version / scope_source_name / scope_source_date | string/date | 否 | 105城市名单版本与权威来源 |
+| policy_applicable_cities | policy_applicable_city_id | string | 否 | 政策—适用城市关系主键 |
+| policy_applicable_cities | record_id / city_id | string | 否 | records和cities_105逻辑外键 |
+| policy_applicable_cities | jurisdiction_level / district_name | string | 否/是 | city、district或province及区县原名 |
+| policy_applicable_cities | match_method / confidence / needs_review / evidence | string/double/bool | 否 | 地域匹配审计信息 |
+| source_registry | source_id | string | 否 | 来源域名稳定主键 |
+| source_registry | domain / official_status / priority / crawl_enabled | string/int/bool | 否 | 来源等级和抓取开关 |
+| policy_sources | policy_source_id | string | 否 | 一条政策连接一个来源URL的关系主键 |
+| policy_sources | record_id / source_id / normalized_url | string | 否 | 政策、来源与规范化URL |
+| policy_document_versions | document_version_id | string | 否 | URL任务＋内容SHA-256稳定版本主键 |
+| crawl_runs / crawl_items / crawl_checkpoints | *_id | string | 否 | 抓取批次、URL任务和断点审计 |
+| fetch_errors | error_id | string | 否 | 抓取失败、可重试状态和错误类型 |
+| llm_extractions | extraction_id | string | 否 | content hash＋模型＋提示词/schema版本缓存键 |
+| llm_extractions | output_json / confidence / needs_review | string/double/bool | 是 | Pydantic验证后的结构化输出与审核状态 |
 
 其他专题表及全部字段以 `src/policydb/ingest/excel.py` 的显式 schema 为准。所有字段均附来源或由上述确定性规则生成。
 

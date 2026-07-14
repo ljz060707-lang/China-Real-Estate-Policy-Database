@@ -29,6 +29,7 @@ page = st.sidebar.radio(
     [
         "数据总览",
         "政策体系",
+        "105城市",
         "政策检索",
         "时间趋势",
         "地区比较",
@@ -41,6 +42,7 @@ page = st.sidebar.radio(
 PAGE_HEADERS = {
     "数据总览": ("数据总览", "覆盖政策记录、地域范围、来源质量与人工审核状态。"),
     "政策体系": ("七大政策体系", "按部门职责与研究用途浏览七大库及其细分类；一条政策可归入多个体系。"),
+    "105城市": ("105个大城市政策覆盖", "基于2020年第七次人口普查大城市范围，观察2018年至今城市政策覆盖与来源质量。"),
     "政策检索": ("政策检索", "按关键词、地区和官方来源快速定位政策记录。"),
     "时间趋势": ("时间趋势", "观察政策发布频率及其随时间的结构变化。"),
     "地区比较": ("地区比较", "比较不同城市的政策数量与研究覆盖情况。"),
@@ -136,6 +138,192 @@ elif page == "政策体系":
         "下载当前结果 CSV",
         frame.write_csv().encode("utf-8-sig"),
         f"{selected_code}.csv",
+    )
+elif page == "105城市":
+    city_reference = db._query(
+        "SELECT city_id,city_name,province_name,city_tier_existing,city_scale_2020 "
+        "FROM cities_105 ORDER BY province_name,city_name"
+    )
+    province_options = ["全部"] + sorted(
+        city_reference["province_name"].unique().to_list()
+    )
+    province = st.selectbox("省份", province_options)
+    available_cities = city_reference
+    if province != "全部":
+        available_cities = available_cities.filter(
+            available_cities["province_name"] == province
+        )
+    city = st.selectbox("城市", ["全部"] + available_cities["city_name"].to_list())
+    max_year = int(db._query("SELECT max(year) FROM v_city_month_policy_panel_105").item())
+    year = st.selectbox("年份", ["全部"] + list(range(max_year, 2017, -1)))
+    month = st.selectbox("月份", ["全部"] + list(range(1, 13)))
+    tier_values = sorted(
+        value for value in city_reference["city_tier_existing"].drop_nulls().unique().to_list()
+    )
+    tier = st.selectbox("城市能级", ["全部"] + tier_values)
+    collection_summary = db._query(
+        "SELECT DISTINCT collection_code,collection_name FROM v_policy_library_summary"
+    )
+    collection_name = st.selectbox(
+        "七大政策体系", ["全部"] + collection_summary["collection_name"].to_list()
+    )
+    collection_code = None
+    subcategory = "全部"
+    if collection_name != "全部":
+        collection_code = collection_summary.filter(
+            collection_summary["collection_name"] == collection_name
+        )[0, "collection_code"]
+        subcategories = db._query(
+            "SELECT DISTINCT subcollection_name FROM record_collections "
+            "WHERE collection_code=? AND subcollection_name IS NOT NULL ORDER BY 1",
+            [collection_code],
+        )["subcollection_name"].to_list()
+        subcategory = st.selectbox("二级政策类别", ["全部"] + subcategories)
+    direction = st.selectbox(
+        "政策方向", ["全部", "loosening", "supportive", "tightening", "neutral", "mixed", "unknown"]
+    )
+    official_status = st.selectbox(
+        "官方状态",
+        ["全部"]
+        + db._query("SELECT DISTINCT official_status FROM records ORDER BY 1")[
+            "official_status"
+        ].to_list(),
+    )
+    source_type = st.selectbox(
+        "来源类型",
+        ["全部"]
+        + db._query("SELECT DISTINCT source_type FROM source_registry ORDER BY 1")[
+            "source_type"
+        ].to_list(),
+    )
+    issuer = st.text_input("发布主体")
+    clauses = ["NOT p.needs_review"]
+    params: list[object] = []
+    if province != "全部":
+        clauses.append("p.province=?")
+        params.append(province)
+    if city != "全部":
+        clauses.append("p.city_name=?")
+        params.append(city)
+    if year != "全部":
+        clauses.append("year(p.record_date)=?")
+        params.append(year)
+    if month != "全部":
+        clauses.append("month(p.record_date)=?")
+        params.append(month)
+    if tier != "全部":
+        clauses.append("p.city_tier_existing=?")
+        params.append(tier)
+    if collection_code:
+        clauses.append(
+            "EXISTS(SELECT 1 FROM record_collections rc WHERE rc.record_id=p.record_id "
+            "AND rc.collection_code=?)"
+        )
+        params.append(collection_code)
+    if subcategory != "全部":
+        clauses.append(
+            "EXISTS(SELECT 1 FROM record_collections rc WHERE rc.record_id=p.record_id "
+            "AND rc.subcollection_name=?)"
+        )
+        params.append(subcategory)
+    if direction != "全部":
+        clauses.append("p.direction=?")
+        params.append(direction)
+    if official_status != "全部":
+        clauses.append("p.official_status=?")
+        params.append(official_status)
+    if source_type != "全部":
+        clauses.append(
+            "EXISTS(SELECT 1 FROM policy_sources ps JOIN source_registry sr USING(source_id) "
+            "WHERE ps.record_id=p.record_id AND sr.source_type=?)"
+        )
+        params.append(source_type)
+    if issuer:
+        clauses.append(
+            "EXISTS(SELECT 1 FROM record_organizations ro JOIN organizations o "
+            "USING(organization_id) WHERE ro.record_id=p.record_id "
+            "AND o.name_standardized ILIKE ?)"
+        )
+        params.append(f"%{issuer}%")
+    where = " AND ".join(clauses)
+    policy_count, official = db._query(
+        "SELECT count(DISTINCT p.record_id),count(DISTINCT CASE WHEN p.official_status IN "
+        "('official','official_reprint') THEN p.record_id END) FROM v_policy_105_cities p WHERE "
+        + where,
+        params,
+    ).row(0)
+    covered = db._query(
+        "SELECT count(DISTINCT city_id) FROM v_policy_105_cities WHERE NOT needs_review"
+    ).item()
+    for column, (label, value) in zip(
+        st.columns(5),
+        [
+            ("城市范围", 105),
+            ("已确定政策城市", covered),
+            ("筛选政策数", int(policy_count)),
+            ("官方政策占比", f"{official / policy_count:.1%}" if policy_count else "—"),
+            ("待审核适用关系", db._query("SELECT count(*) FROM policy_applicable_cities WHERE needs_review").item()),
+        ],
+        strict=True,
+    ):
+        column.metric(label, value)
+    trend = db._query(
+        "SELECT year(p.record_date) AS \"year\",month(p.record_date) AS \"month\","
+        "count(DISTINCT p.record_id) policy_count,"
+        "count(DISTINCT CASE WHEN p.direction IN ('loosening','supportive') THEN p.record_id END) easing_count,"
+        "count(DISTINCT CASE WHEN p.direction='tightening' THEN p.record_id END) tightening_count "
+        "FROM v_policy_105_cities p WHERE "
+        + where
+        + " GROUP BY 1,2 ORDER BY 1,2",
+        params,
+    ).to_pandas()
+    trend["period"] = trend["year"].astype(str) + "-" + trend["month"].astype(str).str.zfill(2)
+    trend_long = trend.melt(
+        id_vars="period",
+        value_vars=["policy_count", "easing_count", "tightening_count"],
+        var_name="指标",
+        value_name="数量",
+    )
+    figure = px.line(
+        trend_long,
+        x="period",
+        y="数量",
+        color="指标",
+        title="政策数量与方向趋势",
+        color_discrete_sequence=["#82318E", "#A66BB0", "#4B1F5E"],
+    )
+    st.plotly_chart(style_plotly_figure(figure), use_container_width=True)
+    ranking = db._query(
+        "SELECT p.city_name,count(DISTINCT p.record_id) policy_count,"
+        "avg(CASE WHEN p.official_status IN ('official','official_reprint') THEN 1.0 ELSE 0.0 END) official_share "
+        "FROM v_policy_105_cities p WHERE "
+        + where
+        + " GROUP BY p.city_name ORDER BY policy_count DESC",
+        params,
+    )
+    st.dataframe(ranking.to_pandas(), use_container_width=True)
+    details = db._query(
+        "SELECT p.record_id,p.record_date,p.city_name,p.province,p.title,p.direction,"
+        "p.official_status,p.source_quality,p.primary_source_url,p.source_sheet "
+        "FROM v_policy_105_cities p WHERE "
+        + where
+        + " ORDER BY p.record_date DESC NULLS LAST LIMIT 500",
+        params,
+    )
+    st.dataframe(details.to_pandas(), use_container_width=True)
+    source_health = db._query(
+        "SELECT official_status,priority,count(*) source_count,"
+        "count(*) FILTER(WHERE crawl_enabled) enabled_count "
+        "FROM source_registry GROUP BY ALL ORDER BY priority,official_status"
+    )
+    with st.expander("来源健康状态"):
+        st.dataframe(source_health.to_pandas(), use_container_width=True)
+        latest_crawl = db._query("SELECT max(started_at) FROM crawl_runs").item()
+        st.caption(f"最近抓取时间：{latest_crawl or '尚未启用来源'}")
+    st.download_button(
+        "下载105城市筛选结果 CSV",
+        details.write_csv().encode("utf-8-sig"),
+        "city_panel_105.csv",
     )
 elif page == "政策检索":
     keyword = st.text_input("关键词")

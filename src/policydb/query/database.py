@@ -24,6 +24,8 @@ def build_database(settings: Settings | None = None) -> Path:
     settings.database.parent.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect(str(settings.database))
     try:
+        for migration in sorted((settings.root / "migrations").glob("*.sql")):
+            con.execute(migration.read_text(encoding="utf-8"))
         con.execute(
             """CREATE TABLE IF NOT EXISTS manual_review_tasks (
                 task_id VARCHAR PRIMARY KEY,
@@ -186,6 +188,128 @@ def build_database(settings: Settings | None = None) -> Path:
                        AS classified_record_count,
                      (SELECT count(*) FROM record_collections)::BIGINT
                        AS record_collection_relation_count"""
+            )
+        if (
+            (settings.curated / "cities_105.parquet").exists()
+            and (settings.curated / "policy_applicable_cities.parquet").exists()
+        ):
+            con.execute(
+                """CREATE OR REPLACE VIEW v_policy_105_cities AS
+                   SELECT r.record_id,r.record_date,r.publication_date,r.title,r.summary,
+                          r.full_text,r.direction,r.official_status,r.source_quality,
+                          r.primary_source_url,r.official_level,r.source_sheet,
+                          c.city_id,c.city_name,c.province_name AS province,
+                          c.city_tier_existing,c.city_scale_2020,
+                          a.jurisdiction_level,a.district_name,a.match_method,
+                          a.confidence AS geography_confidence,a.needs_review,
+                          EXISTS(SELECT 1 FROM record_terms t WHERE t.record_id=r.record_id
+                            AND t.term_name='限购') AS purchase_limit,
+                          EXISTS(SELECT 1 FROM record_terms t WHERE t.record_id=r.record_id
+                            AND t.term_name='限售') AS sale_limit,
+                          EXISTS(SELECT 1 FROM record_terms t WHERE t.record_id=r.record_id
+                            AND t.term_name IN ('商业住房贷款','限贷')) AS commercial_mortgage,
+                          EXISTS(SELECT 1 FROM record_terms t WHERE t.record_id=r.record_id
+                            AND t.term_name='公积金') AS hpf_policy,
+                          EXISTS(SELECT 1 FROM record_terms t WHERE t.record_id=r.record_id
+                            AND t.term_name='人才住房') AS talent_policy,
+                          EXISTS(SELECT 1 FROM record_terms t WHERE t.record_id=r.record_id
+                            AND t.term_name='购房补贴') AS subsidy,
+                          EXISTS(SELECT 1 FROM record_collections x WHERE x.record_id=r.record_id
+                            AND x.collection_code IN ('housing_urban_rural_development',
+                              'natural_resources')) AS supply_side,
+                          EXISTS(SELECT 1 FROM record_collections x WHERE x.record_id=r.record_id
+                            AND x.subcollection_code='urban_renewal') AS urban_renewal,
+                          EXISTS(SELECT 1 FROM record_collections x WHERE x.record_id=r.record_id
+                            AND x.collection_code='financial_regulation') AS financing,
+                          COALESCE(p.mandatory_strength,0) AS policy_strength
+                   FROM records r JOIN policy_applicable_cities a USING(record_id)
+                   JOIN cities_105 c USING(city_id) LEFT JOIN policies p USING(record_id)
+                   WHERE r.record_date >= DATE '2018-01-01'"""
+            )
+            con.execute(
+                """CREATE OR REPLACE VIEW v_city_month_policy_panel_105 AS
+                   WITH months AS (
+                     SELECT period::DATE month_start
+                     FROM range(DATE '2018-01-01', current_date + INTERVAL 1 MONTH,
+                                INTERVAL 1 MONTH) t(period)
+                   ), grid AS (
+                     SELECT c.*,m.month_start FROM cities_105 c CROSS JOIN months m
+                   )
+                   SELECT g.city_id,g.city_name,g.province_name AS province,
+                          g.city_tier_existing,g.city_scale_2020,
+                          year(g.month_start)::INTEGER AS year,
+                          month(g.month_start)::INTEGER AS month,
+                          count(DISTINCT p.record_id)::BIGINT policy_count,
+                          count(DISTINCT CASE WHEN p.official_status IN
+                            ('official','official_reprint') THEN p.record_id END)::BIGINT
+                            official_policy_count,
+                          count(DISTINCT CASE WHEN p.record_id IS NOT NULL AND p.official_status NOT IN
+                            ('official','official_reprint') THEN p.record_id END)::BIGINT
+                            secondary_only_count,
+                          count(DISTINCT CASE WHEN p.direction IN ('loosening','supportive')
+                            THEN p.record_id END)::BIGINT easing_count,
+                          count(DISTINCT CASE WHEN p.direction='tightening'
+                            THEN p.record_id END)::BIGINT tightening_count,
+                          count(DISTINCT CASE WHEN p.direction='neutral'
+                            THEN p.record_id END)::BIGINT neutral_count,
+                          count(DISTINCT CASE WHEN p.purchase_limit THEN p.record_id END)::BIGINT
+                            purchase_limit_count,
+                          count(DISTINCT CASE WHEN p.sale_limit THEN p.record_id END)::BIGINT
+                            sale_limit_count,
+                          count(DISTINCT CASE WHEN p.commercial_mortgage THEN p.record_id END)::BIGINT
+                            commercial_mortgage_count,
+                          count(DISTINCT CASE WHEN p.hpf_policy THEN p.record_id END)::BIGINT
+                            hpf_policy_count,
+                          count(DISTINCT CASE WHEN p.talent_policy THEN p.record_id END)::BIGINT
+                            talent_policy_count,
+                          count(DISTINCT CASE WHEN p.subsidy THEN p.record_id END)::BIGINT subsidy_count,
+                          count(DISTINCT CASE WHEN p.supply_side THEN p.record_id END)::BIGINT
+                            supply_side_count,
+                          count(DISTINCT CASE WHEN p.urban_renewal THEN p.record_id END)::BIGINT
+                            urban_renewal_count,
+                          count(DISTINCT CASE WHEN p.financing THEN p.record_id END)::BIGINT
+                            financing_count,
+                          COALESCE(sum(p.policy_strength),0)::DOUBLE policy_strength_sum,
+                          avg(p.policy_strength)::DOUBLE policy_strength_mean,
+                          (count(DISTINCT p.record_id)>0) AS has_policy,
+                          CASE WHEN count(DISTINCT p.record_id)=0 THEN 0.0 ELSE
+                            round(0.6*count(DISTINCT CASE WHEN p.official_status IN
+                              ('official','official_reprint') THEN p.record_id END)
+                              / count(DISTINCT p.record_id)
+                              +0.2*count(DISTINCT CASE WHEN p.full_text IS NOT NULL
+                                THEN p.record_id END)/count(DISTINCT p.record_id)
+                              +0.2*count(DISTINCT CASE WHEN p.primary_source_url IS NOT NULL
+                                THEN p.record_id END)/count(DISTINCT p.record_id),4)
+                          END AS data_completeness_score
+                   FROM grid g LEFT JOIN v_policy_105_cities p
+                     ON g.city_id=p.city_id
+                    AND date_trunc('month',p.record_date)=g.month_start
+                    AND NOT p.needs_review
+                   GROUP BY ALL"""
+            )
+            con.execute(
+                """CREATE OR REPLACE VIEW v_city_year_policy_panel_105 AS
+                   SELECT city_id,city_name,province,city_tier_existing,city_scale_2020,year,
+                          sum(policy_count)::BIGINT policy_count,
+                          sum(official_policy_count)::BIGINT official_policy_count,
+                          sum(secondary_only_count)::BIGINT secondary_only_count,
+                          sum(easing_count)::BIGINT easing_count,
+                          sum(tightening_count)::BIGINT tightening_count,
+                          sum(neutral_count)::BIGINT neutral_count,
+                          sum(purchase_limit_count)::BIGINT purchase_limit_count,
+                          sum(sale_limit_count)::BIGINT sale_limit_count,
+                          sum(commercial_mortgage_count)::BIGINT commercial_mortgage_count,
+                          sum(hpf_policy_count)::BIGINT hpf_policy_count,
+                          sum(talent_policy_count)::BIGINT talent_policy_count,
+                          sum(subsidy_count)::BIGINT subsidy_count,
+                          sum(supply_side_count)::BIGINT supply_side_count,
+                          sum(urban_renewal_count)::BIGINT urban_renewal_count,
+                          sum(financing_count)::BIGINT financing_count,
+                          sum(policy_strength_sum)::DOUBLE policy_strength_sum,
+                          avg(policy_strength_mean)::DOUBLE policy_strength_mean,
+                          bool_or(has_policy) AS has_policy,
+                          avg(data_completeness_score)::DOUBLE data_completeness_score
+                   FROM v_city_month_policy_panel_105 GROUP BY ALL"""
             )
     finally:
         con.close()

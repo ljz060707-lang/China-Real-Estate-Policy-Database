@@ -22,9 +22,33 @@ def _sha(path: Path) -> str:
     return h.hexdigest()
 
 
+def _csv_safe(frame: pl.DataFrame) -> pl.DataFrame:
+    nested = [name for name, dtype in frame.schema.items() if dtype.is_nested()]
+    if not nested:
+        return frame
+    return frame.with_columns(
+        pl.col(name)
+        .map_elements(
+            lambda value: json.dumps(
+                value.to_list() if hasattr(value, "to_list") else value,
+                ensure_ascii=False,
+                default=str,
+            )
+            if value is not None
+            else None,
+            return_dtype=pl.String,
+        )
+        .alias(name)
+        for name in nested
+    )
+
+
 def create_release(version: str, settings: Settings | None = None) -> Path:
     settings = settings or Settings.discover()
-    out = settings.root / "data" / "releases" / version
+    final_out = settings.root / "data" / "releases" / version
+    if final_out.exists():
+        raise FileExistsError(f"Release is immutable and already exists: {final_out}")
+    out = final_out.with_name(f".{version}.building")
     if out.exists():
         shutil.rmtree(out)
     (out / "parquet").mkdir(parents=True)
@@ -32,13 +56,20 @@ def create_release(version: str, settings: Settings | None = None) -> Path:
     (out / "excel").mkdir()
     for src in settings.curated.glob("*.parquet"):
         shutil.copy2(src, out / "parquet" / src.name)
-        pl.read_parquet(src).write_csv(out / "csv" / f"{src.stem}.csv")
+        _csv_safe(pl.read_parquet(src)).write_csv(out / "csv" / f"{src.stem}.csv")
     with duckdb.connect(str(settings.database), read_only=True) as con:
         for view in (
             "v_city_month_policy_panel",
             "v_city_year_policy_panel",
             "v_policy_event_study",
+            "v_policy_105_cities",
+            "v_city_month_policy_panel_105",
+            "v_city_year_policy_panel_105",
         ):
+            if not con.execute(
+                "SELECT count(*) FROM information_schema.tables WHERE table_name=?", [view]
+            ).fetchone()[0]:
+                continue
             frame = con.execute(f"SELECT * FROM {view}").pl()
             frame.write_parquet(out / "parquet" / f"{view}.parquet")
             frame.write_csv(out / "csv" / f"{view}.csv")
@@ -51,6 +82,12 @@ def create_release(version: str, settings: Settings | None = None) -> Path:
     excel_records.write_excel(out / "excel" / "policy_records.xlsx", autofit=True)
     for name in ("data_dictionary.md", "methodology.md"):
         shutil.copy2(settings.root / "docs" / name, out / name)
+    reference_dir = out / "reference"
+    reference_dir.mkdir()
+    for name in ("cities_105.csv", "source_registry.yaml", "crawl_keywords.yaml"):
+        source = settings.root / "data" / "reference" / name
+        if source.exists():
+            shutil.copy2(source, reference_dir / name)
     report = validate(settings)
     (out / "validation_report.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -89,4 +126,5 @@ def create_release(version: str, settings: Settings | None = None) -> Path:
     (out / "release_manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
     )
-    return out
+    out.rename(final_out)
+    return final_out

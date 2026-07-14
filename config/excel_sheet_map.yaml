@@ -1,0 +1,73 @@
+version: 1
+workbook_contract: "【中金不动产与空间服务】政策数据库 20260705.xlsx"
+sheets:
+  "T1 房地产政策目录":
+    role: policy_master
+    header_row: 1
+    fields:
+      A: publish_date_raw
+      B: jurisdiction_raw
+      C: policy_title_raw
+      D: policy_category_raw
+      E: summary_raw
+      F: full_text_raw
+      G: source_url_raw
+      H: notes_raw
+    url_columns: [G]
+  "T4 2023年城市需求支持政策":
+    role: demand_policy_matrix
+    header_row: 8
+    fact_fields:
+      B: city_raw
+      C: publish_date_raw
+      D: purchase_limit_raw
+      E: sale_limit_raw
+      F: commercial_mortgage_down_payment_raw
+      G: hpf_down_payment_raw
+      H: hpf_loan_quota_raw
+      I: other_hpf_conditions_raw
+      J: talent_or_hukou_raw
+      K: purchase_subsidy_or_other_raw
+      AB: policy_document_name_raw
+    derived_columns: [M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z, AA, AF, AG, AH, AI, AJ, AK]
+  "T3 2021年末官方表态":
+    role: official_statement
+    url_columns: [F]
+  "T5 供给侧措施":
+    role: supply_policy
+    url_columns: [D]
+  "T6 城市限售政策汇总":
+    role: sale_restriction
+    url_columns: [F]
+  "T7 中央经济工作会议":
+    role: central_meeting
+    url_columns: [F]
+  "T11 2007年以来历届全国党代会":
+    role: party_congress
+    url_columns: [D]
+  "T12 央行、银保监会、证监会、住建部2014年至今政策梳理":
+    role: regulator_policy
+    url_columns: [E]
+  "房地产项目白名单（城市情况）":
+    role: whitelist_city
+    url_columns: [G]
+  "房地产项目白名单（企业情况）":
+    role: whitelist_enterprise
+    url_columns: [G]
+  "PSL专项贷款":
+    role: psl
+    url_columns: [H]
+  "T12 二手房参考价":
+    role: secondhand_reference_price
+    url_columns: [G]
+  "T14 禁马甲土拍限制":
+    role: land_bid_restriction
+    url_columns: [F]
+  "附录1 疫情期间政策跟踪":
+    role: special_period_tracking
+    url_columns: []
+
+derived_sheet_roles:
+  - derived_statistics
+  - derived_display
+

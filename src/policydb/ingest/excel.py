@@ -21,6 +21,7 @@ from policydb.transform.normalization import (
     normalize_url,
     stable_id,
 )
+from policydb.transform.t4_matching import build_t4_match_candidates
 
 RECORD_COLUMNS = [
     "record_id",
@@ -408,6 +409,7 @@ def import_excel(path: str | Path, settings: Settings | None = None) -> dict:
     from policydb.transform.collections import build_collection_layer
 
     collection_report = build_collection_layer(settings)
+    t4_match_report = build_t4_match_candidates(settings)
     manifest = {
         "import_batch_id": batch,
         "source_file": raw_copy.name,
@@ -419,6 +421,7 @@ def import_excel(path: str | Path, settings: Settings | None = None) -> dict:
         "staging_cell_counts": staging_counts,
         "inventory": inventory,
         "collection_coverage": collection_report,
+        "t4_matching": t4_match_report,
     }
     (settings.root / "data" / "staging" / "import_manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"

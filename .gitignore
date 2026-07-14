@@ -6,7 +6,11 @@ __pycache__/
 .env
 .streamlit/secrets.toml
 *.pyc
-data/raw/
+data/raw/*
+!data/raw/webpages/
+!data/raw/webpages/**
+!data/raw/documents/
+!data/raw/documents/**
 data/releases/
 data/curated/history/
 data/logs/*.csv

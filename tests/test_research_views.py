@@ -56,3 +56,28 @@ def test_official_share_duckdb_compatible(db):
         "THEN 1.0 ELSE 0.0 END) AS official_share FROM records"
     ).item()
     assert 0 <= value <= 1
+
+
+def test_105_city_research_views_have_complete_grid(db):
+    panel = db.research.city_month_panel_105("2018-01-01", "2018-12-31")
+    assert panel.height == 105 * 12
+    assert panel["city_id"].n_unique() == 105
+
+
+def test_105_city_year_panel_api(db):
+    panel = db.research.city_year_panel_105("2018-01-01", "2026-12-31")
+    assert panel["city_id"].n_unique() == 105
+    assert "data_completeness_score" in panel.columns
+
+
+def test_uncertain_province_relations_are_excluded_from_research_panel(db):
+    long_count = db._query(
+        "SELECT count(*) FROM v_policy_105_cities WHERE needs_review"
+    ).item()
+    assert long_count > 0
+    confirmed = db._query(
+        "SELECT count(*) FROM v_policy_105_cities WHERE NOT needs_review"
+    ).item()
+    assert db._query(
+        "SELECT sum(policy_count) FROM v_city_month_policy_panel_105"
+    ).item() == confirmed
