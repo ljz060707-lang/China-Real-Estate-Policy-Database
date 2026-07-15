@@ -1,8 +1,8 @@
 {
-  "import_batch_id": "excel_20260713T041054Z_829951c7",
+  "import_batch_id": "excel_20260715T082526Z_829951c7",
   "source_file": "【中金不动产与空间服务】政策数据库 20260705.xlsx",
   "source_sha256": "829951c7e88eebdffd729b96c1aac7ccf4c37037a11e6f8df8da9e36605039bf",
-  "imported_at": "2026-07-13T04:10:54.798806+00:00",
+  "imported_at": "2026-07-15T08:25:26.867050+00:00",
   "sheet_count": 28,
   "main_policy_count": 3011,
   "record_count": 3568,
@@ -1184,5 +1184,37 @@
         ]
       }
     ]
+  },
+  "collection_coverage": {
+    "created_at": "2026-07-15T08:25:39.241055+00:00",
+    "collection_count": 7,
+    "subcollection_count": 34,
+    "staging_sheet_count": 28,
+    "mapped_sheet_count": 28,
+    "staging_cell_count": 91793,
+    "catalog_cell_count": 91793,
+    "unmapped_sheet_count": 0,
+    "unmapped_cell_count": 0,
+    "record_count": 3568,
+    "classified_record_count": 3568,
+    "subclassified_record_count": 3568,
+    "unclassified_record_count": 0,
+    "record_collection_relation_count": 18974,
+    "collection_record_counts": {
+      "central_party_state": 458,
+      "financial_regulation": 1693,
+      "housing_urban_rural_development": 1744,
+      "local_government": 3128,
+      "natural_resources": 493,
+      "risk_support": 528,
+      "tracking_statistics": 3150
+    },
+    "passed": true
+  },
+  "t4_matching": {
+    "candidate_count": 2156,
+    "approved_existing_count": 1624,
+    "pending_candidate_count": 532,
+    "source_row_count": 1955
   }
 }
