@@ -37,10 +37,13 @@ uv run policydb release --version 0.1.0
 
 ```bash
 uv run policydb dashboard
+# 如果8501端口已占用：uv run policydb dashboard --port 8502
 # 在“人工审核中心”完成审核后：
 uv run policydb review apply
 uv run policydb validate
 ```
+
+Dashboard 默认使用稳定模式：关闭文件监听与快速中断，限制原生计算线程，查询结果按数据库版本缓存。政策检索最多展示 200 条摘要记录，正文只在选择单条政策后加载。
 
 网页审核会自动追加 `data/reference/manual_corrections.csv` 和
 `data/logs/review_history.csv`。只有 `review apply` 会把已确认修正应用到 Curated 层；
@@ -74,7 +77,7 @@ db.export(results, "outputs/search.xlsx")
 GitHub Pages 无法直接运行 Streamlit。本项目已准备为“GitHub 仓库 + Streamlit Community Cloud”部署：
 
 - 云端使用精简的 `requirements.txt`；
-- 审核任务分页加载，每页 50 条，避免一次渲染 5,000 条任务；
+- 审核任务分页加载，每页 25 条，避免一次渲染数千条任务；
 - `POLICYDB_READ_ONLY=1` 可将公开网站设为只读；
 - Raw Excel、审核日志、人工修正和虚拟环境不会进入 GitHub；
 - 推送后由 GitHub Actions 自动运行测试与数据验证。

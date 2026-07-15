@@ -23,7 +23,14 @@ from policydb import PolicyDB  # noqa: E402
 st.set_page_config(page_title="中国房地产政策数据库", layout="wide")
 apply_academic_theme()
 render_sidebar_brand()
-db = PolicyDB.open(ROOT)
+
+
+@st.cache_resource(show_spinner=False)
+def open_database() -> PolicyDB:
+    return PolicyDB.open(ROOT)
+
+
+db = open_database()
 page = st.sidebar.radio(
     "页面",
     [
@@ -131,9 +138,9 @@ elif page == "政策体系":
     if selected_subcollection != "全部":
         sql += " AND subcollection_name=?"
         params.append(selected_subcollection)
-    sql += " ORDER BY record_date DESC NULLS LAST LIMIT 500"
+    sql += " ORDER BY record_date DESC NULLS LAST LIMIT 200"
     frame = db._query(sql, params)
-    st.dataframe(frame.to_pandas(), use_container_width=True)
+    st.dataframe(frame, use_container_width=True, height=430)
     st.download_button(
         "下载当前结果 CSV",
         frame.write_csv().encode("utf-8-sig"),
@@ -301,23 +308,23 @@ elif page == "105城市":
         + " GROUP BY p.city_name ORDER BY policy_count DESC",
         params,
     )
-    st.dataframe(ranking.to_pandas(), use_container_width=True)
+    st.dataframe(ranking, use_container_width=True, height=340)
     details = db._query(
         "SELECT p.record_id,p.record_date,p.city_name,p.province,p.title,p.direction,"
         "p.official_status,p.source_quality,p.primary_source_url,p.source_sheet "
         "FROM v_policy_105_cities p WHERE "
         + where
-        + " ORDER BY p.record_date DESC NULLS LAST LIMIT 500",
+        + " ORDER BY p.record_date DESC NULLS LAST LIMIT 200",
         params,
     )
-    st.dataframe(details.to_pandas(), use_container_width=True)
+    st.dataframe(details, use_container_width=True, height=430)
     source_health = db._query(
         "SELECT official_status,priority,count(*) source_count,"
         "count(*) FILTER(WHERE crawl_enabled) enabled_count "
         "FROM source_registry GROUP BY ALL ORDER BY priority,official_status"
     )
     with st.expander("来源健康状态"):
-        st.dataframe(source_health.to_pandas(), use_container_width=True)
+        st.dataframe(source_health, use_container_width=True)
         latest_crawl = db._query("SELECT max(started_at) FROM crawl_runs").item()
         st.caption(f"最近抓取时间：{latest_crawl or '尚未启用来源'}")
     st.download_button(
@@ -330,10 +337,37 @@ elif page == "政策检索":
     region = st.text_input("省/市/区县")
     official = st.checkbox("仅官方")
     frame = db.search(
-        keyword=keyword or None, region=region or None, official_only=official, limit=500
+        keyword=keyword or None,
+        region=region or None,
+        official_only=official,
+        limit=200,
+        include_full_text=False,
     )
-    st.dataframe(frame.to_pandas(), use_container_width=True)
+    st.caption(f"显示前 {frame.height} 条结果；政策全文仅在选择记录后加载。")
+    st.dataframe(frame, use_container_width=True, height=430)
     st.download_button("下载 CSV", frame.write_csv().encode("utf-8-sig"), "policy_search.csv")
+    if not frame.is_empty():
+        record_ids = frame["record_id"].to_list()
+        selected_record = st.selectbox(
+            "查看政策详情",
+            record_ids,
+            format_func=lambda value: str(
+                frame.filter(frame["record_id"] == value)[0, "title"] or value
+            ),
+        )
+        policy = db.get(selected_record)
+        if policy:
+            with st.expander("摘要、全文与来源", expanded=False):
+                st.write(policy.get("summary") or "暂无摘要")
+                st.text_area(
+                    "政策原文",
+                    value=policy.get("full_text") or "暂无原文",
+                    height=320,
+                    disabled=True,
+                )
+                source_url = policy.get("primary_source_url")
+                if source_url and str(source_url).startswith(("http://", "https://")):
+                    st.link_button("打开原始来源", str(source_url))
 elif page == "时间趋势":
     frame = db._query(
         "SELECT year(record_date) AS \"year\",month(record_date) AS \"month\","
@@ -385,10 +419,10 @@ elif page == "专题页面":
         "PSL专项贷款": "v_psl_financing_events",
         "中央会议表述": "v_official_statements",
     }
-    frame = db._query(f"SELECT * FROM {views.get(topic, 'v_policy_master')} LIMIT 500")
-    st.dataframe(frame.to_pandas(), use_container_width=True)
+    frame = db._query(f"SELECT * FROM {views.get(topic, 'v_policy_master')} LIMIT 200")
+    st.dataframe(frame, use_container_width=True, height=430)
 elif page == "数据质量":
-    st.dataframe(db._query("SELECT * FROM v_data_quality").to_pandas(), use_container_width=True)
+    st.dataframe(db._query("SELECT * FROM v_data_quality"), use_container_width=True)
     st.info("需要逐条处理的问题，请进入左侧的“人工审核中心”。")
 else:
     render_review_center(ROOT)

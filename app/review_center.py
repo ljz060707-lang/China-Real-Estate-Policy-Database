@@ -30,6 +30,44 @@ TYPE_LABELS = {
 STATUS_LABELS = {"pending": "待审核", "completed": "已完成", "all": "全部状态"}
 
 
+@st.cache_data(ttl=30, max_entries=32, show_spinner=False)
+def _cached_review_stats(root: str, database_stamp: int) -> dict:
+    del database_stamp
+    return review_stats(Settings.discover(root))
+
+
+@st.cache_data(ttl=30, max_entries=64, show_spinner=False)
+def _cached_review_count(
+    root: str,
+    review_type: str,
+    status: str,
+    database_stamp: int,
+) -> int:
+    del database_stamp
+    return review_task_count(
+        Settings.discover(root), review_type=review_type, status=status
+    )
+
+
+@st.cache_data(ttl=30, max_entries=64, show_spinner=False)
+def _cached_review_tasks(
+    root: str,
+    review_type: str,
+    status: str,
+    limit: int,
+    offset: int,
+    database_stamp: int,
+):
+    del database_stamp
+    return list_review_tasks(
+        Settings.discover(root),
+        review_type=review_type,
+        status=status,
+        limit=limit,
+        offset=offset,
+    )
+
+
 def _act(
     task_id: str,
     decision: str,
@@ -53,6 +91,7 @@ def _act(
     except (KeyError, ValueError) as error:
         st.error(str(error))
         return
+    st.cache_data.clear()
     st.success("审核结果已保存")
     st.rerun()
 
@@ -65,7 +104,9 @@ def render_review_center(root: str | Path | None = None) -> None:
     if read_only:
         st.info("当前为 GitHub 发布版（只读）。请在本地项目中完成审核和应用修正。")
 
-    stats = review_stats(settings)
+    root_key = str(settings.root)
+    database_stamp = settings.database.stat().st_mtime_ns
+    stats = _cached_review_stats(root_key, database_stamp)
     type_counts = stats["review_type"]
     cards = [
         ("待审核任务", stats["pending"]),
@@ -87,13 +128,14 @@ def render_review_center(root: str | Path | None = None) -> None:
         status = next(key for key, value in STATUS_LABELS.items() if value == status_label)
         if st.button("重新扫描问题", use_container_width=True, disabled=read_only):
             result = generate_review_tasks(settings)
+            st.cache_data.clear()
             st.success(f"扫描完成，本次新增 {result['created_total']} 条任务")
             st.rerun()
         st.caption("重复扫描不会覆盖已完成的审核结果。")
 
-    page_size = 50
-    total_tasks = review_task_count(
-        settings, review_type=review_type, status=status
+    page_size = 25
+    total_tasks = _cached_review_count(
+        root_key, review_type, status, database_stamp
     )
     total_pages = max(1, math.ceil(total_tasks / page_size))
     with filter_column:
@@ -108,12 +150,13 @@ def render_review_center(root: str | Path | None = None) -> None:
         )
         st.caption(f"共 {total_tasks:,} 条 · 第 {page_number}/{total_pages} 页")
 
-    tasks = list_review_tasks(
-        settings,
-        review_type=review_type,
-        status=status,
-        limit=page_size,
-        offset=(page_number - 1) * page_size,
+    tasks = _cached_review_tasks(
+        root_key,
+        review_type,
+        status,
+        page_size,
+        (page_number - 1) * page_size,
+        database_stamp,
     )
     if tasks.is_empty():
         with detail_column:

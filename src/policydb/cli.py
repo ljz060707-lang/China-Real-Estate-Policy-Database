@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import sys
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Annotated
@@ -115,18 +117,37 @@ def export(
 
 
 @app.command()
-def dashboard():
+def dashboard(port: int = typer.Option(8501, "--port", min=1024, max=65535)):
     s = Settings.discover()
-    subprocess.run(
-        [
-            str(Path(__import__("sys").executable).resolve()),
-            "-m",
-            "streamlit",
-            "run",
-            str(s.root / "app" / "dashboard.py"),
-        ],
-        check=True,
-    )
+    env = os.environ.copy()
+    env.setdefault("POLARS_MAX_THREADS", "2")
+    env.setdefault("OMP_NUM_THREADS", "2")
+    env.setdefault("ARROW_NUM_THREADS", "2")
+    command = [
+        str(Path(sys.executable).resolve()),
+        "-m",
+        "streamlit",
+        "run",
+        str(s.root / "app" / "dashboard.py"),
+        "--server.address=127.0.0.1",
+        f"--server.port={port}",
+        "--server.fileWatcherType=none",
+        "--server.runOnSave=false",
+        "--runner.fastReruns=false",
+        "--browser.gatherUsageStats=false",
+    ]
+    typer.echo(f"正在启动稳定模式：http://127.0.0.1:{port}")
+    try:
+        result = subprocess.run(command, check=False, env=env)
+    except KeyboardInterrupt:
+        return
+    if result.returncode:
+        typer.echo(
+            f"网页进程已退出（代码 {result.returncode}）。请重新运行命令；"
+            "若端口被占用，可增加 --port 8502。",
+            err=True,
+        )
+        raise typer.Exit(1)
 
 
 @app.command()

@@ -9,6 +9,12 @@ def test_search_limit(db):
     assert db.search(limit=3).height <= 3
 
 
+def test_search_summary_does_not_load_full_text(db):
+    frame = db.search(keyword="城市", limit=5, include_full_text=False)
+    assert "full_text" not in frame.columns
+    assert {"record_id", "title", "summary"}.issubset(frame.columns)
+
+
 def test_get(db):
     rid = db.search(limit=1)["record_id"][0]
     assert db.get(rid)["record_id"] == rid

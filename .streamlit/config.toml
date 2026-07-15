@@ -1,6 +1,12 @@
 [server]
 headless = true
 maxUploadSize = 25
+fileWatcherType = "none"
+runOnSave = false
+maxMessageSize = 50
+
+[runner]
+fastReruns = false
 
 [browser]
 gatherUsageStats = false

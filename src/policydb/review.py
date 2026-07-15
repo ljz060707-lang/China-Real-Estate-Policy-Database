@@ -420,7 +420,15 @@ def list_review_tasks(
                        t.review_type,t.created_at,t.task_id
               LIMIT {max(1, int(limit))} OFFSET {max(0, int(offset))}"""
     with duckdb.connect(str(settings.database), read_only=True) as con:
-        return con.execute(sql, params).pl()
+        result = con.execute(sql, params)
+        columns = [item[0] for item in result.description]
+        rows = result.fetchall()
+    return pl.DataFrame(
+        rows,
+        schema=columns,
+        orient="row",
+        infer_schema_length=None,
+    )
 
 
 def review_task_count(

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import re
+from collections import OrderedDict
 from collections.abc import Iterable
 from pathlib import Path
+from threading import RLock
 
 import duckdb
 import polars as pl
@@ -41,6 +43,8 @@ class PolicyDB:
     def __init__(self, settings: Settings):
         self.settings = settings
         self.research = ResearchAPI(self)
+        self._query_cache: OrderedDict[tuple[int, str, str], pl.DataFrame] = OrderedDict()
+        self._query_lock = RLock()
 
     @classmethod
     def open(cls, root: str | Path | None = None) -> PolicyDB:
@@ -52,8 +56,34 @@ class PolicyDB:
         return cls(settings)
 
     def _query(self, sql: str, params: list | None = None) -> pl.DataFrame:
-        with duckdb.connect(str(self.settings.database), read_only=True) as con:
-            return con.execute(sql, params or []).pl()
+        """Run a cached, serialised query without a native Arrow handoff.
+
+        Streamlit may restart a script while an Arrow conversion is active. On Windows that
+        can terminate the interpreter instead of raising a Python exception. Using the stable
+        Python row boundary avoids that failure mode; the database timestamp invalidates cache.
+        """
+        values = params or []
+        database_stamp = self.settings.database.stat().st_mtime_ns
+        cache_key = (database_stamp, sql, repr(values))
+        with self._query_lock:
+            cached = self._query_cache.get(cache_key)
+            if cached is not None:
+                self._query_cache.move_to_end(cache_key)
+                return cached.clone()
+            with duckdb.connect(str(self.settings.database), read_only=True) as con:
+                result = con.execute(sql, values)
+                columns = [item[0] for item in result.description]
+                rows = result.fetchall()
+            frame = pl.DataFrame(
+                rows,
+                schema=columns,
+                orient="row",
+                infer_schema_length=None,
+            )
+            self._query_cache[cache_key] = frame
+            while len(self._query_cache) > 128:
+                self._query_cache.popitem(last=False)
+            return frame.clone()
 
     def search(
         self,
@@ -65,6 +95,7 @@ class PolicyDB:
         direction=None,
         official_only=False,
         limit=1000,
+        include_full_text=True,
     ) -> pl.DataFrame:
         clauses, params = ["1=1"], []
         if keyword:
@@ -87,8 +118,16 @@ class PolicyDB:
             params.append(list(direction))
         if official_only:
             clauses.append("official_status IN ('official','official_reprint')")
+        columns = "*"
+        if not include_full_text:
+            columns = (
+                "record_id,record_date,title,summary,city_name,geography_original,topics,"
+                "direction,official_status,source_quality,primary_source_url,source_sheet,"
+                "source_row,manual_review_status"
+            )
         return self._query(
-            f"SELECT * FROM v_policy_master WHERE {' AND '.join(clauses)} ORDER BY record_date DESC NULLS LAST LIMIT {int(limit)}",
+            f"SELECT {columns} FROM v_policy_master WHERE {' AND '.join(clauses)} "
+            f"ORDER BY record_date DESC NULLS LAST LIMIT {int(limit)}",
             params,
         )
 
