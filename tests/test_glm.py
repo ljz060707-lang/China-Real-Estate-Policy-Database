@@ -71,3 +71,38 @@ def test_glm_without_key_creates_pending_cache(tmp_path):
 
 def test_glm_chunks_long_text():
     assert len(GLMEnricher.chunks("x" * 25001, size=10000)) == 3
+
+
+def test_glm_second_pass_is_independent_and_evidence_only(tmp_path):
+    verification = {
+        "field_evidence_valid": True,
+        "segmentation_complete": True,
+        "city_scope_supported": True,
+        "classification_supported": True,
+        "direction_supported": True,
+        "strength_supported": True,
+        "confidence": 0.94,
+    }
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        output = _valid_output() if calls == 1 else verification
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": json.dumps(output)}}]},
+            request=request,
+        )
+
+    root = tmp_path / "repo"
+    (root / "data" / "curated").mkdir(parents=True)
+    enricher = GLMEnricher(
+        Settings(root=root),
+        api_key="test",
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    extraction = enricher.extract("hash", "原文证据")
+    checked = enricher.verify("hash", "原文证据", extraction)
+    assert checked and checked.field_evidence_valid and checked.confidence == 0.94
+    assert calls == 2

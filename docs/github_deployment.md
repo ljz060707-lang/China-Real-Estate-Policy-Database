@@ -39,7 +39,13 @@ Main file path: app/dashboard.py
 POLICYDB_ROOT = "."
 POLICYDB_READ_ONLY = "1"
 POLICYDB_DATA_VERSION = "0.1.0"
+TIANDITU_TOKEN = "在天地图控制台创建的浏览器端Key"
+TIANDITU_MAP_APPROVAL = "GS（2024）0568号"
+TIANDITU_QUALIFICATION = "甲测资字1100471"
 ```
+
+公开只读站点不要配置 `GLM_API_KEY`。自动抽取与来源恢复应通过本地受控运行或
+GitHub Actions Secret 执行，再把经过验证的 Curated/数据库快照发布到网页。
 
 云端发布版建议只读。Streamlit Community Cloud 的本地磁盘不是永久存储，网页审核结果可能在重启或重新部署后丢失。人工审核应在本地完成，运行 `policydb review apply` 后，再提交更新后的 DuckDB/Parquet 快照。
 

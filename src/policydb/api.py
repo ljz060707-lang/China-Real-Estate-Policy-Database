@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import tempfile
 from collections import OrderedDict
 from collections.abc import Iterable
 from pathlib import Path
@@ -52,7 +54,26 @@ class PolicyDB:
         if not settings.database.exists():
             from policydb.query.database import build_database
 
-            build_database(settings)
+            read_only_host = os.getenv("POLICYDB_READ_ONLY", "").lower() in {
+                "1",
+                "true",
+                "yes",
+            }
+            if read_only_host:
+                cache_dir = Path(tempfile.gettempdir()) / "policydb-readonly"
+                cache_dir.mkdir(parents=True, exist_ok=True)
+                settings = settings.model_copy(
+                    update={"database_path": cache_dir / "policydb.duckdb"}
+                )
+            try:
+                build_database(settings)
+            except (OSError, PermissionError, duckdb.IOException):
+                cache_dir = Path(tempfile.gettempdir()) / "policydb-readonly"
+                cache_dir.mkdir(parents=True, exist_ok=True)
+                settings = settings.model_copy(
+                    update={"database_path": cache_dir / "policydb.duckdb"}
+                )
+                build_database(settings)
         return cls(settings)
 
     def _query(self, sql: str, params: list | None = None) -> pl.DataFrame:

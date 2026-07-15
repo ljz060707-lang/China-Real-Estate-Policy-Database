@@ -58,6 +58,19 @@ def test_official_share_duckdb_compatible(db):
     assert 0 <= value <= 1
 
 
+def test_city_panel_has_normalized_provinces_and_no_boolean_avg(db):
+    description = db._query("DESCRIBE v_city_month_policy_panel")
+    assert "province" in description["column_name"].to_list()
+    assert db._query(
+        "SELECT count(*) FROM v_city_month_policy_panel WHERE province IS NOT NULL"
+    ).item() > 0
+    value = db._query(
+        "SELECT avg(CASE WHEN official_policy_count > 0 THEN 1.0 ELSE 0.0 END) "
+        "FROM v_city_month_policy_panel"
+    ).item()
+    assert 0 <= value <= 1
+
+
 def test_105_city_research_views_have_complete_grid(db):
     panel = db.research.city_month_panel_105("2018-01-01", "2018-12-31")
     assert panel.height == 105 * 12

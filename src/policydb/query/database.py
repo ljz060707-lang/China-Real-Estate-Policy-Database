@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import duckdb
@@ -21,6 +22,16 @@ VIEW_ALIASES = [
 
 def build_database(settings: Settings | None = None) -> Path:
     settings = settings or Settings.discover()
+    geography_inputs = (
+        settings.curated / "record_jurisdictions.parquet",
+        settings.curated / "jurisdictions.parquet",
+        settings.curated / "cities_105.parquet",
+    )
+    read_only_host = os.getenv("POLICYDB_READ_ONLY", "").lower() in {"1", "true", "yes"}
+    if all(path.exists() for path in geography_inputs) and not read_only_host:
+        from policydb.geography import materialize_geography
+
+        materialize_geography(settings)
     settings.database.parent.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect(str(settings.database))
     try:
@@ -56,7 +67,8 @@ def build_database(settings: Settings | None = None) -> Path:
                 f"CREATE OR REPLACE VIEW {name} AS SELECT * FROM read_parquet('{parquet_sql}')"
             )
         staging_excel = settings.root / "data" / "staging" / "excel"
-        if any(staging_excel.glob("*.parquet")):
+        has_staging_excel = any(staging_excel.glob("*.parquet"))
+        if has_staging_excel:
             staging_glob = str(staging_excel / "*.parquet").replace("'", "''").replace(
                 "\\", "/"
             )
@@ -75,39 +87,115 @@ def build_database(settings: Settings | None = None) -> Path:
         con.execute(
             "CREATE OR REPLACE VIEW v_policy_instrument_long AS SELECT * FROM v_policy_topic_long WHERE taxonomy_name='instrument'"
         )
-        con.execute(
-            "CREATE OR REPLACE VIEW v_policy_geography_long AS SELECT r.record_id,r.record_date,r.title,g.* FROM records r JOIN record_jurisdictions g USING(record_id)"
-        )
+        if (settings.curated / "record_geographies_normalized.parquet").exists():
+            con.execute(
+                "CREATE OR REPLACE VIEW v_policy_geography_long AS "
+                "SELECT r.record_id,r.record_date,r.title,g.* FROM records r "
+                "JOIN record_geographies_normalized g USING(record_id)"
+            )
+        else:
+            con.execute(
+                "CREATE OR REPLACE VIEW v_policy_geography_long AS "
+                "SELECT r.record_id,r.record_date,r.title,g.* FROM records r "
+                "JOIN record_jurisdictions g USING(record_id)"
+            )
         con.execute(
             "CREATE OR REPLACE VIEW v_policy_quantitative_measures AS SELECT * FROM quantitative_measures"
         )
-        con.execute("""CREATE OR REPLACE VIEW v_city_policy_timeline AS SELECT g.jurisdiction_name city_name,r.record_date,r.record_id,r.title,r.direction,r.source_quality,t.term_name topic
-            FROM records r JOIN record_jurisdictions g USING(record_id) LEFT JOIN record_terms t USING(record_id)""")
-        con.execute("""CREATE OR REPLACE VIEW v_city_month_policy_panel AS SELECT
-            g.jurisdiction_id city_code,g.jurisdiction_name city_name,NULL::VARCHAR province,
-            year(r.record_date)::INTEGER AS "year",month(r.record_date)::INTEGER AS "month",count(DISTINCT r.record_id)::BIGINT policy_count,
-            count(DISTINCT CASE WHEN r.official_status IN ('official','official_reprint') THEN r.record_id END)::BIGINT official_policy_count,
-            count(DISTINCT CASE WHEN r.direction='tightening' THEN r.record_id END)::BIGINT tightening_count,
-            count(DISTINCT CASE WHEN r.direction='loosening' THEN r.record_id END)::BIGINT loosening_count,
-            count(DISTINCT CASE WHEN r.direction='supportive' THEN r.record_id END)::BIGINT supportive_count,
-            count(DISTINCT CASE WHEN t.term_name='限购' THEN r.record_id END)::BIGINT purchase_restriction_count,
-            count(DISTINCT CASE WHEN t.term_name='限售' THEN r.record_id END)::BIGINT sale_restriction_count,
-            count(DISTINCT CASE WHEN t.term_name IN ('商业住房贷款','限贷') THEN r.record_id END)::BIGINT mortgage_count,
-            count(DISTINCT CASE WHEN t.term_name='公积金' THEN r.record_id END)::BIGINT provident_fund_count,
-            count(DISTINCT CASE WHEN t.term_name='购房补贴' THEN r.record_id END)::BIGINT subsidy_count,
-            count(DISTINCT CASE WHEN t.term_name='人才住房' THEN r.record_id END)::BIGINT talent_policy_count,
-            count(DISTINCT CASE WHEN r.legacy_category LIKE '%供给%' THEN r.record_id END)::BIGINT supply_side_count,
-            count(DISTINCT CASE WHEN t.term_name IN ('城市更新','城中村改造','老旧小区改造') THEN r.record_id END)::BIGINT urban_renewal_count,
-            sum(COALESCE(p.mandatory_strength,0))::DOUBLE policy_strength_sum,max(COALESCE(p.mandatory_strength,0))::DOUBLE policy_strength_max,
-            avg(r.source_quality)::DOUBLE source_quality_mean
-            FROM records r JOIN record_jurisdictions g USING(record_id) LEFT JOIN record_terms t USING(record_id) LEFT JOIN policies p USING(record_id)
-            WHERE r.record_date IS NOT NULL GROUP BY 1,2,3,4,5""")
+        if (settings.curated / "auto_t4_links.parquet").exists():
+            con.execute("""CREATE OR REPLACE VIEW v_policy_features_resolved AS
+                SELECT COALESCE(f.record_id,a.record_id) AS record_id,f.feature_name,
+                       f.feature_value,f.source_sheet,f.source_cell,
+                       CASE WHEN f.record_id IS NULL AND a.record_id IS NOT NULL
+                            THEN 'deterministic_auto_match' ELSE 'curated' END AS link_source
+                FROM policy_features f LEFT JOIN auto_t4_links a USING(source_cell)""")
+        else:
+            con.execute("""CREATE OR REPLACE VIEW v_policy_features_resolved AS
+                SELECT *, 'curated'::VARCHAR AS link_source FROM policy_features""")
+        has_normalized_geography = (
+            settings.curated / "record_geographies_normalized.parquet"
+        ).exists()
+        if has_normalized_geography:
+            con.execute("""CREATE OR REPLACE VIEW v_policy_geography_base AS
+                SELECT r.record_id,r.record_date,r.title,r.record_type,r.direction,
+                       r.official_status,r.source_quality,r.legacy_category,r.source_sheet,
+                       g.geography_original,g.province_name AS province,
+                       COALESCE(g.parent_city_name,g.city_name) AS city_name,
+                       g.city_code,g.county_name,g.jurisdiction_level,
+                       COALESCE(p.mandatory_strength,0)::DOUBLE AS policy_strength
+                FROM records r JOIN record_geographies_normalized g USING(record_id)
+                LEFT JOIN policies p USING(record_id)""")
+        else:
+            con.execute("""CREATE OR REPLACE VIEW v_policy_geography_base AS
+                SELECT r.record_id,r.record_date,r.title,r.record_type,r.direction,
+                       r.official_status,r.source_quality,r.legacy_category,r.source_sheet,
+                       g.geography_original,NULL::VARCHAR AS province,
+                       g.jurisdiction_name AS city_name,g.jurisdiction_id AS city_code,
+                       NULL::VARCHAR AS county_name,'unknown'::VARCHAR AS jurisdiction_level,
+                       COALESCE(p.mandatory_strength,0)::DOUBLE AS policy_strength
+                FROM records r JOIN record_jurisdictions g USING(record_id)
+                LEFT JOIN policies p USING(record_id)""")
+        con.execute("""CREATE OR REPLACE VIEW v_city_policy_timeline AS
+            SELECT g.city_name,r.record_date,r.record_id,r.title,r.direction,r.source_quality,
+                   t.term_name topic
+            FROM records r JOIN v_policy_geography_base g USING(record_id)
+            LEFT JOIN record_terms t USING(record_id)""")
+        con.execute("""CREATE OR REPLACE VIEW v_city_month_policy_panel AS
+            WITH base AS (
+              SELECT DISTINCT record_id,record_date,province,city_name,city_code,direction,
+                     official_status,source_quality,legacy_category,policy_strength
+              FROM v_policy_geography_base
+              WHERE record_date IS NOT NULL AND city_name IS NOT NULL
+                AND jurisdiction_level IN ('city','county','county_level_city')
+            ) SELECT
+              min(city_code)::VARCHAR AS city_code,city_name,province,
+              year(record_date)::INTEGER AS "year",month(record_date)::INTEGER AS "month",
+              count(DISTINCT record_id)::BIGINT AS policy_count,
+              count(DISTINCT CASE WHEN official_status IN ('official','official_reprint') THEN record_id END)::BIGINT AS official_policy_count,
+              count(DISTINCT CASE WHEN direction='tightening' THEN record_id END)::BIGINT AS tightening_count,
+              count(DISTINCT CASE WHEN direction='loosening' THEN record_id END)::BIGINT AS loosening_count,
+              count(DISTINCT CASE WHEN direction='supportive' THEN record_id END)::BIGINT AS supportive_count,
+              count(DISTINCT CASE WHEN EXISTS(SELECT 1 FROM record_terms t WHERE t.record_id=base.record_id AND t.term_name='限购') THEN record_id END)::BIGINT AS purchase_restriction_count,
+              count(DISTINCT CASE WHEN EXISTS(SELECT 1 FROM record_terms t WHERE t.record_id=base.record_id AND t.term_name='限售') THEN record_id END)::BIGINT AS sale_restriction_count,
+              count(DISTINCT CASE WHEN EXISTS(SELECT 1 FROM record_terms t WHERE t.record_id=base.record_id AND t.term_name IN ('商业住房贷款','限贷')) THEN record_id END)::BIGINT AS mortgage_count,
+              count(DISTINCT CASE WHEN EXISTS(SELECT 1 FROM record_terms t WHERE t.record_id=base.record_id AND t.term_name='公积金') THEN record_id END)::BIGINT AS provident_fund_count,
+              count(DISTINCT CASE WHEN EXISTS(SELECT 1 FROM record_terms t WHERE t.record_id=base.record_id AND t.term_name='购房补贴') THEN record_id END)::BIGINT AS subsidy_count,
+              count(DISTINCT CASE WHEN EXISTS(SELECT 1 FROM record_terms t WHERE t.record_id=base.record_id AND t.term_name='人才住房') THEN record_id END)::BIGINT AS talent_policy_count,
+              count(DISTINCT CASE WHEN legacy_category LIKE '%供给%' THEN record_id END)::BIGINT AS supply_side_count,
+              count(DISTINCT CASE WHEN EXISTS(SELECT 1 FROM record_terms t WHERE t.record_id=base.record_id AND t.term_name IN ('城市更新','城中村改造','老旧小区改造','危旧房改造')) THEN record_id END)::BIGINT AS urban_renewal_count,
+              sum(policy_strength)::DOUBLE AS policy_strength_sum,
+              max(policy_strength)::DOUBLE AS policy_strength_max,
+              avg(source_quality::DOUBLE)::DOUBLE AS source_quality_mean
+            FROM base GROUP BY city_name,province,year(record_date),month(record_date)""")
         con.execute(
             "CREATE OR REPLACE VIEW v_city_year_policy_panel AS SELECT city_code,city_name,province,year,sum(policy_count) policy_count,sum(official_policy_count) official_policy_count,sum(tightening_count) tightening_count,sum(loosening_count) loosening_count,sum(supportive_count) supportive_count,sum(purchase_restriction_count) purchase_restriction_count,sum(sale_restriction_count) sale_restriction_count,sum(mortgage_count) mortgage_count,sum(provident_fund_count) provident_fund_count,sum(subsidy_count) subsidy_count,sum(talent_policy_count) talent_policy_count,sum(supply_side_count) supply_side_count,sum(urban_renewal_count) urban_renewal_count,sum(policy_strength_sum) policy_strength_sum,max(policy_strength_max) policy_strength_max,avg(source_quality_mean) source_quality_mean FROM v_city_month_policy_panel GROUP BY ALL"
         )
-        con.execute(
-            "CREATE OR REPLACE VIEW v_province_month_policy_panel AS SELECT province,year,month,sum(policy_count) policy_count FROM v_city_month_policy_panel GROUP BY ALL"
-        )
+        con.execute("""CREATE OR REPLACE VIEW v_province_month_policy_panel AS
+            WITH base AS (
+              SELECT DISTINCT record_id,record_date,province,direction,official_status,
+                     source_quality,legacy_category,policy_strength
+              FROM v_policy_geography_base
+              WHERE record_date IS NOT NULL AND province IS NOT NULL
+            ) SELECT province,year(record_date)::INTEGER AS "year",
+              month(record_date)::INTEGER AS "month",
+              count(DISTINCT record_id)::BIGINT AS policy_count,
+              count(DISTINCT CASE WHEN official_status IN ('official','official_reprint') THEN record_id END)::BIGINT AS official_policy_count,
+              count(DISTINCT CASE WHEN direction='tightening' THEN record_id END)::BIGINT AS tightening_count,
+              count(DISTINCT CASE WHEN direction='loosening' THEN record_id END)::BIGINT AS loosening_count,
+              count(DISTINCT CASE WHEN direction='supportive' THEN record_id END)::BIGINT AS supportive_count,
+              sum(policy_strength)::DOUBLE AS policy_strength_sum,
+              max(policy_strength)::DOUBLE AS policy_strength_max,
+              avg(source_quality::DOUBLE)::DOUBLE AS source_quality_mean
+            FROM base GROUP BY province,year(record_date),month(record_date)""")
+        con.execute("""CREATE OR REPLACE VIEW v_national_month_policy_panel AS
+            SELECT year(record_date)::INTEGER AS "year",month(record_date)::INTEGER AS "month",
+              count(DISTINCT record_id)::BIGINT AS policy_count,
+              count(DISTINCT CASE WHEN official_status IN ('official','official_reprint') THEN record_id END)::BIGINT AS official_policy_count,
+              count(DISTINCT CASE WHEN direction='tightening' THEN record_id END)::BIGINT AS tightening_count,
+              count(DISTINCT CASE WHEN direction='loosening' THEN record_id END)::BIGINT AS loosening_count,
+              count(DISTINCT CASE WHEN direction='supportive' THEN record_id END)::BIGINT AS supportive_count,
+              avg(source_quality::DOUBLE)::DOUBLE AS source_quality_mean
+            FROM records WHERE record_date IS NOT NULL GROUP BY 1,2""")
         con.execute(
             "CREATE OR REPLACE VIEW v_policy_event_study AS SELECT *,0::INTEGER event_time FROM v_city_month_policy_panel"
         )
@@ -162,8 +250,9 @@ def build_database(settings: Settings | None = None) -> Path:
                    FROM record_collections GROUP BY ALL
                    ORDER BY collection_name,subcollection_name NULLS LAST"""
             )
-            con.execute(
-                """CREATE OR REPLACE VIEW v_source_collection_coverage AS
+            if has_staging_excel:
+                con.execute(
+                    """CREATE OR REPLACE VIEW v_source_collection_coverage AS
                    SELECT s.source_sheet,s.collection_code,s.collection_name,
                           s.subcollection_code,s.subcollection_name,s.source_kind,
                           count(e.source_cell)::BIGINT staging_cell_count,
@@ -174,13 +263,18 @@ def build_database(settings: Settings | None = None) -> Path:
                      ON s.source_sheet=e.source_sheet_name
                    WHERE s.mapping_role='primary'
                    GROUP BY ALL ORDER BY s.source_sheet"""
-            )
+                )
+                staging_metrics = (
+                    "(SELECT count(DISTINCT source_sheet_name) FROM staging_excel_cells),"
+                    "(SELECT count(*) FROM staging_excel_cells)"
+                )
+            else:
+                staging_metrics = "0::BIGINT,0::BIGINT"
             con.execute(
-                """CREATE OR REPLACE VIEW v_information_completeness AS
+                f"""CREATE OR REPLACE VIEW v_information_completeness AS
                    SELECT
-                     (SELECT count(DISTINCT source_sheet_name) FROM staging_excel_cells)::BIGINT
-                       AS staging_sheet_count,
-                     (SELECT count(*) FROM staging_excel_cells)::BIGINT AS staging_cell_count,
+                     {staging_metrics.split(',')[0]}::BIGINT AS staging_sheet_count,
+                     {staging_metrics.split(',', 1)[1]}::BIGINT AS staging_cell_count,
                      (SELECT count(DISTINCT source_sheet) FROM source_sheet_collections)::BIGINT
                        AS mapped_sheet_count,
                      (SELECT count(*) FROM records)::BIGINT AS record_count,

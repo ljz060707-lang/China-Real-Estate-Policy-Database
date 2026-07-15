@@ -5,12 +5,20 @@ from pathlib import Path
 
 import plotly.express as px
 import streamlit as st
+import streamlit.components.v1 as components
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
+from app.geography_panel import (  # noqa: E402
+    GeographyPanelUnavailable,
+    filter_options,
+    panel_health,
+    query_region_panel,
+    tianditu_map_html,
+)
 from app.review_center import render_review_center  # noqa: E402
 from app.theme import (  # noqa: E402
     apply_academic_theme,
@@ -385,19 +393,85 @@ elif page == "时间趋势":
     figure.update_traces(line={"width": 2.4}, marker={"size": 4})
     st.plotly_chart(style_plotly_figure(figure), use_container_width=True)
 elif page == "地区比较":
-    frame = db._query(
-        "SELECT city_name,count(*) policy_count FROM v_policy_master "
-        "WHERE city_name IS NOT NULL GROUP BY 1 ORDER BY 2 DESC LIMIT 40"
-    ).to_pandas()
-    figure = px.bar(
-        frame,
-        x="city_name",
-        y="policy_count",
-        title="地区政策数量排名",
-        color_discrete_sequence=["#82318E"],
+    try:
+        health = panel_health(db)
+        options = filter_options(db)
+    except GeographyPanelUnavailable as exc:
+        st.error(str(exc))
+        st.code("uv run policydb normalize-geography\nuv run policydb build-database")
+        st.stop()
+    filters = st.columns([1.0, 1.2, 1.2, 1.0, 1.3])
+    level = filters[0].selectbox("层级", ["全国", "省级", "地级市"], index=1)
+    province_choice = filters[1].selectbox("省份", ["全部", *options["provinces"]])
+    city_choice = filters[2].selectbox("城市", ["全部", *options["cities"]])
+    year_choice = filters[3].selectbox("年份", ["全部", *options["years"]])
+    topic_choice = filters[4].selectbox("政策类型", ["全部", *options["topics"]])
+    page_size = 30
+    page_number = int(st.number_input("排名页码", min_value=1, value=1, step=1))
+    result = query_region_panel(
+        db,
+        level,
+        province=None if province_choice == "全部" else province_choice,
+        city=None if city_choice == "全部" else city_choice,
+        year=None if year_choice == "全部" else int(year_choice),
+        topic=None if topic_choice == "全部" else topic_choice,
+        limit=page_size,
+        offset=(page_number - 1) * page_size,
     )
-    figure.update_traces(marker_line_width=0)
-    st.plotly_chart(style_plotly_figure(figure), use_container_width=True)
+    ranking = result["ranking"]
+    trend = result["trend"]
+    if ranking.is_empty():
+        st.info("当前筛选条件没有地区政策数据。请减少筛选条件或切换统计层级。")
+    else:
+        rank_pd = ranking.to_pandas()
+        trend_pd = trend.to_pandas()
+        rank_tab, trend_tab, map_tab = st.tabs(["总体排名", "时间趋势", "天地图"])
+        with rank_tab:
+            figure = px.bar(
+                rank_pd,
+                x="region",
+                y="policy_count",
+                hover_data=["official_policy_count", "official_share"],
+                title=f"{level}政策数量排名（第 {page_number} 页）",
+                color_discrete_sequence=["#82318E"],
+            )
+            figure.update_traces(marker_line_width=0)
+            st.plotly_chart(style_plotly_figure(figure), use_container_width=True)
+            st.dataframe(ranking, use_container_width=True, height=360)
+            st.caption(f"共 {result['total']} 个地区；当前每页 {page_size} 个。")
+        with trend_tab:
+            if trend.is_empty():
+                st.info("当前筛选条件没有时间序列数据。")
+            else:
+                trend_pd["period"] = (
+                    trend_pd["year"].astype(str)
+                    + "-"
+                    + trend_pd["month"].astype(str).str.zfill(2)
+                )
+                figure = px.line(
+                    trend_pd,
+                    x="period",
+                    y=["policy_count", "official_policy_count", "easing_count"],
+                    title="地区政策月度趋势",
+                    color_discrete_sequence=["#82318E", "#4B1F5E", "#A66BB0"],
+                )
+                st.plotly_chart(style_plotly_figure(figure), use_container_width=True)
+        with map_tab:
+            map_html = tianditu_map_html(ranking["region"].to_list())
+            if map_html:
+                components.html(map_html, height=565)
+            else:
+                st.info(
+                    "地图未配置天地图 Key。设置 TIANDITU_TOKEN 后即可显示；"
+                    "柱状排名和时间趋势不依赖地图服务。"
+                )
+    with st.expander("地区视图运行状态"):
+        st.write(f"v_city_month_policy_panel：{health['row_count']} 行")
+        st.code(
+            "DESCRIBE v_city_month_policy_panel;\n"
+            "SELECT COUNT(*) FROM v_city_month_policy_panel;\n"
+            "SELECT * FROM v_city_month_policy_panel LIMIT 10;"
+        )
 elif page == "专题页面":
     topic = st.selectbox(
         "专题",

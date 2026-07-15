@@ -93,6 +93,19 @@ CRAWL_SCHEMAS = {
         "created_at": pl.String,
         "updated_at": pl.String,
     },
+    "llm_verifications": {
+        "verification_id": pl.String,
+        "content_sha256": pl.String,
+        "model_name": pl.String,
+        "prompt_version": pl.String,
+        "status": pl.String,
+        "output_json": pl.String,
+        "confidence": pl.Float64,
+        "error_type": pl.String,
+        "called_at": pl.String,
+        "created_at": pl.String,
+        "updated_at": pl.String,
+    },
 }
 
 

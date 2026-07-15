@@ -50,9 +50,26 @@ class GLMExtraction(BaseModel):
     needs_review: bool = False
 
 
+class GLMVerification(BaseModel):
+    field_evidence_valid: bool
+    segmentation_complete: bool
+    city_scope_supported: bool
+    classification_supported: bool
+    direction_supported: bool
+    strength_supported: bool
+    source_refetch_required: bool = False
+    evidence_spans: list[EvidenceSpan] = Field(default_factory=list)
+    conflicts: list[str] = Field(default_factory=list)
+    confidence: float = Field(ge=0, le=1)
+
+
 SYSTEM_PROMPT = """你是中国房地产政策资料结构化助手。只输出符合给定JSON schema的JSON。
 不得根据常识编造发布日期、机构、链接、行政区划代码或文件真实性。
 证据不足时保留空值并设置needs_review=true。"""
+
+VERIFICATION_PROMPT = """你是独立的政策数据复核助手。只核对输入正文与第一次抽取，输出JSON。
+逐字段给出正文证据，检查文本切割、城市过度推断、分类、方向和强度；不得补写正文中不存在的内容。
+你只能报告证据与冲突，最终是否通过由确定性程序决定。"""
 
 
 class GLMEnricher:
@@ -74,6 +91,7 @@ class GLMEnricher:
         self.client = client or httpx.Client(timeout=90)
         self.retries = retries
         self.cache_path = self.settings.curated / "llm_extractions.parquet"
+        self.verification_cache_path = self.settings.curated / "llm_verifications.parquet"
 
     @staticmethod
     def chunks(text: str, size: int = 12000) -> list[str]:
@@ -161,6 +179,82 @@ class GLMEnricher:
         append_unique(self.cache_path, [row], "extraction_id")
         return result
 
+    def verify(
+        self,
+        content_sha256: str,
+        text: str,
+        extraction: GLMExtraction,
+    ) -> GLMVerification | None:
+        verification_id = stable_id(
+            content_sha256,
+            self.model,
+            self.prompt_version,
+            "independent-verification-v1",
+            prefix="LLMVERIFY",
+        )
+        if self.verification_cache_path.exists():
+            cached = pl.read_parquet(self.verification_cache_path).filter(
+                (pl.col("verification_id") == verification_id)
+                & (pl.col("status") == "complete")
+            )
+            if cached.height:
+                return GLMVerification.model_validate_json(cached[-1, "output_json"])
+        now = datetime.now(UTC).isoformat()
+        result: GLMVerification | None = None
+        error_type = None
+        status = "awaiting_api_key"
+        if self.api_key:
+            error: Exception | None = None
+            for _ in range(self.retries + 1):
+                try:
+                    response = self.client.post(
+                        "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+                        headers={"Authorization": f"Bearer {self.api_key}"},
+                        json={
+                            "model": self.model,
+                            "response_format": {"type": "json_object"},
+                            "messages": [
+                                {"role": "system", "content": VERIFICATION_PROMPT},
+                                {
+                                    "role": "user",
+                                    "content": "schema="
+                                    + json.dumps(
+                                        GLMVerification.model_json_schema(), ensure_ascii=False
+                                    )
+                                    + "\n第一次抽取="
+                                    + extraction.model_dump_json()
+                                    + "\n正文="
+                                    + "\n\n".join(self.chunks(text)[:4]),
+                                },
+                            ],
+                        },
+                    )
+                    response.raise_for_status()
+                    content = response.json()["choices"][0]["message"]["content"]
+                    result = GLMVerification.model_validate_json(content)
+                    status = "complete"
+                    break
+                except (httpx.HTTPError, KeyError, TypeError, ValidationError) as exc:
+                    error = exc
+            if result is None:
+                status = "failed_validation"
+                error_type = type(error).__name__ if error else "unknown"
+        row = {
+            "verification_id": verification_id,
+            "content_sha256": content_sha256,
+            "model_name": self.model,
+            "prompt_version": self.prompt_version,
+            "status": status,
+            "output_json": result.model_dump_json() if result else None,
+            "confidence": result.confidence if result else None,
+            "error_type": error_type,
+            "called_at": now if self.api_key else None,
+            "created_at": now,
+            "updated_at": now,
+        }
+        append_unique(self.verification_cache_path, [row], "verification_id")
+        return result
+
     def enrich_pending(self) -> dict:
         versions_path = self.settings.curated / "policy_document_versions.parquet"
         if not versions_path.exists():
@@ -177,6 +271,37 @@ class GLMEnricher:
                 awaiting += 1
         return {
             "pending": versions.height,
+            "completed": completed,
+            "awaiting_api_key": awaiting,
+            "failed": failed,
+        }
+
+    def verify_pending(self) -> dict:
+        """Run an independent evidence check for completed first-pass extractions."""
+        versions_path = self.settings.curated / "policy_document_versions.parquet"
+        if not versions_path.exists() or not self.cache_path.exists():
+            return {"pending": 0, "completed": 0, "awaiting_api_key": 0, "failed": 0}
+        versions = pl.read_parquet(versions_path).select(
+            "content_sha256", "extracted_text"
+        ).unique("content_sha256", keep="last")
+        extractions = pl.read_parquet(self.cache_path).filter(
+            (pl.col("status") == "complete") & pl.col("output_json").is_not_null()
+        )
+        work = extractions.join(versions, on="content_sha256", how="inner")
+        completed = awaiting = failed = 0
+        for row in work.iter_rows(named=True):
+            extraction = GLMExtraction.model_validate_json(row["output_json"])
+            result = self.verify(
+                row["content_sha256"], row.get("extracted_text") or "", extraction
+            )
+            if result:
+                completed += 1
+            elif self.api_key:
+                failed += 1
+            else:
+                awaiting += 1
+        return {
+            "pending": work.height,
             "completed": completed,
             "awaiting_api_key": awaiting,
             "failed": failed,

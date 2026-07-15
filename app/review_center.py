@@ -14,6 +14,7 @@ from policydb.review import (
     review_task_count,
     save_review_decision,
 )
+from policydb.review_automation import automate_review_tasks
 from policydb.settings import Settings
 
 TYPE_LABELS = {
@@ -27,7 +28,17 @@ TYPE_LABELS = {
     "duplicate_record": "重复记录",
     "other": "其他",
 }
-STATUS_LABELS = {"pending": "待审核", "completed": "已完成", "all": "全部状态"}
+STATUS_LABELS = {
+    "manual_review_required": "真正需要人工判断",
+    "pending_diagnosis": "等待自动来源恢复",
+    "auto_verified": "自动验证通过",
+    "auto_repaired_segmentation": "已修复文本切割",
+    "auto_reparsed": "已重新解析",
+    "auto_recovered_official": "已恢复官方来源",
+    "auto_recovered_secondary": "已恢复辅助来源",
+    "rejected": "非事实/重复任务",
+    "all": "全部状态",
+}
 
 
 @st.cache_data(ttl=30, max_entries=32, show_spinner=False)
@@ -40,12 +51,15 @@ def _cached_review_stats(root: str, database_stamp: int) -> dict:
 def _cached_review_count(
     root: str,
     review_type: str,
-    status: str,
+    automation_status: str,
     database_stamp: int,
 ) -> int:
     del database_stamp
     return review_task_count(
-        Settings.discover(root), review_type=review_type, status=status
+        Settings.discover(root),
+        review_type=review_type,
+        status="all",
+        automation_status=automation_status,
     )
 
 
@@ -53,7 +67,7 @@ def _cached_review_count(
 def _cached_review_tasks(
     root: str,
     review_type: str,
-    status: str,
+    automation_status: str,
     limit: int,
     offset: int,
     database_stamp: int,
@@ -62,7 +76,8 @@ def _cached_review_tasks(
     return list_review_tasks(
         Settings.discover(root),
         review_type=review_type,
-        status=status,
+        status="all",
+        automation_status=automation_status,
         limit=limit,
         offset=offset,
     )
@@ -108,13 +123,25 @@ def render_review_center(root: str | Path | None = None) -> None:
     database_stamp = settings.database.stat().st_mtime_ns
     stats = _cached_review_stats(root_key, database_stamp)
     type_counts = stats["review_type"]
+    auto_counts = stats["automation_status"]
+    automatic_done = sum(
+        auto_counts.get(name, 0)
+        for name in (
+            "auto_verified",
+            "auto_repaired_segmentation",
+            "auto_reparsed",
+            "auto_recovered_official",
+            "auto_recovered_secondary",
+            "rejected",
+        )
+    )
     cards = [
-        ("待审核任务", stats["pending"]),
-        ("已完成", stats["completed"]),
+        ("人工兜底", auto_counts.get("manual_review_required", 0)),
+        ("等待自动恢复", auto_counts.get("pending_diagnosis", 0)),
+        ("自动处理", automatic_done),
         ("低置信分类", type_counts.get("low_confidence", 0)),
-        ("链接问题", type_counts.get("invalid_url", 0)),
-        ("T4 未关联", type_counts.get("unmatched_t4", 0)),
-        ("T2 未解释", type_counts.get("unexplained_t2", 0)),
+        ("官方来源恢复", auto_counts.get("auto_recovered_official", 0)),
+        ("文本修复", auto_counts.get("auto_repaired_segmentation", 0)),
     ]
     for column, (label, value) in zip(st.columns(6), cards, strict=True):
         column.metric(label, int(value))
@@ -125,17 +152,28 @@ def render_review_center(root: str | Path | None = None) -> None:
         selected_label = st.selectbox("审核类型", list(TYPE_LABELS.values()))
         review_type = next(key for key, value in TYPE_LABELS.items() if value == selected_label)
         status_label = st.selectbox("状态", list(STATUS_LABELS.values()))
-        status = next(key for key, value in STATUS_LABELS.items() if value == status_label)
-        if st.button("重新扫描问题", use_container_width=True, disabled=read_only):
-            result = generate_review_tasks(settings)
+        automation_status = next(
+            key for key, value in STATUS_LABELS.items() if value == status_label
+        )
+        if st.button("运行自动诊断与修复", use_container_width=True, disabled=read_only):
+            result = automate_review_tasks(settings)
             st.cache_data.clear()
-            st.success(f"扫描完成，本次新增 {result['created_total']} 条任务")
+            st.success(
+                f"自动处理率 {result['automatic_processing_rate']:.1%}；"
+                f"人工兜底 {result['manual_review_count']} 条"
+            )
             st.rerun()
-        st.caption("重复扫描不会覆盖已完成的审核结果。")
+        with st.expander("高级：重新发现问题"):
+            if st.button("重新扫描问题", disabled=read_only):
+                result = generate_review_tasks(settings)
+                st.cache_data.clear()
+                st.success(f"扫描完成，本次新增 {result['created_total']} 条任务")
+                st.rerun()
+        st.caption("默认先自动修复；只有关键事实冲突才进入人工兜底。")
 
     page_size = 25
     total_tasks = _cached_review_count(
-        root_key, review_type, status, database_stamp
+        root_key, review_type, automation_status, database_stamp
     )
     total_pages = max(1, math.ceil(total_tasks / page_size))
     with filter_column:
@@ -153,7 +191,7 @@ def render_review_center(root: str | Path | None = None) -> None:
     tasks = _cached_review_tasks(
         root_key,
         review_type,
-        status,
+        automation_status,
         page_size,
         (page_number - 1) * page_size,
         database_stamp,
@@ -180,7 +218,10 @@ def render_review_center(root: str | Path | None = None) -> None:
         st.markdown(f"**{TYPE_LABELS.get(task['review_type'], task['review_type'])}**")
         meta_left, meta_right = st.columns(2)
         meta_left.text_input("record_id", task.get("record_id") or "—", disabled=True)
-        meta_right.text_input("状态", task.get("status") or "—", disabled=True)
+        meta_right.text_input(
+            "自动状态", task.get("automation_status") or "pending_diagnosis", disabled=True
+        )
+        st.text_input("异常原因", task.get("diagnosis") or "尚未诊断", disabled=True)
         st.text_input("标题", task.get("title") or "—", disabled=True)
         date_source_left, date_source_right = st.columns(2)
         date_source_left.text_input(

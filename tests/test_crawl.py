@@ -10,7 +10,7 @@ import yaml
 from policydb.crawl.checkpoint import append_unique
 from policydb.crawl.dedup import canonicalize_url, content_sha256
 from policydb.crawl.fetcher import RespectfulFetcher
-from policydb.crawl.parser import parse_document
+from policydb.crawl.parser import merge_semantic_blocks, parse_document
 from policydb.crawl.pipeline import CrawlPipeline
 from policydb.settings import Settings
 
@@ -141,6 +141,80 @@ def test_pdf_parser_extracts_text():
     assert parsed["document_type"] == "pdf"
     assert parsed["page_count"] == 1
     assert "policy document" in parsed["full_text"]
+
+
+def test_cross_page_sentence_is_merged_without_inventing_text():
+    result = merge_semantic_blocks(
+        [
+            {"text": "本通知自发布之日起", "page": 1, "kind": "text"},
+            {"text": "正式施行。", "page": 2, "kind": "text"},
+        ]
+    )
+    assert "本通知自发布之日起正式施行。" in result["text"]
+    assert result["repairs"][0]["reason"] == "cross_page_sentence"
+
+
+def test_crawl_pipeline_fetches_html_attachment(tmp_path):
+    root = tmp_path / "repo"
+    (root / "data" / "reference").mkdir(parents=True)
+    (root / "data" / "curated").mkdir(parents=True)
+    (root / "data" / "reference" / "source_registry.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "sources": [
+                    {
+                        "source_id": "SRC_ATTACHMENT",
+                        "source_name": "测试政府",
+                        "domain": "example.gov.cn",
+                        "source_type": "government",
+                        "source_role": "canonical_candidate",
+                        "official_status": "official",
+                        "seed_urls": ["https://example.gov.cn/policy"],
+                        "crawl_enabled": True,
+                        "priority": 0,
+                        "rate_limit": 0,
+                    }
+                ]
+            },
+            allow_unicode=True,
+        ),
+        encoding="utf-8",
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("attachment.pdf"):
+            document = fitz.open()
+            page = document.new_page()
+            page.insert_text((72, 72), "attachment policy text")
+            body = document.tobytes()
+            document.close()
+            return httpx.Response(
+                200,
+                content=body,
+                headers={"content-type": "application/pdf"},
+                request=request,
+            )
+        return httpx.Response(
+            200,
+            text=(
+                "<html><title>政策</title><article><p>政策正文内容足够用于解析。</p>"
+                '<a href="/attachment.pdf">附件</a></article></html>'
+            ),
+            headers={"content-type": "text/html"},
+            request=request,
+        )
+
+    fetcher = RespectfulFetcher(
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+        check_robots=False,
+        rate_limit=0,
+    )
+    pipeline = CrawlPipeline(Settings(root=root), fetcher=fetcher)
+    plan = pipeline.plan(run_type="test", start_date=date(2024, 1, 1), end_date=date(2024, 1, 2))
+    pipeline.run(plan["run_id"])
+    versions = pl.read_parquet(root / "data" / "curated" / "policy_document_versions.parquet")
+    assert versions.height == 2
+    assert versions.filter(pl.col("content_type").str.contains("pdf")).height == 1
 
 
 def test_url_hash_and_checkpoint_deduplication(tmp_path):

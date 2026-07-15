@@ -15,9 +15,12 @@ from policydb.crawl.pipeline import CrawlPipeline
 from policydb.enrich.glm import GLMEnricher
 from policydb.export.excel_compatible import export_excel_compatible
 from policydb.export.release import create_release
+from policydb.geography import materialize_geography
 from policydb.ingest.excel import import_excel, inventory_excel
 from policydb.query.database import build_database
+from policydb.recovery import recover_review_sources
 from policydb.review import apply_corrections, generate_review_tasks
+from policydb.review_automation import automate_review_tasks
 from policydb.scope import materialize_city_scope
 from policydb.settings import Settings
 from policydb.sources import bootstrap_sources_from_excel
@@ -178,6 +181,14 @@ def build_city_scope():
     typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
 
 
+@app.command("normalize-geography")
+def normalize_geography():
+    """统一省、市、县级市名称和层级，并重建地区研究视图。"""
+    result = materialize_geography()
+    build_database()
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
 @app.command("match-t4")
 def match_t4():
     """生成T4到T1的精确/模糊匹配候选；模糊结果不自动应用。"""
@@ -254,6 +265,14 @@ def enrich_glm(pending_only: bool = typer.Option(True, "--pending-only/--all")):
     typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
 
 
+@enrich_app.command("verify")
+def enrich_verify():
+    """独立复核第一次GLM抽取；最终状态仍由确定性规则决定。"""
+    result = GLMEnricher().verify_pending()
+    build_database()
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
 @app.command("export-excel")
 def export_excel(
     template: Annotated[Path, typer.Option("--template")],
@@ -290,3 +309,19 @@ def review_apply():
     """将已确认的修正应用到 Curated 层并重建 DuckDB。"""
     result = apply_corrections()
     typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@review_app.command("auto")
+def review_auto(
+    dry_run: bool = typer.Option(False, "--dry-run", help="仅诊断，不写入Curated修复"),
+):
+    """自动诊断、修复和分流已有任务，不新增人工任务。"""
+    result = automate_review_tasks(apply_repairs=not dry_run)
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@review_app.command("recover-sources")
+def review_recover_sources(limit: int = typer.Option(20, "--limit", min=1, max=500)):
+    """优先回抓已有URL，再搜索已启用的官方来源注册表。"""
+    result = recover_review_sources(limit=limit)
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2, default=str))

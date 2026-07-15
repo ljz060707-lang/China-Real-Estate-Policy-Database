@@ -8,9 +8,10 @@ import polars as pl
 import yaml
 
 from policydb.crawl.checkpoint import append_unique, ensure_crawl_storage
+from policydb.crawl.dedup import content_sha256
 from policydb.crawl.discovery import discover_search_items, discover_seed_items
 from policydb.crawl.fetcher import RespectfulFetcher
-from policydb.crawl.parser import parse_document
+from policydb.crawl.parser import extract_pdf_embedded, parse_document
 from policydb.crawl.registry import load_registry
 from policydb.scope import load_cities_105
 from policydb.settings import Settings
@@ -129,7 +130,7 @@ class CrawlPipeline:
                 source = source_index[item["source_id"]]
                 self.fetcher.rate_limit = source.rate_limit
                 result = self.fetcher.fetch(item["url"])
-                parsed = parse_document(result.body, result.content_type)
+                parsed = parse_document(result.body, result.content_type, result.final_url)
                 extension = ".pdf" if parsed["document_type"] == "pdf" else ".html"
                 raw_dir = (
                     self.settings.root
@@ -201,6 +202,103 @@ class CrawlPipeline:
                     versions.append(version_row)
                     existing_version_ids.add(version_id)
                     item_status = "fetched"
+                for attachment in parsed.get("attachments", []):
+                    attachment_url = attachment.get("url")
+                    if not attachment_url:
+                        if attachment.get("source") == "pdf_embedded":
+                            embedded = dict(extract_pdf_embedded(result.body)).get(
+                                attachment.get("label")
+                            )
+                            if embedded is not None:
+                                attachment_dir = (
+                                    self.settings.root
+                                    / "data"
+                                    / "raw"
+                                    / "documents"
+                                    / now.strftime("%Y")
+                                    / now.strftime("%m")
+                                )
+                                attachment_dir.mkdir(parents=True, exist_ok=True)
+                                digest = content_sha256(embedded)
+                                suffix = Path(str(attachment.get("label") or "")).suffix or ".bin"
+                                embedded_path = attachment_dir / f"{digest}{suffix[:10]}"
+                                if not embedded_path.exists():
+                                    embedded_path.write_bytes(embedded)
+                        continue
+                    attachment_item_id = stable_id(item["item_id"], attachment_url, prefix="ATTACH")
+                    try:
+                        attachment_result = self.fetcher.fetch(attachment_url)
+                        attachment_parsed = parse_document(
+                            attachment_result.body,
+                            attachment_result.content_type,
+                            attachment_result.final_url,
+                        )
+                        attachment_extension = (
+                            ".pdf"
+                            if attachment_parsed["document_type"] == "pdf"
+                            else Path(attachment_result.final_url).suffix or ".bin"
+                        )
+                        attachment_dir = (
+                            self.settings.root
+                            / "data"
+                            / "raw"
+                            / "documents"
+                            / now.strftime("%Y")
+                            / now.strftime("%m")
+                        )
+                        attachment_dir.mkdir(parents=True, exist_ok=True)
+                        attachment_path = (
+                            attachment_dir
+                            / f"{attachment_result.response_sha256}{attachment_extension[:10]}"
+                        )
+                        if not attachment_path.exists():
+                            attachment_path.write_bytes(attachment_result.body)
+                        attachment_version_id = stable_id(
+                            attachment_item_id,
+                            attachment_result.response_sha256,
+                            prefix="DOCVER",
+                        )
+                        if attachment_version_id not in existing_version_ids:
+                            versions.append(
+                                {
+                                    "document_version_id": attachment_version_id,
+                                    "record_id": None,
+                                    "crawl_item_id": attachment_item_id,
+                                    "source_id": item["source_id"],
+                                    "canonical_url": attachment_url,
+                                    "final_url": attachment_result.final_url,
+                                    "content_sha256": attachment_result.response_sha256,
+                                    "local_path": str(attachment_path.relative_to(self.settings.root)),
+                                    "content_type": attachment_result.content_type,
+                                    "http_status": attachment_result.status_code,
+                                    "title": attachment.get("label") or attachment_parsed["title"],
+                                    "extracted_text": attachment_parsed["full_text"],
+                                    "parse_status": attachment_parsed["parse_status"],
+                                    "is_material_change": False,
+                                    "first_seen_at": now.isoformat(),
+                                    "last_seen_at": now.isoformat(),
+                                    "created_at": now.isoformat(),
+                                    "updated_at": now.isoformat(),
+                                }
+                            )
+                            existing_version_ids.add(attachment_version_id)
+                    except Exception as attachment_error:
+                        errors.append(
+                            {
+                                "error_id": stable_id(
+                                    attachment_item_id, now.isoformat(), prefix="FETCHERR"
+                                ),
+                                "run_id": run_id,
+                                "item_id": attachment_item_id,
+                                "source_id": item["source_id"],
+                                "url": attachment_url,
+                                "error_type": type(attachment_error).__name__,
+                                "error_message": str(attachment_error)[:1000],
+                                "retryable": True,
+                                "created_at": now.isoformat(),
+                                "updated_at": now.isoformat(),
+                            }
+                        )
                 items = items.with_columns(
                     pl.when(pl.col("item_id") == item["item_id"])
                     .then(pl.lit(item_status))

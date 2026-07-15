@@ -92,6 +92,21 @@ def ensure_review_schema(settings: Settings | None = None) -> Settings:
                 updated_at TIMESTAMP WITH TIME ZONE NOT NULL
             )"""
         )
+        automation_columns = {
+            "diagnosis": "VARCHAR",
+            "automation_status": "VARCHAR DEFAULT 'pending_diagnosis'",
+            "diagnostic_confidence": "DOUBLE",
+            "completeness_score": "DOUBLE",
+            "diagnosis_evidence": "VARCHAR",
+            "repair_action": "VARCHAR",
+            "verification_round_1": "VARCHAR",
+            "verification_round_2": "VARCHAR",
+            "recovered_source_url": "VARCHAR",
+        }
+        existing = {row[0] for row in con.execute("DESCRIBE manual_review_tasks").fetchall()}
+        for column, data_type in automation_columns.items():
+            if column not in existing:
+                con.execute(f"ALTER TABLE manual_review_tasks ADD COLUMN {column} {data_type}")
     _ensure_csv(settings.manual_corrections, CORRECTION_FIELDS)
     _ensure_csv(settings.review_history, HISTORY_FIELDS)
     return settings
@@ -386,12 +401,17 @@ def review_stats(settings: Settings | None = None) -> dict:
         type_rows = con.execute(
             "SELECT review_type,count(*) FROM manual_review_tasks GROUP BY review_type"
         ).fetchall()
+        automation_rows = con.execute(
+            "SELECT COALESCE(automation_status,'pending_diagnosis'),count(*) "
+            "FROM manual_review_tasks GROUP BY 1"
+        ).fetchall()
     statuses = {status: count for status, count in status_rows}
     return {
         "pending": statuses.get("pending", 0),
         "completed": sum(count for status, count in status_rows if status != "pending"),
         "status": statuses,
         "review_type": {review_type: count for review_type, count in type_rows},
+        "automation_status": {status: count for status, count in automation_rows},
     }
 
 
@@ -400,6 +420,7 @@ def list_review_tasks(
     *,
     review_type: str | None = None,
     status: str | None = "pending",
+    automation_status: str | None = None,
     limit: int = 1000,
     offset: int = 0,
 ) -> pl.DataFrame:
@@ -413,6 +434,9 @@ def list_review_tasks(
     elif status and status != "all":
         clauses.append("t.status=?")
         params.append(status)
+    if automation_status and automation_status != "all":
+        clauses.append("COALESCE(t.automation_status,'pending_diagnosis')=?")
+        params.append(automation_status)
     sql = f"""SELECT t.*,r.title,r.record_date,r.summary,r.primary_source_url
               FROM manual_review_tasks t LEFT JOIN records r ON t.record_id=r.record_id
               WHERE {' AND '.join(clauses)}
@@ -436,6 +460,7 @@ def review_task_count(
     *,
     review_type: str | None = None,
     status: str | None = "pending",
+    automation_status: str | None = None,
 ) -> int:
     settings = ensure_review_schema(settings)
     clauses, params = ["1=1"], []
@@ -447,6 +472,9 @@ def review_task_count(
     elif status and status != "all":
         clauses.append("status=?")
         params.append(status)
+    if automation_status and automation_status != "all":
+        clauses.append("COALESCE(automation_status,'pending_diagnosis')=?")
+        params.append(automation_status)
     with duckdb.connect(str(settings.database), read_only=True) as con:
         return int(
             con.execute(
@@ -484,10 +512,12 @@ def save_review_decision(
         effective_evidence = evidence_url or task_row["evidence_url"]
         con.execute(
             """UPDATE manual_review_tasks
-               SET status=?,suggested_value=?,review_note=?,evidence_url=?,updated_at=?
+               SET status=?,automation_status=?,suggested_value=?,review_note=?,
+                   evidence_url=?,updated_at=?
                WHERE task_id=?""",
             [
                 decision,
+                "rejected" if decision == "rejected" else "auto_verified",
                 effective_value,
                 review_note,
                 effective_evidence,
