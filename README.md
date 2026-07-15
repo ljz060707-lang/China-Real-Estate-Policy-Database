@@ -1,6 +1,3 @@
-````markdown
-<div align="center">
-
 # 🏙️ 中国房地产与城市政策研究数据库
 
 ### China Real Estate & Urban Policy Research Database
