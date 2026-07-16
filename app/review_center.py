@@ -155,7 +155,7 @@ def render_review_center(root: str | Path | None = None) -> None:
         automation_status = next(
             key for key, value in STATUS_LABELS.items() if value == status_label
         )
-        if st.button("运行自动诊断与修复", use_container_width=True, disabled=read_only):
+        if st.button("运行自动诊断与修复", width="stretch", disabled=read_only):
             result = automate_review_tasks(settings)
             st.cache_data.clear()
             st.success(
@@ -258,7 +258,7 @@ def render_review_center(root: str | Path | None = None) -> None:
         )
         review_note = st.text_area("审核备注", height=90, disabled=read_only)
         if st.button(
-            "确认正确", type="primary", use_container_width=True, disabled=read_only
+            "确认正确", type="primary", width="stretch", disabled=read_only
         ):
             _act(
                 task_id,
@@ -269,7 +269,7 @@ def render_review_center(root: str | Path | None = None) -> None:
                 evidence_url=evidence_url,
                 settings=settings,
             )
-        if st.button("保存修改", use_container_width=True, disabled=read_only):
+        if st.button("保存修改", width="stretch", disabled=read_only):
             if not new_value.strip():
                 st.error("请输入修改后的值")
             else:
@@ -282,7 +282,7 @@ def render_review_center(root: str | Path | None = None) -> None:
                     evidence_url=evidence_url,
                     settings=settings,
                 )
-        if st.button("拒绝", use_container_width=True, disabled=read_only):
+        if st.button("拒绝", width="stretch", disabled=read_only):
             _act(
                 task_id,
                 "rejected",
@@ -292,7 +292,7 @@ def render_review_center(root: str | Path | None = None) -> None:
                 evidence_url=evidence_url,
                 settings=settings,
             )
-        if st.button("暂不处理", use_container_width=True, disabled=read_only):
+        if st.button("暂不处理", width="stretch", disabled=read_only):
             _act(
                 task_id,
                 "ignored",

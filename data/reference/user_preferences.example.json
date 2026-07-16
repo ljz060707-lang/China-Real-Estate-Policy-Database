@@ -1,0 +1,15 @@
+{
+  "glm_model": "glm-4-flash",
+  "glm_base_url": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+  "search_provider": "None",
+  "request_timeout": 30,
+  "connect_timeout": 10,
+  "max_retries": 3,
+  "default_rate_limit": 0.5,
+  "default_overlap_days": 3,
+  "default_max_fetches": 100,
+  "respect_robots": true,
+  "max_concurrency": 4,
+  "tianditu_map_approval": "GS（2024）0568号",
+  "tianditu_qualification": "甲测资字1100471"
+}

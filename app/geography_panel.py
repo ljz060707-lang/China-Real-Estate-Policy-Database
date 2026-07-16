@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import html
 import json
-import os
 
 import polars as pl
 
 from policydb import PolicyDB
+from policydb.settings import Settings
 
 
 class GeographyPanelUnavailable(RuntimeError):
@@ -126,12 +126,13 @@ def query_region_panel(
     return {"ranking": ranking, "trend": trend, "total": total}
 
 
-def tianditu_map_html(regions: list[str]) -> str | None:
-    token = os.getenv("TIANDITU_TOKEN", "").strip()
+def tianditu_map_html(regions: list[str], settings: Settings | None = None) -> str | None:
+    settings = settings or Settings.discover()
+    token = (settings.tianditu_token or "").strip()
     if not token:
         return None
-    approval = os.getenv("TIANDITU_MAP_APPROVAL", "GS（2024）0568号")
-    qualification = os.getenv("TIANDITU_QUALIFICATION", "甲测资字1100471")
+    approval = settings.tianditu_map_approval
+    qualification = settings.tianditu_qualification
     safe_token = html.escape(token, quote=True)
     safe_approval = html.escape(approval)
     safe_qualification = html.escape(qualification)

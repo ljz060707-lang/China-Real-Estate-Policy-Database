@@ -11,12 +11,15 @@ from typing import Annotated
 import typer
 
 from policydb.api import PolicyDB
+from policydb.crawl.health import disable_unhealthy, enable_recommended, evaluate_sources
 from policydb.crawl.pipeline import CrawlPipeline
 from policydb.enrich.glm import GLMEnricher
 from policydb.export.excel_compatible import export_excel_compatible
 from policydb.export.release import create_release
 from policydb.geography import materialize_geography
 from policydb.ingest.excel import import_excel, inventory_excel
+from policydb.jobs import CrawlJobRequest, JobManager
+from policydb.jobs.worker import run_job
 from policydb.query.database import build_database
 from policydb.recovery import recover_review_sources
 from policydb.review import apply_corrections, generate_review_tasks
@@ -33,10 +36,14 @@ review_app = typer.Typer(no_args_is_help=True, help="生成、处理和应用人
 sources_app = typer.Typer(no_args_is_help=True, help="管理政策来源注册表")
 crawl_app = typer.Typer(no_args_is_help=True, help="断点续跑的政策网页抓取")
 enrich_app = typer.Typer(no_args_is_help=True, help="可选的结构化模型辅助提取")
+jobs_app = typer.Typer(no_args_is_help=True, help="后台抓取任务")
+report_app = typer.Typer(no_args_is_help=True, help="运行报告")
 app.add_typer(review_app, name="review")
 app.add_typer(sources_app, name="sources")
 app.add_typer(crawl_app, name="crawl")
 app.add_typer(enrich_app, name="enrich")
+app.add_typer(jobs_app, name="jobs")
+app.add_typer(report_app, name="report")
 
 
 @app.command()
@@ -207,8 +214,29 @@ def sources_bootstrap_from_excel(
     typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
 
 
+@sources_app.command("evaluate")
+def sources_evaluate(limit: int | None = typer.Option(None, "--limit")):
+    """检测来源入口、解析能力与健康评分；网络访问只发生在显式运行时。"""
+    typer.echo(json.dumps(evaluate_sources(limit=limit), ensure_ascii=False, indent=2))
+
+
+@sources_app.command("enable-recommended")
+def sources_enable_recommended(limit: int = typer.Option(20, "--limit", min=1, max=100)):
+    """启用已经过体检并标记为推荐的有限来源。"""
+    typer.echo(json.dumps(enable_recommended(limit=limit), ensure_ascii=False, indent=2))
+
+
+@sources_app.command("disable-unhealthy")
+def sources_disable_unhealthy():
+    typer.echo(json.dumps(disable_unhealthy(), ensure_ascii=False, indent=2))
+
+
 def _date(value: str) -> date:
-    return date.today() if value == "today" else date.fromisoformat(value)
+    if value == "today":
+        return date.today()
+    if value == "overlap3":
+        return date.today() - timedelta(days=3)
+    return date.fromisoformat(value)
 
 
 @crawl_app.command("backfill")
@@ -256,19 +284,109 @@ def crawl_audit(scope: str = typer.Option("large-cities-105", "--scope")):
     typer.echo(json.dumps(CrawlPipeline().audit(), ensure_ascii=False, indent=2))
 
 
+def _job_mode(
+    mode: str,
+    from_: str,
+    to: str,
+    max_fetches: int,
+    run_glm: bool,
+) -> None:
+    settings = Settings.discover()
+    manager = JobManager(settings)
+    request = CrawlJobRequest(
+        mode=mode,
+        start_date=_date(from_),
+        end_date=_date(to),
+        max_fetches=max_fetches,
+        run_glm=run_glm,
+    )
+    state = manager.create(request)
+    result = run_job(state.job_id, settings)
+    typer.echo(json.dumps({"job_id": state.job_id, **result}, ensure_ascii=False, indent=2, default=str))
+
+
+@crawl_app.command("smart")
+def crawl_smart(
+    from_: str = typer.Option("overlap3", "--from"),
+    to: str = typer.Option("today", "--to"),
+    max_fetches: int = typer.Option(100, "--max-fetches"),
+    run_glm: bool = typer.Option(False, "--glm/--no-glm"),
+):
+    _job_mode("smart", from_, to, max_fetches, run_glm)
+
+
+@crawl_app.command("official-update")
+def crawl_official_update(
+    from_: str = typer.Option("overlap3", "--from"),
+    to: str = typer.Option("today", "--to"),
+    max_fetches: int = typer.Option(100, "--max-fetches"),
+):
+    _job_mode("official_update", from_, to, max_fetches, False)
+
+
+@crawl_app.command("web-discovery")
+def crawl_web_discovery(
+    from_: str = typer.Option("today", "--from"),
+    to: str = typer.Option("today", "--to"),
+    max_fetches: int = typer.Option(100, "--max-fetches"),
+):
+    _job_mode("web_discovery", from_, to, max_fetches, False)
+
+
+@crawl_app.command("seed-backtrack")
+def crawl_seed_backtrack(
+    from_: str = typer.Option("2018-01-01", "--from"),
+    to: str = typer.Option("today", "--to"),
+    max_fetches: int = typer.Option(100, "--max-fetches"),
+):
+    _job_mode("seed_backtrack", from_, to, max_fetches, False)
+
+
+@crawl_app.command("recover-missing")
+def crawl_recover_missing(max_fetches: int = typer.Option(20, "--max-fetches")):
+    _job_mode("recover_missing", "2018-01-01", "today", max_fetches, False)
+
+
+@jobs_app.command("run")
+def jobs_run(job_id: str = typer.Option(..., "--job-id")):
+    typer.echo(json.dumps(run_job(job_id), ensure_ascii=False, indent=2, default=str))
+
+
+@jobs_app.command("status")
+def jobs_status(job_id: str = typer.Option(..., "--job-id")):
+    typer.echo(JobManager().load_state(job_id).model_dump_json(indent=2))
+
+
+@jobs_app.command("cancel")
+def jobs_cancel(job_id: str = typer.Option(..., "--job-id")):
+    typer.echo(JobManager().cancel(job_id).model_dump_json(indent=2))
+
+
+@report_app.command("crawl")
+def report_crawl(job_id: str = typer.Option(..., "--job-id")):
+    manager = JobManager()
+    path = manager.job_dir(job_id) / "report.md"
+    if not path.exists():
+        raise typer.BadParameter("报告尚未生成")
+    typer.echo(path.read_text(encoding="utf-8"))
+
+
 @enrich_app.command("glm")
-def enrich_glm(pending_only: bool = typer.Option(True, "--pending-only/--all")):
+def enrich_glm(
+    pending_only: bool = typer.Option(True, "--pending-only/--all"),
+    run_id: str | None = typer.Option(None, "--run-id"),
+):
     """处理待提取正文；无GLM_API_KEY时仅建立待处理缓存。"""
     _ = pending_only
-    result = GLMEnricher().enrich_pending()
+    result = GLMEnricher().enrich_pending(run_id=run_id)
     build_database()
     typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
 
 
 @enrich_app.command("verify")
-def enrich_verify():
+def enrich_verify(run_id: str | None = typer.Option(None, "--run-id")):
     """独立复核第一次GLM抽取；最终状态仍由确定性规则决定。"""
-    result = GLMEnricher().verify_pending()
+    result = GLMEnricher().verify_pending(run_id=run_id)
     build_database()
     typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
 

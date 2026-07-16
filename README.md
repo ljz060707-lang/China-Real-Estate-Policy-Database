@@ -259,7 +259,19 @@ GLM用于：
 
 模型不会替代官方来源、发布日期和行政区划等确定性事实。
 
-## 1. 创建本地配置
+## 1. 推荐：在网页“个人设置”中配置
+
+启动 Dashboard 后进入左侧 **个人设置**。在“AI模型”中填写 GLM API Key，点击“保存AI设置”。
+
+- 密钥写入当前操作系统的 Keyring（Windows 凭据管理器）；
+- 页面只显示“已配置：••••••••”，不会回显密钥；
+- 空输入后保存表示不修改；
+- 清除密钥必须勾选二次确认；
+- 模型名称、Base URL、超时等非敏感选项写入被 Git 忽略的 `data/reference/user_preferences.json`。
+
+保存后，Dashboard、CLI 和后台抓取进程会读取同一配置，无需重启网站。
+
+## 2. 兼容方式：环境变量或 `.env`
 
 复制示例文件：
 
@@ -290,19 +302,19 @@ $env:GLM_API_KEY="你的API_Key"
 $env:GLM_MODEL="glm-4-flash"
 ```
 
-## 2. 执行第一次结构化抽取
+## 3. 执行第一次结构化抽取
 
 ```powershell
 uv run policydb enrich glm
 ```
 
-## 3. 执行第二次独立复核
+## 4. 执行第二次独立复核
 
 ```powershell
 uv run policydb enrich verify
 ```
 
-## 4. 自动更新审核状态
+## 5. 自动更新审核状态
 
 ```powershell
 uv run policydb review auto
@@ -342,6 +354,8 @@ data/reference/source_registry.yaml
 
 为了避免对政府网站造成不必要访问，所有外部来源默认关闭。
 
+普通用户无需编辑 YAML：进入网页左侧 **智能抓取 → 来源管理**，先运行“来源体检”，查看健康评分、推荐状态和最近错误，再勾选少量来源启用。系统不会静默启用全部 816 个来源。
+
 ## 1. 从原始 Excel 提取历史来源
 
 ```powershell
@@ -350,6 +364,24 @@ uv run policydb sources bootstrap-from-excel `
 ```
 
 ## 2. 审核并启用来源
+
+推荐的网页流程：
+
+```text
+智能抓取 → 来源管理 → 运行来源体检
+→ 查看健康评分和推荐名单
+→ 勾选已确认来源 → 启用所选
+```
+
+等价 CLI：
+
+```powershell
+uv run policydb sources evaluate --limit 20
+uv run policydb sources enable-recommended --limit 20
+uv run policydb sources disable-unhealthy
+```
+
+注册表更新会先备份、再原子替换，并记录修改日志。
 
 示例：
 
@@ -564,6 +596,8 @@ TIANDITU_MAP_APPROVAL=你的实际审图号
 TIANDITU_QUALIFICATION=你的测绘资质信息
 ```
 
+也可在 **个人设置 → 地图服务** 中安全保存 Token，并填写项目实际使用的审图号和测绘资质号。Token 进入 Keyring，审图号和资质号进入非敏感偏好文件。
+
 未配置天地图 Key 时：
 
 * 地区排名仍可使用；
@@ -771,6 +805,92 @@ AI主要用于：
 * 证据复核。
 
 ---
+
+# 🧠 网页智能抓取与后台任务
+
+启动网站后进入左侧 **智能抓取**。普通用户只需要：
+
+```text
+选择抓取模式 → 设置日期/城市/主题/上限
+→ 查看规模与费用预估 → 开始抓取
+→ 查看实时进度 → 下载 Markdown/CSV 报告
+```
+
+抓取不会在 Streamlit 主线程运行。页面仅保存无密钥的任务请求，然后启动独立 Python 工作进程。状态持续写入：
+
+```text
+data/logs/crawl_jobs/<job_id>/
+├─ state.json
+├─ request.json
+├─ events.jsonl
+├─ stdout.log
+├─ report.json
+└─ report.md
+```
+
+`state.json` 使用临时文件加 `os.replace` 原子更新；刷新页面或重新打开网站后仍能恢复任务。会修改 Curated 的任务使用 `data/logs/policydb-write.lock` 互斥锁，停止任务采用批次间协作式取消。
+
+## 七种抓取模式
+
+1. **智能组合抓取（推荐）**：默认采用最近 3 天重叠窗口，串联官方来源、原链接回溯、解析、去重、可选 GLM、独立复核、重建和验证。
+2. **官方来源增量更新**：只允许官方原文或官方转载成为 canonical source；没有已启用来源时明确阻塞并提示运行来源体检。
+3. **全网政策发现**：通过 Bing、Serper 或 Tavily 正式 API 查询，不抓取搜索引擎 HTML；媒体结果只能成为 discovery lead。
+4. **中金原数据库链接回溯**：即使启用来源数为 0 仍可从 Excel 历史链接运行；默认可先限制为 5 个 URL 小规模检查。
+5. **105城市历史回溯**：默认 2018-01-01 至今天，运行前展示城市数、来源数、查询数、最大网页数和 API 调用量。
+6. **缺失来源自动恢复**：区分无候选、低置信、候选冲突、连接失败、超时、HTTP错误、robots阻止、官方恢复和转载恢复。
+7. **来源体检与智能启用**：检查入口可达性、详情链接、正文解析、响应时间和错误类型，生成 0—100 健康评分；启用必须由用户确认。
+
+列表页发现会解析链接文字、相对 URL、相邻日期和“下一页”，限制同域、最大页数与候选数，并通过已访问 URL 集合防止循环翻页。动态网站预留 JSON API 和 Playwright 适配位置，但默认使用普通 HTTP HTML；Playwright 不作为全站默认方案。
+
+## 搜索服务与抓取安全
+
+在 **个人设置 → 搜索服务** 选择 `None`、`Bing`、`Serper` 或 `Tavily`。未配置搜索 API 时，“全网政策发现”会提示：
+
+> 全网发现需要配置搜索服务API；官方来源增量抓取和中金链接回溯仍可运行。
+
+密钥读取优先级：
+
+```text
+显式函数参数
+→ 操作系统 Keyring
+→ Streamlit Secrets
+→ 环境变量
+→ 本地 .env 兼容层
+```
+
+以下位置禁止保存真实密钥：README、YAML、DuckDB、Parquet、任务 `request.json`、日志和命令行参数。`POLICYDB_READ_ONLY=1` 时，网站禁用保存密钥、启动抓取和修改来源，只允许查看历史与报告。
+
+## 报告输出
+
+每次完成后生成：
+
+```text
+outputs/crawl_reports/<job_id>/
+├─ summary.json
+├─ report.md
+├─ discovered_candidates.csv
+├─ fetched_documents.csv
+├─ new_policies.csv
+├─ duplicate_documents.csv
+├─ recovered_sources.csv
+├─ errors.csv
+└─ source_health.csv
+```
+
+报告中的“成功”必须有实际抓取与文档版本指标支持。只创建 `run_id`、执行 `validate` 或得到 0 条结果，不会被表述为抓取成功。
+
+## 对应 CLI
+
+```powershell
+uv run policydb crawl smart --from overlap3 --to today --max-fetches 100
+uv run policydb crawl official-update --from overlap3 --to today
+uv run policydb crawl web-discovery --from overlap3 --to today
+uv run policydb crawl seed-backtrack --from 2018-01-01 --to today --max-fetches 5
+uv run policydb crawl recover-missing --max-fetches 20
+uv run policydb jobs status --job-id <JOB_ID>
+uv run policydb jobs cancel --job-id <JOB_ID>
+uv run policydb report crawl --job-id <JOB_ID>
+```
 
 # 🧰 常用工作流速查
 

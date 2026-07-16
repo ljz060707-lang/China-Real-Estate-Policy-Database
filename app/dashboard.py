@@ -12,6 +12,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
+from app.crawl_center import render_crawl_center  # noqa: E402
 from app.geography_panel import (  # noqa: E402
     GeographyPanelUnavailable,
     filter_options,
@@ -20,12 +21,14 @@ from app.geography_panel import (  # noqa: E402
     tianditu_map_html,
 )
 from app.review_center import render_review_center  # noqa: E402
+from app.settings_page import render_settings_page  # noqa: E402
 from app.theme import (  # noqa: E402
     apply_academic_theme,
     render_page_header,
     render_sidebar_brand,
     style_plotly_figure,
 )
+from app.ui import safe_dataframe, safe_pandas  # noqa: E402
 from policydb import PolicyDB  # noqa: E402
 
 st.set_page_config(page_title="中国房地产政策数据库", layout="wide")
@@ -51,6 +54,8 @@ page = st.sidebar.radio(
         "专题页面",
         "数据质量",
         "人工审核中心",
+        "智能抓取",
+        "个人设置",
     ],
 )
 
@@ -63,6 +68,8 @@ PAGE_HEADERS = {
     "地区比较": ("地区比较", "比较不同城市的政策数量与研究覆盖情况。"),
     "专题页面": ("专题研究", "面向供给侧、城市更新、白名单等专题提取研究样本。"),
     "数据质量": ("数据质量", "集中查看缺失、重复、来源和待审核问题。"),
+    "智能抓取": ("智能抓取", "后台执行来源发现、抓取、解析、复核和报告生成。"),
+    "个人设置": ("个人设置", "安全管理模型、地图、搜索和抓取偏好。"),
 }
 if page in PAGE_HEADERS:
     render_page_header(*PAGE_HEADERS[page])
@@ -90,7 +97,7 @@ if page == "数据总览":
     for column, (label, value) in zip(st.columns(5), cards, strict=True):
         column.metric(label, value)
 elif page == "政策体系":
-    summary = db._query("SELECT * FROM v_policy_library_summary").to_pandas()
+    summary = safe_pandas(db._query("SELECT * FROM v_policy_library_summary"))
     collections = summary[["collection_code", "collection_name"]].drop_duplicates()
     selected_name = st.selectbox("政策库", collections["collection_name"].tolist())
     selected_code = collections.loc[
@@ -134,7 +141,7 @@ elif page == "政策体系":
             title=f"{selected_name}：细分类记录数",
             color_discrete_sequence=["#82318E"],
         )
-        st.plotly_chart(style_plotly_figure(figure), use_container_width=True)
+        st.plotly_chart(style_plotly_figure(figure), width="stretch")
     options = ["全部"] + subset["subcollection_name"].dropna().tolist()
     selected_subcollection = st.selectbox("细分类筛选", options)
     sql = (
@@ -148,7 +155,7 @@ elif page == "政策体系":
         params.append(selected_subcollection)
     sql += " ORDER BY record_date DESC NULLS LAST LIMIT 200"
     frame = db._query(sql, params)
-    st.dataframe(frame, use_container_width=True, height=430)
+    safe_dataframe(frame, height=430)
     st.download_button(
         "下载当前结果 CSV",
         frame.write_csv().encode("utf-8-sig"),
@@ -282,7 +289,7 @@ elif page == "105城市":
         strict=True,
     ):
         column.metric(label, value)
-    trend = db._query(
+    trend = safe_pandas(db._query(
         "SELECT year(p.record_date) AS \"year\",month(p.record_date) AS \"month\","
         "count(DISTINCT p.record_id) policy_count,"
         "count(DISTINCT CASE WHEN p.direction IN ('loosening','supportive') THEN p.record_id END) easing_count,"
@@ -291,7 +298,7 @@ elif page == "105城市":
         + where
         + " GROUP BY 1,2 ORDER BY 1,2",
         params,
-    ).to_pandas()
+    ))
     trend["period"] = trend["year"].astype(str) + "-" + trend["month"].astype(str).str.zfill(2)
     trend_long = trend.melt(
         id_vars="period",
@@ -307,7 +314,7 @@ elif page == "105城市":
         title="政策数量与方向趋势",
         color_discrete_sequence=["#82318E", "#A66BB0", "#4B1F5E"],
     )
-    st.plotly_chart(style_plotly_figure(figure), use_container_width=True)
+    st.plotly_chart(style_plotly_figure(figure), width="stretch")
     ranking = db._query(
         "SELECT p.city_name,count(DISTINCT p.record_id) policy_count,"
         "avg(CASE WHEN p.official_status IN ('official','official_reprint') THEN 1.0 ELSE 0.0 END) official_share "
@@ -316,7 +323,7 @@ elif page == "105城市":
         + " GROUP BY p.city_name ORDER BY policy_count DESC",
         params,
     )
-    st.dataframe(ranking, use_container_width=True, height=340)
+    safe_dataframe(ranking, height=340)
     details = db._query(
         "SELECT p.record_id,p.record_date,p.city_name,p.province,p.title,p.direction,"
         "p.official_status,p.source_quality,p.primary_source_url,p.source_sheet "
@@ -325,14 +332,14 @@ elif page == "105城市":
         + " ORDER BY p.record_date DESC NULLS LAST LIMIT 200",
         params,
     )
-    st.dataframe(details, use_container_width=True, height=430)
+    safe_dataframe(details, height=430)
     source_health = db._query(
         "SELECT official_status,priority,count(*) source_count,"
         "count(*) FILTER(WHERE crawl_enabled) enabled_count "
         "FROM source_registry GROUP BY ALL ORDER BY priority,official_status"
     )
     with st.expander("来源健康状态"):
-        st.dataframe(source_health, use_container_width=True)
+        safe_dataframe(source_health)
         latest_crawl = db._query("SELECT max(started_at) FROM crawl_runs").item()
         st.caption(f"最近抓取时间：{latest_crawl or '尚未启用来源'}")
     st.download_button(
@@ -352,7 +359,7 @@ elif page == "政策检索":
         include_full_text=False,
     )
     st.caption(f"显示前 {frame.height} 条结果；政策全文仅在选择记录后加载。")
-    st.dataframe(frame, use_container_width=True, height=430)
+    safe_dataframe(frame, height=430)
     st.download_button("下载 CSV", frame.write_csv().encode("utf-8-sig"), "policy_search.csv")
     if not frame.is_empty():
         record_ids = frame["record_id"].to_list()
@@ -377,11 +384,11 @@ elif page == "政策检索":
                 if source_url and str(source_url).startswith(("http://", "https://")):
                     st.link_button("打开原始来源", str(source_url))
 elif page == "时间趋势":
-    frame = db._query(
+    frame = safe_pandas(db._query(
         "SELECT year(record_date) AS \"year\",month(record_date) AS \"month\","
         "count(*) AS \"count\" "
         "FROM records WHERE record_date IS NOT NULL GROUP BY ALL ORDER BY 1,2"
-    ).to_pandas()
+    ))
     frame["period"] = frame["year"].astype(str) + "-" + frame["month"].astype(str).str.zfill(2)
     figure = px.line(
         frame,
@@ -391,7 +398,7 @@ elif page == "时间趋势":
         color_discrete_sequence=["#82318E"],
     )
     figure.update_traces(line={"width": 2.4}, marker={"size": 4})
-    st.plotly_chart(style_plotly_figure(figure), use_container_width=True)
+    st.plotly_chart(style_plotly_figure(figure), width="stretch")
 elif page == "地区比较":
     try:
         health = panel_health(db)
@@ -423,8 +430,8 @@ elif page == "地区比较":
     if ranking.is_empty():
         st.info("当前筛选条件没有地区政策数据。请减少筛选条件或切换统计层级。")
     else:
-        rank_pd = ranking.to_pandas()
-        trend_pd = trend.to_pandas()
+        rank_pd = safe_pandas(ranking)
+        trend_pd = safe_pandas(trend)
         rank_tab, trend_tab, map_tab = st.tabs(["总体排名", "时间趋势", "天地图"])
         with rank_tab:
             figure = px.bar(
@@ -436,8 +443,8 @@ elif page == "地区比较":
                 color_discrete_sequence=["#82318E"],
             )
             figure.update_traces(marker_line_width=0)
-            st.plotly_chart(style_plotly_figure(figure), use_container_width=True)
-            st.dataframe(ranking, use_container_width=True, height=360)
+            st.plotly_chart(style_plotly_figure(figure), width="stretch")
+            safe_dataframe(ranking, height=360)
             st.caption(f"共 {result['total']} 个地区；当前每页 {page_size} 个。")
         with trend_tab:
             if trend.is_empty():
@@ -455,7 +462,7 @@ elif page == "地区比较":
                     title="地区政策月度趋势",
                     color_discrete_sequence=["#82318E", "#4B1F5E", "#A66BB0"],
                 )
-                st.plotly_chart(style_plotly_figure(figure), use_container_width=True)
+                st.plotly_chart(style_plotly_figure(figure), width="stretch")
         with map_tab:
             map_html = tianditu_map_html(ranking["region"].to_list())
             if map_html:
@@ -494,9 +501,13 @@ elif page == "专题页面":
         "中央会议表述": "v_official_statements",
     }
     frame = db._query(f"SELECT * FROM {views.get(topic, 'v_policy_master')} LIMIT 200")
-    st.dataframe(frame, use_container_width=True, height=430)
+    safe_dataframe(frame, height=430)
 elif page == "数据质量":
-    st.dataframe(db._query("SELECT * FROM v_data_quality"), use_container_width=True)
+    safe_dataframe(db._query("SELECT * FROM v_data_quality"))
     st.info("需要逐条处理的问题，请进入左侧的“人工审核中心”。")
-else:
+elif page == "人工审核中心":
     render_review_center(ROOT)
+elif page == "智能抓取":
+    render_crawl_center(ROOT)
+else:
+    render_settings_page(ROOT)

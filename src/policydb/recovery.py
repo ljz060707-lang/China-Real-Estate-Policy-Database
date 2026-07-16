@@ -78,22 +78,14 @@ def score_source_candidate(record: RecoveryRecord, candidate: SourceCandidate) -
         else 0.0,
         "region": _similarity(record.region, candidate.region),
         "text": _similarity((record.full_text or "")[:3000], (candidate.text or "")[:3000]),
-        "official": {
-            "official": 1.0,
-            "official_reprint": 0.85,
-            "authoritative_media": 0.6,
-            "general_media": 0.35,
-            "unknown": 0.0,
-        }[candidate.official_status],
     }
     weights = {
         "title": 0.25,
-        "document_number": 0.2,
+        "document_number": 0.3,
         "issuing_agency": 0.15,
         "date": 0.1,
         "region": 0.1,
         "text": 0.1,
-        "official": 0.1,
     }
     conflicts = []
     if record.document_number and candidate.document_number:
@@ -109,7 +101,6 @@ def score_source_candidate(record: RecoveryRecord, candidate: SourceCandidate) -
         "date": bool(record.record_date and candidate.publication_date),
         "region": bool(record.region and candidate.region),
         "text": bool(record.full_text and candidate.text),
-        "official": True,
     }
     denominator = sum(weight for name, weight in weights.items() if available[name]) or 1.0
     score = (
@@ -218,14 +209,25 @@ class SourceRecoveryEngine:
         record: RecoveryRecord,
         candidates: list[SourceCandidate],
         *,
-        threshold: float = 0.9,
+        threshold: float | None = None,
     ) -> dict:
         ranked = self.rank(record, candidates)
         if not ranked:
             return {"status": "no_candidate", "score": 0.0}
         candidate, score = ranked[0]
         runner_up = ranked[1][1].score if len(ranked) > 1 else 0.0
-        if score.has_critical_conflict or score.score < threshold or score.score - runner_up < 0.05:
+        if candidate.official_status not in {"official", "official_reprint"}:
+            return {
+                "status": "low_confidence",
+                "score": score.score,
+                "candidate_url": candidate.url,
+                "source_role": "discovery_lead",
+                "evidence": [*score.evidence, "media_cannot_be_canonical"],
+            }
+        required_score = threshold if threshold is not None else (
+            0.85 if candidate.official_status == "official" else 0.90
+        )
+        if score.has_critical_conflict or score.score < required_score or score.score - runner_up < 0.05:
             return {
                 "status": "candidate_conflict" if score.has_critical_conflict or score.score - runner_up < 0.05 else "low_confidence",
                 "score": score.score,

@@ -17,6 +17,8 @@ def test_dashboard_pages_render_without_exceptions(root):
         "地区比较",
         "数据质量",
         "人工审核中心",
+        "智能抓取",
+        "个人设置",
     ):
         app.radio[0].set_value(page).run()
         assert not app.exception

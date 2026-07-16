@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 from datetime import UTC, date, datetime
 from typing import Literal
 
@@ -71,6 +70,8 @@ VERIFICATION_PROMPT = """你是独立的政策数据复核助手。只核对输�
 逐字段给出正文证据，检查文本切割、城市过度推断、分类、方向和强度；不得补写正文中不存在的内容。
 你只能报告证据与冲突，最终是否通过由确定性程序决定。"""
 
+_UNSET = object()
+
 
 class GLMEnricher:
     schema_version = "1.0.0"
@@ -81,14 +82,16 @@ class GLMEnricher:
         settings: Settings | None = None,
         *,
         client: httpx.Client | None = None,
-        api_key: str | None = None,
+        api_key: str | None | object = _UNSET,
         model: str | None = None,
         retries: int = 2,
     ) -> None:
         self.settings = settings or Settings.discover()
-        self.api_key = api_key if api_key is not None else os.getenv("GLM_API_KEY")
-        self.model = model or os.getenv("GLM_MODEL", "glm-4-flash")
-        self.client = client or httpx.Client(timeout=90)
+        resolved_key = self.settings.glm_api_key if api_key is _UNSET else api_key
+        self.api_key: str | None = resolved_key if isinstance(resolved_key, str) else None
+        self.model = model or self.settings.glm_model
+        self.base_url = self.settings.glm_base_url
+        self.client = client or httpx.Client(timeout=self.settings.request_timeout)
         self.retries = retries
         self.cache_path = self.settings.curated / "llm_extractions.parquet"
         self.verification_cache_path = self.settings.curated / "llm_verifications.parquet"
@@ -104,7 +107,7 @@ class GLMEnricher:
         for _ in range(self.retries + 1):
             try:
                 response = self.client.post(
-                    "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+                    self.base_url,
                     headers={"Authorization": f"Bearer {self.api_key}"},
                     json={
                         "model": self.model,
@@ -208,7 +211,7 @@ class GLMEnricher:
             for _ in range(self.retries + 1):
                 try:
                     response = self.client.post(
-                        "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+                        self.base_url,
                         headers={"Authorization": f"Bearer {self.api_key}"},
                         json={
                             "model": self.model,
@@ -255,14 +258,53 @@ class GLMEnricher:
         append_unique(self.verification_cache_path, [row], "verification_id")
         return result
 
-    def enrich_pending(self) -> dict:
+    @staticmethod
+    def _likely_relevant(text: str) -> bool:
+        return any(
+            term in text
+            for term in ("房地产", "住房", "楼市", "购房", "土地", "公积金", "城市更新", "保交", "房企")
+        )
+
+    def _pending_versions(
+        self,
+        run_id: str | None = None,
+        document_version_ids: list[str] | None = None,
+    ) -> pl.DataFrame:
         versions_path = self.settings.curated / "policy_document_versions.parquet"
         if not versions_path.exists():
-            return {"pending": 0, "completed": 0, "awaiting_api_key": 0, "failed": 0}
+            return pl.DataFrame()
         versions = pl.read_parquet(versions_path)
-        completed = awaiting = failed = 0
+        if document_version_ids:
+            versions = versions.filter(
+                pl.col("document_version_id").is_in(document_version_ids)
+            )
+        if run_id:
+            items_path = self.settings.curated / "crawl_items.parquet"
+            if not items_path.exists():
+                return versions.head(0)
+            items = pl.read_parquet(items_path).filter(pl.col("run_id") == run_id).select(
+                "item_id"
+            )
+            versions = versions.join(
+                items, left_on="crawl_item_id", right_on="item_id", how="inner"
+            )
+        return versions
+
+    def enrich_pending(
+        self,
+        run_id: str | None = None,
+        document_version_ids: list[str] | None = None,
+    ) -> dict:
+        versions = self._pending_versions(run_id, document_version_ids)
+        if versions.is_empty():
+            return {"pending": 0, "completed": 0, "awaiting_api_key": 0, "failed": 0, "irrelevant": 0}
+        completed = awaiting = failed = irrelevant = 0
         for row in versions.iter_rows(named=True):
-            result = self.extract(row["content_sha256"], row.get("extracted_text") or "")
+            text = row.get("extracted_text") or ""
+            if not self._likely_relevant(text):
+                irrelevant += 1
+                continue
+            result = self.extract(row["content_sha256"], text)
             if result:
                 completed += 1
             elif self.api_key:
@@ -274,14 +316,19 @@ class GLMEnricher:
             "completed": completed,
             "awaiting_api_key": awaiting,
             "failed": failed,
+            "irrelevant": irrelevant,
         }
 
-    def verify_pending(self) -> dict:
+    def verify_pending(
+        self,
+        run_id: str | None = None,
+        document_version_ids: list[str] | None = None,
+    ) -> dict:
         """Run an independent evidence check for completed first-pass extractions."""
         versions_path = self.settings.curated / "policy_document_versions.parquet"
         if not versions_path.exists() or not self.cache_path.exists():
             return {"pending": 0, "completed": 0, "awaiting_api_key": 0, "failed": 0}
-        versions = pl.read_parquet(versions_path).select(
+        versions = self._pending_versions(run_id, document_version_ids).select(
             "content_sha256", "extracted_text"
         ).unique("content_sha256", keep="last")
         extractions = pl.read_parquet(self.cache_path).filter(

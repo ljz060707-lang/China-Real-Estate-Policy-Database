@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -9,8 +10,13 @@ import yaml
 
 from policydb.crawl.checkpoint import append_unique, ensure_crawl_storage
 from policydb.crawl.dedup import content_sha256
-from policydb.crawl.discovery import discover_search_items, discover_seed_items
-from policydb.crawl.fetcher import RespectfulFetcher
+from policydb.crawl.discovery import (
+    ListPageDiscovery,
+    discover_search_items,
+    discover_seed_items,
+)
+from policydb.crawl.fetcher import PermissionErrorLocal, RespectfulFetcher
+from policydb.crawl.models import DiscoveryRequest
 from policydb.crawl.parser import extract_pdf_embedded, parse_document
 from policydb.crawl.registry import load_registry
 from policydb.scope import load_cities_105
@@ -38,10 +44,24 @@ class CrawlPipeline:
         start_date: date,
         end_date: date,
         official_first: bool = True,
+        include_disabled_seed: bool = False,
+        max_items: int | None = None,
+        official_only_sources: bool = False,
     ) -> dict:
         now = datetime.now(UTC)
         run_id = stable_id(run_type, now.isoformat(), prefix="CRAWLRUN")
-        sources = [source for source in load_registry(self.settings) if source.crawl_enabled]
+        all_sources = load_registry(self.settings)
+        sources = (
+            [source for source in all_sources if source.seed_urls]
+            if include_disabled_seed or run_type == "seed_backtrack"
+            else [source for source in all_sources if source.crawl_enabled]
+        )
+        if official_only_sources:
+            sources = [
+                source
+                for source in sources
+                if source.official_status in {"official", "official_reprint"}
+            ]
         if official_first:
             sources.sort(key=lambda item: item.priority)
         search_sources = [source for source in sources if source.search_url_template]
@@ -63,13 +83,57 @@ class CrawlPipeline:
             cities = load_cities_105(self.settings)
         years = range(start_date.year, end_date.year + 1)
         items = []
+        discovery_errors: list[dict] = []
         for source in sources:
-            items.extend(discover_seed_items(source, run_id))
+            seed_source = source.model_copy(
+                update={"list_page_urls": []}
+            )
+            items.extend(discover_seed_items(seed_source, run_id))
+            if source.list_page_urls and run_type != "seed_backtrack":
+                try:
+                    candidates = ListPageDiscovery(self.fetcher).discover(
+                        DiscoveryRequest(
+                            run_id=run_id,
+                            mode=run_type,
+                            start_date=start_date,
+                            end_date=end_date,
+                            max_candidates=max_items or 200,
+                        ),
+                        source,
+                    )
+                    now_text = now.isoformat()
+                    items.extend(
+                        {
+                            "item_id": stable_id(source.source_id, item.canonical_url, prefix="CRAWLITEM"),
+                            "run_id": run_id,
+                            "source_id": source.source_id,
+                            "url": item.url,
+                            "canonical_url": item.canonical_url,
+                            "status": "pending",
+                            "city_id": None,
+                            "query_year": item.date_hint.year if item.date_hint else None,
+                            "keyword_group": item.keyword_group,
+                            "retry_count": 0,
+                            "first_seen_at": now_text,
+                            "last_seen_at": now_text,
+                            "created_at": now_text,
+                            "updated_at": now_text,
+                        }
+                        for item in candidates
+                    )
+                except Exception as exc:
+                    discovery_errors.append(
+                        {"source_id": source.source_id, "error_type": type(exc).__name__}
+                    )
             items.extend(
                 discover_search_items(
                     source, run_id, cities, years, keyword_groups
                 )
             )
+            if max_items and len(items) >= max_items:
+                items = items[:max_items]
+                break
+        items = list({item["item_id"]: item for item in items}.values())
         if items and self._path("crawl_items").exists():
             existing = {
                 row["item_id"]: row
@@ -89,7 +153,7 @@ class CrawlPipeline:
                 "scope_id": "large-cities-105",
                 "period_start": start_date.isoformat(),
                 "period_end": end_date.isoformat(),
-                "status": "planned",
+                "status": "planned" if sources else "blocked_no_enabled_sources",
                 "source_count": len(sources),
                 "item_count": len(items),
                 "fetched_count": 0,
@@ -101,9 +165,29 @@ class CrawlPipeline:
             }
         ]
         append_unique(self._path("crawl_runs"), runs, "run_id")
-        return {"run_id": run_id, "source_count": len(sources), "item_count": len(items)}
+        return {
+            "run_id": run_id,
+            "source_count": len(sources),
+            "item_count": len(items),
+            "status": "planned" if sources else "blocked_no_enabled_sources",
+            "diagnostic": None
+            if sources
+            else "当前没有已启用来源；请先运行来源体检并审核推荐来源。",
+            "discovery_errors": discovery_errors,
+        }
 
-    def run(self, run_id: str) -> dict:
+    @staticmethod
+    def _atomic_write(path: Path, payload: bytes) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temp = path.with_suffix(path.suffix + ".tmp")
+        try:
+            temp.write_bytes(payload)
+            os.replace(temp, path)
+        except PermissionError as exc:
+            temp.unlink(missing_ok=True)
+            raise PermissionErrorLocal(f"local write denied: {path}") from exc
+
+    def run(self, run_id: str, *, cancel_check=None) -> dict:
         items_path = self._path("crawl_items")
         if not items_path.exists():
             return {"run_id": run_id, "fetched": 0, "failed": 0}
@@ -124,12 +208,28 @@ class CrawlPipeline:
         versions: list[dict] = []
         errors: list[dict] = []
         fetched = 0
+        cancelled = False
+        processed_count = 0
+        last_item_id: str | None = None
         for item in pending.iter_rows(named=True):
+            if cancel_check and cancel_check():
+                cancelled = True
+                break
+            processed_count += 1
+            last_item_id = item["item_id"]
             now = datetime.now(UTC)
             try:
                 source = source_index[item["source_id"]]
                 self.fetcher.rate_limit = source.rate_limit
                 result = self.fetcher.fetch(item["url"])
+                if result.not_modified:
+                    items = items.with_columns(
+                        pl.when(pl.col("item_id") == item["item_id"])
+                        .then(pl.lit("unchanged"))
+                        .otherwise(pl.col("status"))
+                        .alias("status")
+                    )
+                    continue
                 parsed = parse_document(result.body, result.content_type, result.final_url)
                 extension = ".pdf" if parsed["document_type"] == "pdf" else ".html"
                 raw_dir = (
@@ -143,10 +243,11 @@ class CrawlPipeline:
                 raw_dir.mkdir(parents=True, exist_ok=True)
                 raw_path = raw_dir / f"{result.response_sha256}{extension}"
                 if not raw_path.exists():
-                    raw_path.write_bytes(result.body)
+                    self._atomic_write(raw_path, result.body)
                 metadata_path = raw_path.with_suffix(raw_path.suffix + ".metadata.json")
                 if not metadata_path.exists():
-                    metadata_path.write_text(
+                    self._atomic_write(
+                        metadata_path,
                         json.dumps(
                             {
                                 "requested_url": result.requested_url,
@@ -158,8 +259,7 @@ class CrawlPipeline:
                             },
                             ensure_ascii=False,
                             indent=2,
-                        ),
-                        encoding="utf-8",
+                        ).encode("utf-8"),
                     )
                 version_id = stable_id(item["item_id"], result.response_sha256, prefix="DOCVER")
                 version_row = {
@@ -203,6 +303,9 @@ class CrawlPipeline:
                     existing_version_ids.add(version_id)
                     item_status = "fetched"
                 for attachment in parsed.get("attachments", []):
+                    if cancel_check and cancel_check():
+                        cancelled = True
+                        break
                     attachment_url = attachment.get("url")
                     if not attachment_url:
                         if attachment.get("source") == "pdf_embedded":
@@ -316,7 +419,7 @@ class CrawlPipeline:
                         "url": item["url"],
                         "error_type": type(exc).__name__,
                         "error_message": str(exc)[:1000],
-                        "retryable": not isinstance(exc, PermissionError),
+                            "retryable": bool(getattr(exc, "retryable", True)),
                         "created_at": now.isoformat(),
                         "updated_at": now.isoformat(),
                     }
@@ -337,14 +440,21 @@ class CrawlPipeline:
         checkpoint = {
             "checkpoint_id": stable_id(run_id, prefix="CHECKPOINT"),
             "run_id": run_id,
-            "last_item_id": pending[-1, "item_id"] if pending.height else None,
-            "status": "complete",
-            "processed_count": pending.height,
+            "last_item_id": last_item_id,
+            "status": "cancelled" if cancelled else "complete",
+            "processed_count": processed_count,
             "created_at": datetime.now(UTC).isoformat(),
             "updated_at": datetime.now(UTC).isoformat(),
         }
         append_unique(self._path("crawl_checkpoints"), [checkpoint], "checkpoint_id")
-        return {"run_id": run_id, "fetched": fetched, "failed": len(errors)}
+        result = {
+            "run_id": run_id,
+            "fetched": fetched,
+            "failed": len(errors),
+        }
+        if cancelled:
+            result["cancelled"] = True
+        return result
 
     def audit(self) -> dict:
         def count(name: str) -> int:

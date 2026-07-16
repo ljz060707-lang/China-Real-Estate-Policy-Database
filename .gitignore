@@ -3,6 +3,7 @@ __pycache__/
 .pytest_cache/
 .test-tmp-*/
 .ruff_cache/
+.uv-cache/
 .env
 .streamlit/secrets.toml
 *.pyc
@@ -13,7 +14,13 @@ data/raw/*
 !data/raw/documents/**
 data/releases/
 data/curated/history/
+data/logs/
 data/logs/*.csv
+data/logs/*.jsonl
+data/logs/*.log
 data/reference/manual_corrections.csv
+data/reference/user_preferences.json
+data/logs/crawl_jobs/
+data/logs/policydb-write.lock
 database/*.duckdb.wal
 outputs/
