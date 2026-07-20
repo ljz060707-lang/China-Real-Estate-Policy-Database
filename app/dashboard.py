@@ -22,6 +22,7 @@ from app.geography_panel import (  # noqa: E402
 )
 from app.review_center import render_review_center  # noqa: E402
 from app.settings_page import render_settings_page  # noqa: E402
+from app.setup_wizard import needs_initial_setup, render_setup_wizard  # noqa: E402
 from app.theme import (  # noqa: E402
     apply_academic_theme,
     render_page_header,
@@ -34,6 +35,10 @@ from policydb import PolicyDB  # noqa: E402
 st.set_page_config(page_title="中国房地产政策数据库", layout="wide")
 apply_academic_theme()
 render_sidebar_brand()
+
+if needs_initial_setup(ROOT):
+    render_setup_wizard(ROOT)
+    st.stop()
 
 
 @st.cache_resource(show_spinner=False)

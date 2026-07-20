@@ -24,3 +24,5 @@ data/logs/crawl_jobs/
 data/logs/policydb-write.lock
 database/*.duckdb.wal
 outputs/
+.runtime/*
+!.runtime/.gitkeep
