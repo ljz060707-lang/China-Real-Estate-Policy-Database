@@ -53,6 +53,25 @@ class CrawlJobRequest(BaseModel):
     official_first: bool = True
     confirmed_recommended_source_ids: list[str] = Field(default_factory=list)
     demo_mode: bool = False
+    processing_mode: Literal["staged_only", "glm", "glm_verify", "full"] = "full"
+
+    def estimate(self, enabled_source_count: int) -> dict[str, int]:
+        """Return a UI-only estimate without constructing the crawl pipeline."""
+        cities = len(self.cities) or (105 if self.mode == "historical_105" else 1)
+        topics = len(self.topics) or 1
+        query_count = (
+            cities * topics * 8
+            if self.mode in {"web_discovery", "historical_105", "smart"}
+            else 0
+        )
+        return {
+            "city_count": cities,
+            "topic_count": topics,
+            "source_count": enabled_source_count,
+            "query_count": min(query_count, self.max_candidates),
+            "max_pages": self.max_fetches,
+            "possible_api_calls": min(query_count, self.max_candidates),
+        }
 
 
 class JobState(BaseModel):
@@ -72,3 +91,10 @@ class JobState(BaseModel):
     error_message: str | None = None
     run_id: str | None = None
     counters: dict[str, int | float] = Field(default_factory=dict)
+    heartbeat_at: datetime | None = None
+    worker_started_at: datetime | None = None
+    last_progress_at: datetime | None = None
+    current_url_redacted: str | None = None
+    current_source_id: str | None = None
+    queued_count: int = 0
+    processed_count: int = 0

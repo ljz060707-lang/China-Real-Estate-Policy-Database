@@ -22,7 +22,9 @@ data/reference/manual_corrections.csv
 data/reference/user_preferences.json
 data/logs/crawl_jobs/
 data/logs/policydb-write.lock
+data/work/
 database/*.duckdb.wal
+database/*.tmp.duckdb
 outputs/
 .runtime/*
 !.runtime/.gitkeep

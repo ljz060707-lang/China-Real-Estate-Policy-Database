@@ -187,7 +187,7 @@ class CrawlPipeline:
             temp.unlink(missing_ok=True)
             raise PermissionErrorLocal(f"local write denied: {path}") from exc
 
-    def run(self, run_id: str, *, cancel_check=None) -> dict:
+    def run(self, run_id: str, *, cancel_check=None, progress=None) -> dict:
         items_path = self._path("crawl_items")
         if not items_path.exists():
             return {"run_id": run_id, "fetched": 0, "failed": 0}
@@ -217,6 +217,19 @@ class CrawlPipeline:
                 break
             processed_count += 1
             last_item_id = item["item_id"]
+            if progress:
+                progress(
+                    "fetching",
+                    processed_count,
+                    max(pending.height, 1),
+                    f"正在抓取 {processed_count}/{pending.height}",
+                    {
+                        "processed": processed_count,
+                        "queued": max(pending.height - processed_count, 0),
+                        "_current_url": item["url"],
+                        "_source_id": item["source_id"],
+                    },
+                )
             now = datetime.now(UTC)
             try:
                 source = source_index[item["source_id"]]

@@ -12,6 +12,7 @@ def test_windows_launcher_files_exist():
         "打开房地产政策数据库.bat",
         "关闭房地产政策数据库.bat",
         "首次安装.bat",
+        "start_policydb.cmd",
         "scripts/launch_dashboard.ps1",
         "scripts/stop_dashboard.ps1",
         "scripts/first_setup.ps1",
@@ -22,10 +23,15 @@ def test_windows_launcher_files_exist():
 
 
 def test_batch_files_are_independent_of_working_directory():
-    for name in ("打开房地产政策数据库.bat", "关闭房地产政策数据库.bat", "首次安装.bat"):
+    for name in ("关闭房地产政策数据库.bat", "首次安装.bat"):
         content = (ROOT / name).read_text(encoding="utf-8")
         assert "%~dp0" in content
         assert "-ExecutionPolicy Bypass" in content
+    wrapper = (ROOT / "打开房地产政策数据库.bat").read_text(encoding="ascii")
+    command = (ROOT / "start_policydb.cmd").read_text(encoding="ascii")
+    assert "%~dp0start_policydb.cmd" in wrapper
+    assert "%~dp0" in command and "-ExecutionPolicy Bypass" in command
+    assert "pause" in command and "EXIT_CODE" in command
 
 
 def test_launcher_uses_health_check_and_persistent_state():
@@ -34,9 +40,20 @@ def test_launcher_uses_health_check_and_persistent_state():
     assert '"dashboard.pid"' in content
     assert '"dashboard.port"' in content
     assert '"dashboard.log"' in content
-    assert "Start-BackgroundWorker" in content
+    assert "Start-BackgroundDashboard" in content
+    assert "Resolve-ProjectPython" in content
+    assert '".venv-1\\Scripts\\python.exe"' in content
+    assert '"launcher.log"' in content
+    assert '"dashboard.process.json"' in content
     assert "--server.fileWatcherType=none" in content
     assert "--runner.fastReruns=false" in content
+
+
+def test_windows_command_entries_use_crlf():
+    for name in ("打开房地产政策数据库.bat", "start_policydb.cmd"):
+        payload = (ROOT / name).read_bytes()
+        assert b"\r\n" in payload
+        assert b"\n" not in payload.replace(b"\r\n", b"")
 
 
 def test_first_setup_uses_official_uv_and_does_not_guess_excel():

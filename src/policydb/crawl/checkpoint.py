@@ -5,6 +5,14 @@ from pathlib import Path
 import polars as pl
 
 CRAWL_SCHEMAS = {
+    "discovery_candidates": {
+        "candidate_id": pl.String,
+        "run_id": pl.String,
+        "url": pl.String,
+        "canonical_url": pl.String,
+        "title_hint": pl.String,
+        "status": pl.String,
+    },
     "crawl_runs": {
         "run_id": pl.String,
         "run_type": pl.String,
@@ -77,6 +85,15 @@ CRAWL_SCHEMAS = {
         "last_seen_at": pl.String,
         "created_at": pl.String,
         "updated_at": pl.String,
+    },
+    "attachments": {
+        "attachment_id": pl.String,
+        "run_id": pl.String,
+        "parent_item_id": pl.String,
+        "url": pl.String,
+        "local_path": pl.String,
+        "content_sha256": pl.String,
+        "status": pl.String,
     },
     "llm_extractions": {
         "extraction_id": pl.String,

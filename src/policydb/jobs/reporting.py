@@ -4,6 +4,8 @@ import csv
 import json
 from pathlib import Path
 
+import polars as pl
+
 from policydb.jobs.models import JobState
 from policydb.settings import Settings
 
@@ -17,6 +19,13 @@ REPORT_TABLES = (
     "source_health",
 )
 
+RESULT_PATH_MAP = {
+    "discovered_candidates": "crawl_items",
+    "fetched_documents": "policy_document_versions",
+    "errors": "fetch_errors",
+    "source_health": "source_health",
+}
+
 
 def _write_csv(path: Path, rows: list[dict]) -> None:
     fields = sorted({key for row in rows for key in row}) or ["status"]
@@ -25,6 +34,20 @@ def _write_csv(path: Path, rows: list[dict]) -> None:
         writer.writeheader()
         for row in rows:
             writer.writerow(row)
+
+
+def _write_result_csv(path: Path, name: str, result: dict) -> None:
+    rows = result.get(name)
+    if isinstance(rows, list):
+        _write_csv(path, rows)
+        return
+    table_name = RESULT_PATH_MAP.get(name)
+    source = result.get("table_paths", {}).get(table_name) if table_name else None
+    if source and Path(source).exists():
+        pl.scan_parquet(source).sink_csv(path)
+        return
+    preview = result.get("previews", {}).get(name, [])
+    _write_csv(path, preview)
 
 
 def generate_crawl_report(
@@ -44,7 +67,7 @@ def generate_crawl_report(
     }
     (output / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     for name in REPORT_TABLES:
-        _write_csv(output / f"{name}.csv", result.get(name, []))
+        _write_result_csv(output / f"{name}.csv", name, result)
     recommendations = "\n".join(f"- {item}" for item in summary["recommendations"]) or "- 本次没有额外建议。"
     markdown = f"""# 抓取运行报告
 

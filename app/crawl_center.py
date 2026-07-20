@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import csv
 import json
-from datetime import date, timedelta
+import time
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import plotly.express as px
@@ -11,7 +12,6 @@ import streamlit as st
 from app.theme import style_plotly_figure
 from app.ui import safe_dataframe
 from policydb.crawl.registry import load_registry, set_sources_enabled
-from policydb.crawl.service import CrawlService
 from policydb.jobs import CrawlJobRequest, JobManager
 from policydb.settings import Settings
 
@@ -32,6 +32,24 @@ TOPICS = [
 ]
 
 
+@st.cache_resource(show_spinner=False, ttl=10)
+def _cached_sources(root: str, registry_stamp: int):
+    del registry_stamp
+    return load_registry(Settings.discover(root))
+
+
+@st.cache_data(show_spinner=False, ttl=30)
+def _cached_configuration(root: str) -> dict[str, bool]:
+    settings = Settings.discover(root)
+    return {
+        "glm": bool(settings.glm_api_key),
+        "tianditu": bool(settings.tianditu_token),
+        "search": bool(
+            settings.search_api_key and settings.search_provider != "None"
+        ),
+    }
+
+
 def _city_options(settings: Settings) -> list[str]:
     """Read the small UI selector without loading Polars in Streamlit."""
     path = settings.root / "data" / "reference" / "cities_105.csv"
@@ -41,18 +59,30 @@ def _city_options(settings: Settings) -> list[str]:
     return [value for value in values if value]
 
 
-def _start(manager: JobManager, request: CrawlJobRequest) -> None:
-    state = manager.create(request)
-    manager.start(state.job_id)
+def _start(manager: JobManager, request: CrawlJobRequest) -> bool:
+    started = time.perf_counter()
+    try:
+        state = manager.create(request)
+        manager.start(state.job_id)
+    except PermissionError as exc:
+        st.error(f"任务创建失败：{exc}")
+        return False
+    except Exception as exc:
+        st.error(f"后台进程启动失败：{type(exc).__name__}：{exc}")
+        return False
     st.session_state["active_crawl_job"] = state.job_id
-    st.success(f"后台任务已启动：{state.job_id}")
+    elapsed_ms = round((time.perf_counter() - started) * 1000, 1)
+    manager.record_timing(state.job_id, "streamlit_start_seconds", elapsed_ms / 1000)
+    st.session_state["crawl_start_elapsed_ms"] = elapsed_ms
+    st.toast(f"后台任务已启动：{state.job_id}（{elapsed_ms} ms）")
+    return True
 
 
-def _configuration_cards(settings: Settings, sources) -> None:
+def _configuration_cards(configuration: dict[str, bool], sources) -> None:
     cards = [
-        ("GLM", "已配置" if settings.glm_api_key else "未配置"),
-        ("天地图", "已配置" if settings.tianditu_token else "未配置"),
-        ("搜索服务", "已配置" if settings.search_api_key and settings.search_provider != "None" else "未配置"),
+        ("GLM", "已配置" if configuration["glm"] else "未配置"),
+        ("天地图", "已配置" if configuration["tianditu"] else "未配置"),
+        ("搜索服务", "已配置" if configuration["search"] else "未配置"),
         ("官方来源", sum(source.crawl_enabled and source.official_status in {"official", "official_reprint"} for source in sources)),
         ("来源总量", len(sources)),
     ]
@@ -60,7 +90,51 @@ def _configuration_cards(settings: Settings, sources) -> None:
         column.metric(label, value)
 
 
-def _render_new_job(settings: Settings, manager: JobManager, sources) -> None:
+@st.fragment
+def _render_start_actions(
+    manager: JobManager,
+    request: CrawlJobRequest,
+    *,
+    read_only: bool,
+    start_disabled: bool,
+) -> None:
+    action_columns = st.columns(2)
+    if action_columns[0].button(
+        "开始抓取",
+        type="primary",
+        width="stretch",
+        disabled=read_only or start_disabled,
+    ):
+        if _start(manager, request):
+            st.stop()
+    if action_columns[1].button(
+        "运行本地演示",
+        width="stretch",
+        disabled=read_only,
+        help="固定使用 5 个本地样例，不访问网络、不写入政策主数据。",
+    ):
+        if _start(
+            manager,
+            request.model_copy(
+                update={
+                    "demo_mode": True,
+                    "max_fetches": 5,
+                    "run_glm": False,
+                    "rebuild_database": False,
+                    "run_validation": False,
+                    "processing_mode": "staged_only",
+                }
+            ),
+        ):
+            st.stop()
+
+
+def _render_new_job(
+    settings: Settings,
+    manager: JobManager,
+    sources,
+    configuration: dict[str, bool],
+) -> None:
     read_only = settings.read_only
     if read_only:
         st.warning("当前为只读公开部署。API配置和抓取任务仅允许在本地管理环境执行。")
@@ -79,10 +153,32 @@ def _render_new_job(settings: Settings, manager: JobManager, sources) -> None:
     max_candidates = int(limits[0].number_input("最大候选数", min_value=1, max_value=100000, value=200))
     max_fetches = int(limits[1].number_input("最大抓取数", min_value=1, max_value=10000, value=5 if mode == "seed_backtrack" else 100))
     options = st.columns(3)
-    run_glm = options[0].checkbox("抓取后运行GLM", value=bool(settings.glm_api_key))
+    run_glm = options[0].checkbox("抓取后运行GLM", value=configuration["glm"])
     verify = options[1].checkbox("执行第二轮自动复核", value=True)
     rebuild = options[2].checkbox("完成后重建数据库", value=True)
     validate = st.checkbox("完成后执行 validate", value=True)
+    processing_label = st.selectbox(
+        "处理深度",
+        [
+            "仅抓取并暂存",
+            "抓取＋GLM解析",
+            "抓取＋GLM＋复核",
+            "完整处理并重建数据库",
+        ],
+        index=3,
+    )
+    processing_mode = {
+        "仅抓取并暂存": "staged_only",
+        "抓取＋GLM解析": "glm",
+        "抓取＋GLM＋复核": "glm_verify",
+        "完整处理并重建数据库": "full",
+    }[processing_label]
+    if processing_mode == "staged_only":
+        run_glm = verify = rebuild = validate = False
+    elif processing_mode == "glm":
+        run_glm, verify, rebuild, validate = True, False, False, False
+    elif processing_mode == "glm_verify":
+        run_glm, verify, rebuild, validate = True, True, False, False
     demo_mode = st.checkbox(
         "本地演示（不访问网络，仅验证后台任务、进度与报告）",
         value=False,
@@ -112,8 +208,10 @@ def _render_new_job(settings: Settings, manager: JobManager, sources) -> None:
         rebuild_database=rebuild,
         run_validation=validate,
         demo_mode=demo_mode,
+        processing_mode=processing_mode,
     )
-    estimate = CrawlService(settings).estimate(request)
+    enabled_source_count = sum(source.crawl_enabled for source in sources)
+    estimate = request.estimate(enabled_source_count)
     st.subheader("任务预览")
     preview = [
         ("模式", label), ("日期范围", f"{start_date} 至 {end_date}"),
@@ -127,60 +225,44 @@ def _render_new_job(settings: Settings, manager: JobManager, sources) -> None:
         st.error("当前没有已启用来源。官方增量任务不会被显示为“成功抓取0条”。")
         if st.button("运行来源体检", width="stretch", disabled=read_only):
             _start(manager, CrawlJobRequest(mode="source_health", max_fetches=20, rebuild_database=False, run_validation=False))
-    if mode == "web_discovery" and not settings.search_api_key:
+    if mode == "web_discovery" and not configuration["search"]:
         st.warning("全网发现需要配置搜索服务API；官方来源增量抓取和中金链接回溯仍可运行。")
     if mode == "historical_105" and estimate["possible_api_calls"] > 10000:
         st.error("规模估算超过一万次查询，请缩小城市、主题或时间范围。")
-    action_columns = st.columns(2)
-    if action_columns[0].button(
-        "开始抓取",
-        type="primary",
-        width="stretch",
-        disabled=read_only
-        or (mode == "official_update" and enabled_official == 0),
-    ):
-        _start(manager, request)
-    if action_columns[1].button(
-        "运行本地演示",
-        width="stretch",
-        disabled=read_only,
-        help="固定使用 5 个本地样例，不访问网络、不写入政策主数据。",
-    ):
-        _start(
-            manager,
-            request.model_copy(
-                update={
-                    "demo_mode": True,
-                    "max_fetches": 5,
-                    "run_glm": False,
-                    "rebuild_database": False,
-                    "run_validation": False,
-                }
-            ),
-        )
-    active = st.session_state.get("active_crawl_job")
-    if active:
-        _render_job_state(manager, active, key_prefix="new_job")
+    _render_start_actions(
+        manager,
+        request,
+        read_only=read_only,
+        start_disabled=mode == "official_update" and enabled_official == 0,
+    )
+    _render_active_job(manager, key_prefix="new_job")
 
 
 def _render_job_state(manager: JobManager, job_id: str, *, key_prefix: str) -> None:
     try:
-        state = manager.load_state(job_id)
+        state = manager.inspect_state(job_id)
     except FileNotFoundError:
         return
     st.divider()
     st.subheader("当前后台任务")
     st.write(f"{state.job_id} · {state.stage} · {state.message}")
+    terminal = {"completed", "completed_with_warnings", "failed", "cancelled"}
+    now = datetime.now(UTC)
+    if state.status not in terminal and state.heartbeat_at:
+        heartbeat_age = (now - state.heartbeat_at).total_seconds()
+        if heartbeat_age > 60:
+            st.warning("任务长时间无进展；可请求安全停止，必要时再强制终止。")
+        elif heartbeat_age > 15:
+            st.info("后台任务正在等待网络或外部服务响应。")
+        else:
+            st.caption("后台进程运行正常；状态区每 2 秒局部刷新。")
     st.progress(min(state.progress_current / max(state.progress_total, 1), 1.0))
     counters = state.counters
     labels = [("已发现", "discovered"), ("已抓取", "fetched"), ("失败", "failed"), ("新增版本", "document_versions"), ("GLM完成", "glm_completed"), ("待人工", "manual_review")]
     for column, (label, key) in zip(st.columns(6), labels, strict=True):
         column.metric(label, counters.get(key, counters.get("candidate_count", 0) if key == "discovered" else 0))
-    columns = st.columns(3)
-    if columns[0].button(
-        "刷新状态", width="stretch", key=f"{key_prefix}_refresh_{job_id}"
-    ):
-        st.rerun()
+    columns = st.columns(4)
+    columns[0].caption(f"PID：{state.pid or '未启动'}")
     if columns[1].button(
         "停止任务",
         width="stretch",
@@ -189,10 +271,34 @@ def _render_job_state(manager: JobManager, job_id: str, *, key_prefix: str) -> N
         key=f"{key_prefix}_cancel_{job_id}",
     ):
         manager.cancel(job_id)
-        st.rerun()
+        st.toast("已请求安全停止")
+    confirm_force = columns[2].checkbox(
+        "确认强制终止",
+        key=f"{key_prefix}_force_confirm_{job_id}",
+        disabled=state.status in terminal,
+    )
+    if columns[2].button(
+        "强制终止进程",
+        key=f"{key_prefix}_force_{job_id}",
+        disabled=state.status in terminal or not confirm_force,
+    ):
+        manager.terminate(job_id)
+        st.toast("后台进程已终止；暂存文件保留")
     report_path = manager.job_dir(job_id) / "report.md"
     if report_path.exists():
-        columns[2].download_button("下载报告", report_path.read_bytes(), file_name=f"{job_id}_report.md", width="stretch")
+        columns[3].download_button("下载报告", report_path.read_bytes(), file_name=f"{job_id}_report.md", width="stretch")
+    st.caption(f"任务日志：{manager.job_dir(job_id)}")
+    if state.status in {"completed", "completed_with_warnings"}:
+        request = manager.load_request(job_id)
+        if request.processing_mode != "full":
+            st.info("抓取结果已暂存，尚未合并到正式数据库。")
+
+
+@st.fragment(run_every=2.0)
+def _render_active_job(manager: JobManager, *, key_prefix: str) -> None:
+    active = st.session_state.get("active_crawl_job")
+    if active:
+        _render_job_state(manager, active, key_prefix=key_prefix)
 
 
 def _render_sources(settings: Settings, manager: JobManager, sources) -> None:
@@ -258,16 +364,35 @@ def _render_reports(settings: Settings, manager: JobManager) -> None:
 def render_crawl_center(root: str | Path | None = None) -> None:
     settings = Settings.discover(root)
     manager = JobManager(settings)
-    sources = load_registry(settings)
+    if "active_crawl_job" not in st.session_state:
+        active = next(
+            (
+                state.job_id
+                for state in manager.list_states(limit=10)
+                if state.status
+                not in {"completed", "completed_with_warnings", "failed", "cancelled"}
+            ),
+            None,
+        )
+        if active:
+            st.session_state["active_crawl_job"] = active
+    registry = settings.root / "data" / "reference" / "source_registry.yaml"
+    sources = _cached_sources(str(settings.root), registry.stat().st_mtime_ns)
+    configuration = _cached_configuration(str(settings.root))
     st.title("智能抓取")
     st.caption("选择模式、设置范围并启动后台任务；页面刷新后仍可恢复进度和报告。")
-    _configuration_cards(settings, sources)
-    new_tab, sources_tab, history_tab, reports_tab = st.tabs(["新建任务", "来源管理", "运行历史", "抓取报告"])
-    with new_tab:
-        _render_new_job(settings, manager, sources)
-    with sources_tab:
+    _configuration_cards(configuration, sources)
+    view = st.segmented_control(
+        "抓取中心视图",
+        ["新建任务", "来源管理", "运行历史", "抓取报告"],
+        default="新建任务",
+        label_visibility="collapsed",
+    )
+    if view == "新建任务":
+        _render_new_job(settings, manager, sources, configuration)
+    elif view == "来源管理":
         _render_sources(settings, manager, sources)
-    with history_tab:
+    elif view == "运行历史":
         _render_history(manager)
-    with reports_tab:
+    else:
         _render_reports(settings, manager)

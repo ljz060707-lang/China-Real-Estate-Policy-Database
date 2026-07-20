@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
 import os
+import shutil
+from datetime import UTC, datetime
 from pathlib import Path
 
 import duckdb
@@ -20,7 +23,9 @@ VIEW_ALIASES = [
 ]
 
 
-def build_database(settings: Settings | None = None) -> Path:
+def build_database(
+    settings: Settings | None = None, *, materialize_geography: bool = True
+) -> Path:
     settings = settings or Settings.discover()
     geography_inputs = (
         settings.curated / "record_jurisdictions.parquet",
@@ -28,7 +33,11 @@ def build_database(settings: Settings | None = None) -> Path:
         settings.curated / "cities_105.parquet",
     )
     read_only_host = os.getenv("POLICYDB_READ_ONLY", "").lower() in {"1", "true", "yes"}
-    if all(path.exists() for path in geography_inputs) and not read_only_host:
+    if (
+        materialize_geography
+        and all(path.exists() for path in geography_inputs)
+        and not read_only_host
+    ):
         from policydb.geography import materialize_geography
 
         materialize_geography(settings)
@@ -408,3 +417,46 @@ def build_database(settings: Settings | None = None) -> Path:
     finally:
         con.close()
     return settings.database
+
+
+class DatabaseSwapDeferred(RuntimeError):
+    def __init__(self, temporary_database: Path) -> None:
+        super().__init__(f"数据库正在被占用，临时数据库已保留：{temporary_database}")
+        self.temporary_database = temporary_database
+
+
+def build_database_atomic(settings: Settings, job_id: str) -> Path:
+    """Build and validate a private database before replacing the stable file."""
+    target = settings.database
+    temporary = target.with_name(f"policydb.{job_id}.tmp.duckdb")
+    temporary.unlink(missing_ok=True)
+    if target.exists():
+        shutil.copy2(target, temporary)
+    temporary_settings = settings.model_copy(update={"database_path": temporary})
+    build_database(temporary_settings, materialize_geography=False)
+    connection = duckdb.connect(str(temporary), read_only=True)
+    try:
+        connection.execute("SELECT count(*) FROM records").fetchone()
+        connection.execute("SELECT count(*) FROM v_data_quality").fetchone()
+    finally:
+        connection.close()
+    try:
+        os.replace(temporary, target)
+    except PermissionError as exc:
+        raise DatabaseSwapDeferred(temporary) from exc
+    version_path = target.with_suffix(".version.json")
+    temp_version = version_path.with_suffix(".json.tmp")
+    temp_version.write_text(
+        json.dumps(
+            {
+                "job_id": job_id,
+                "updated_at": datetime.now(UTC).isoformat(),
+                "database_mtime_ns": target.stat().st_mtime_ns,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    os.replace(temp_version, version_path)
+    return target

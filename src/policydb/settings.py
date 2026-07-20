@@ -26,6 +26,7 @@ class Settings(BaseModel):
     root: Path
     data_version: str = "0.1.0"
     database_path: Path | None = None
+    curated_path: Path | None = None
 
     @classmethod
     def discover(cls, root: str | Path | None = None) -> Settings:
@@ -41,7 +42,7 @@ class Settings(BaseModel):
 
     @property
     def curated(self) -> Path:
-        return self.root / "data" / "curated"
+        return self.curated_path or self.root / "data" / "curated"
 
     @property
     def research(self) -> Path:
@@ -165,3 +166,15 @@ class Settings(BaseModel):
     @property
     def http_proxy(self) -> str | None:
         return default_secret_store().get_secret("http_proxy")
+
+    @property
+    def project_python_path(self) -> Path | None:
+        value = str(self._preference("project_python_path", "POLICYDB_PYTHON", "")).strip()
+        return Path(value).expanduser() if value else None
+
+    @property
+    def max_concurrency(self) -> int:
+        return min(
+            max(int(self._preference("max_concurrency", "POLICYDB_MAX_CONCURRENCY", 4)), 1),
+            16,
+        )

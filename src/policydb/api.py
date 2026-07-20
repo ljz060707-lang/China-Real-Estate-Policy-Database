@@ -91,10 +91,17 @@ class PolicyDB:
             if cached is not None:
                 self._query_cache.move_to_end(cache_key)
                 return cached.clone()
-            with duckdb.connect(str(self.settings.database), read_only=True) as con:
-                result = con.execute(sql, values)
-                columns = [item[0] for item in result.description]
-                rows = result.fetchall()
+            for attempt in range(2):
+                try:
+                    with duckdb.connect(str(self.settings.database), read_only=True) as con:
+                        result = con.execute(sql, values)
+                        columns = [item[0] for item in result.description]
+                        rows = result.fetchall()
+                    break
+                except (duckdb.IOException, duckdb.ConnectionException):
+                    if attempt:
+                        raise
+                    self._query_cache.clear()
             frame = pl.DataFrame(
                 rows,
                 schema=columns,

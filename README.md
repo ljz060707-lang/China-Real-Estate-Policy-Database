@@ -138,8 +138,13 @@
 ```text
 .runtime/dashboard.pid
 .runtime/dashboard.port
+.runtime/dashboard.process.json
+.runtime/launcher.log
 .runtime/dashboard.log
+.runtime/dashboard.output.log
 ```
+
+启动器按 `.venv` → `.venv-1` → `user_preferences.json` 中显式 Python 路径的顺序选择解释器，并先检查 `streamlit` 与 `policydb` 是否可导入。失败时 CMD 窗口会保留，同时显示 Windows 错误窗口；完整诊断以 `.runtime/launcher.log` 为准。
 
 如果 `database/policydb.duckdb` 或 Curated 数据缺失，安装器不会猜测或自动导入
 电脑中的文件。网站会显示“首次设置向导”，由用户明确选择Raw层已有Excel，或上传
@@ -858,11 +863,22 @@ data/logs/crawl_jobs/<job_id>/
 ├─ request.json
 ├─ events.jsonl
 ├─ stdout.log
+├─ stderr.log
+├─ performance.jsonl
 ├─ report.json
 └─ report.md
 ```
 
-`state.json` 使用临时文件加 `os.replace` 原子更新；刷新页面或重新打开网站后仍能恢复任务。会修改 Curated 的任务使用 `data/logs/policydb-write.lock` 互斥锁，停止任务采用批次间协作式取消。
+`state.json` 使用带进程与线程标识的唯一临时文件加 `os.replace` 原子更新，并限制为最多每 0.5 秒写入一次；页面每 2 秒只局部刷新状态区域。刷新页面或重新打开网站后仍能恢复活动任务。每个任务先写入 `data/work/crawl_jobs/<job_id>/`，只有“完整处理”才在校验后取得 `data/logs/policydb-write.lock`、原子合并 Curated，并通过临时 DuckDB 完成替换。
+
+处理深度分为：
+
+- **仅抓取并暂存**：不运行 GLM、不修改正式 Curated、不重建 DuckDB；
+- **抓取＋GLM解析**：只处理本任务工作区；
+- **抓取＋GLM＋复核**：在工作区完成双重自动处理；
+- **完整处理并重建数据库**：校验增量后提交正式数据并原子重建 DuckDB。
+
+worker 固定使用受限计算线程（Polars 2、Arrow 2、OpenMP/OpenBLAS/MKL 1），网络并发默认 4、最高 16。`performance.jsonl` 每 5 秒记录 CPU、RSS、线程数、磁盘读写、进度和工作区大小。
 
 ## 七种抓取模式
 

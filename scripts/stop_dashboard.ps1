@@ -4,6 +4,7 @@ $Runtime = Join-Path $Root ".runtime"
 $PidFile = Join-Path $Runtime "dashboard.pid"
 $PortFile = Join-Path $Runtime "dashboard.port"
 $StartedFile = Join-Path $Runtime "dashboard.started"
+$ProcessFile = Join-Path $Runtime "dashboard.process.json"
 
 function Test-DashboardHealth {
     param([int]$HealthPort)
@@ -29,14 +30,14 @@ if (Test-Path -LiteralPath $StartedFile) {
 }
 
 if ($dashboardPid -le 0) {
-    Remove-Item -LiteralPath $PidFile, $PortFile, $StartedFile -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $PidFile, $PortFile, $StartedFile, $ProcessFile -Force -ErrorAction SilentlyContinue
     Write-Host "[完成] 网站当前没有运行。" -ForegroundColor Green
     exit 0
 }
 
 $process = Get-Process -Id $dashboardPid -ErrorAction SilentlyContinue
 if ($null -eq $process) {
-    Remove-Item -LiteralPath $PidFile, $PortFile, $StartedFile -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $PidFile, $PortFile, $StartedFile, $ProcessFile -Force -ErrorAction SilentlyContinue
     Write-Host "[完成] 网站进程已经退出，已清理旧状态。" -ForegroundColor Green
     exit 0
 }
@@ -64,6 +65,6 @@ for ($attempt = 1; $attempt -le 15; $attempt++) {
     if (-not (Test-DashboardHealth $dashboardPort)) { break }
     Start-Sleep -Seconds 1
 }
-Remove-Item -LiteralPath $PidFile, $PortFile, $StartedFile -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $PidFile, $PortFile, $StartedFile, $ProcessFile -Force -ErrorAction SilentlyContinue
 Write-Host "[完成] 网站已关闭。" -ForegroundColor Green
 exit 0

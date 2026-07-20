@@ -23,6 +23,7 @@ ALLOWED_FIELDS = {
     "max_concurrency",
     "tianditu_map_approval",
     "tianditu_qualification",
+    "project_python_path",
 }
 
 
