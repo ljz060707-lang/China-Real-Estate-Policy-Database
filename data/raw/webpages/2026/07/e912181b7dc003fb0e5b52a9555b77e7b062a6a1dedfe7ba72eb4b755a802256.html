@@ -1,0 +1,2110 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="renderer" content="webkit">
+<meta http-equiv="Expires" content="0" />
+<meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
+
+<meta name="renderer" content="ie-comp">
+<meta name="renderer" content="ie-stand">
+
+<title>长春市人民政府关于支持居民自住性和改善性住房需求促进房地产市场平稳健康发展的若干意见</title>
+<!--导航-->
+<link href="../../../../images/currency.css" rel="stylesheet" />
+<!--页尾下拉-->
+<link rel="stylesheet" type="text/css" href="../../../../images/easydropdown.css" />
+ <link href="../../../../images/ljf_style.css" rel="stylesheet" />
+<!--<link href="../../../../images/sz_list.css" type="text/css" rel="stylesheet" /> -->
+<script src="../../../../images/jquery-1.11.3.min.js" type="text/javascript"></script>
+<script src="../../../../images/jquery.easydropdown.js"></script>
+<script src="../../../../images/jquery.selectlist.js"></script>
+<!--打印-->
+<script src="../../../../images/jquery-ui-1.10.4.custom.js"></script>
+<script src="../../../../images/jquery.PrintArea.js"></script>
+<script src="../../../../images/sjtp1.js"></script>
+<script>
+function doZoom(size) {
+	var zoom = document.all ? document.all['Zoom'] : document.getElementById('Zoom');
+	zoom.style.fontSize = size + 'px';
+}
+function newprint(){
+   //var sprnhtml = document.getElementById("Zoom").innerHTML;
+   //var selfhtml = window.document.body.innerHTML; 
+   //var selfhtml = $("body").html();
+   //window.document.body.innerHTML = sprnhtml;
+   //window.print();
+   //window.document.body.innerHTML = selfhtml;
+   //$("body").html(selfhtml);
+   
+$("div.PrintArea.area1").printArea();
+}
+</script>
+
+
+<script>
+	$(document).ready(function(){
+		$("table").attr("width","100%");
+		//console.log((".MsoNormalTable").length);
+		
+		$("table").not("#noAbout").not("#noAboutfj").find("tr").each(function(){
+		var tdArr = $(this).children();
+		for(var i=0;i<tdArr.length;i++){
+			tdArr.eq(i).removeAttr("width");
+			var html = '<p class="MsoNormal" style="vertical-align: middle; text-align: center; line-height: 12pt" align="center">';
+			html += '<span style="font-size: 10.5pt; font-family: 宋体; color: black">';
+			html += tdArr.eq(i).text();
+			html += '</span></p>';
+			tdArr.eq(i).html(html);
+			tdArr.eq(i).attr("style","border-top: rgb(204,204,204) 1pt inset; height: 12.05pt; border-right: rgb(204,204,204) 1pt inset; border-bottom: rgb(204,204,204) 1pt inset; padding-bottom: 0cm; padding-top: 0cm; padding-left: 0cm; border-left: rgb(204,204,204) 1pt inset; padding-right: 0cm");
+			//console.log(html);
+		}
+		});
+	});
+</script>
+
+
+<script>
+	$(function(){
+	$('.navToggle').click(function(){
+		if($(".cd_list").is(":hidden")){
+			$('.cd_list').show();
+		}else{
+			$('.cd_list').hide();
+		}
+	});
+
+	});
+</script>
+ <script>            $(".navToggle").click(function () {                $(this).toggleClass("open");            });           </script> 
+<script>
+	$(document).ready(function(){
+	$('.search-icon-cyy').click(function(){
+	  $('.search-jit-hid').toggle();
+	});
+	$('.hmb-icon-cyy').click(function(){
+	  $('.nav-jit-hid').toggle();
+
+	});
+        $('.searchBox_1024').click(function(){
+	  $('.searchBox').toggle();
+	});
+	});
+</script>
+<!--[if IE 8]>
+    <link href="../../../../images/ie8fix.css" rel="stylesheet" type="text/css">
+    <script src="../../../../images/html5shiv.js"></script>
+
+    <script src="../../../../images/respond.min.js"></script>
+<![endif]-->
+<style type="text/css">
+#divInfoContent{ font-size:14px;}
+#divInfoContent p{ margian:inherit; padding:inherit; }
+#focus{ width:1001px; height:502px;overflow:hidden;position:relative;margin: auto;}
+
+#focus br{ display:none;}
+#focus ul{position:absolute;}
+#focus ul li h2{width:100% !important;}
+#focus ul li{float:left;overflow:hidden;position:relative;}
+#focus ul li img{ width:100%;vertical-align:bottom; display:block}
+
+#focus ul li div{position:absolute;overflow:hidden;opacity: 0.6;filter: alpha(opacity=60);}
+#focus .btnBg{position:absolute;width:710px;left:0;bottom:0;background:#000;opacity: 0.6;filter: alpha(opacity=60);}
+#focus .btn{position:absolute;height:60px;right:15px;bottom:0;text-align:right;}
+#focus .btn span{display:inline-block;_display:inline;_zoom:1;width:25px;height:10px;_font-size:0;margin-left:5px; margin-top:30px;cursor:pointer;background:#fff;}
+#focus .btn span.on{background:#fff;}
+#focus .preNext{width:45px;height:100px;position:absolute;top:180px;background:url('images/sprite.png') no-repeat 0 0;cursor:pointer}
+#focus .pre{left:0;}
+#focus .next{right:0;background-position:right top;}
+
+
+
+#focus ul li .slideother{  height:60px;position: relative; background-color:#000;background-color:rgba(0,0,0,0.7);filter: alpha(opacity=60); margin-top:-60px}
+#focus ul li div{opacity: 1;}
+#focus ul li .slideother p{ font-size:20px; padding-left:5px;position:absolute; line-height:60px;left:20px;}
+#focus ul li .slideother p a{color:#FFF;text-decoration:none; font-weight:700px;}
+#focus ul li .slideother p a:hover{text-decoration:underline; font-weight:900px;}
+
+
+
+
+.xyh_xf .xxy_da{clear:both; width:38px; text-align:center; margin:0 auto; margin-bottom:10px;}
+.xyh_xf .xxy_da a{display:block;}
+.bshare-custom.icon-medium-plus a{padding-left:0px !important;}
+
+
+.xyh_xxynrq{ padding:20px;}
+
+@media screen and (max-width:1920px){
+#focus{ width:800px;height:447px}
+#focus ul li{width:800px;}
+#focus img{ width:800px;}
+}
+@media screen and (max-width:1440px){
+#focus{ width:800px;height:447px}
+#focus ul li{ width:800px;}
+#focus img{ width:800px;}
+}
+@media screen and (max-width:1366px){
+#focus{ width:800px;height:447px}
+#focus ul li{ width:800px;height:447px}
+#focus img{ width:800px;height:447px}
+}
+@media screen and (max-width:1024px){
+	#focus{ width:675px; height:378px}
+	#focus ul li{ width:675px;}
+	#focus img{ width:675px;}
+	}
+@media screen and (max-width:768px){
+	#focus{ width:493px; height:276px}
+	#focus ul li{ width:493px;}
+	#focus img{ width:493px;}
+#Zoom h1{ font-size:18px !important; }
+}
+
+@media screen and (max-width:480px){
+	#focus{ width:274px; height:153px}
+	#focus ul li{ width:274px;}
+	#focus img{ width:274px;}
+#Zoom h1{ font-size:18px !important; }
+	}
+@media screen and (max-width:320px){
+	#focus{ width:151px; height:153px}
+	#focus ul li{ width:151px;}
+	#focus img{ width:151px;}
+#focus ul li .slideother{display:none}
+#Zoom h1{ font-size:18px !important; }
+	}</style>
+
+
+</head>
+
+<body>
+<!-- 一级头部开始 -->
+		<style>
+.searchInput{color: #000;}
+</style>
+<link href="../../../../images/site.css" type="text/css" rel="stylesheet" />
+<!--[if IE 8]>
+        <link href="../../../../images/ie8fix.css" rel="stylesheet" type="text/css">
+        <script src="../../../../images/html5shiv.js"></script>
+        <script src="../../../../images/respond.min.js"></script>
+<![endif]-->
+<!--[if IE 9]>
+<link href="../../../../images/ie8fix.css" rel="stylesheet" type="text/css">
+<![endif]-->
+<div class="header"> 
+      <!-----------top------------>
+      <div class="in_top">
+    <div class="txt_l">
+
+<!-- 头部时间天气-->
+<script type="text/javascript"> 
+setInterval(function(){$('#time').html(getNowDate)},100); 
+</script> 
+<td width="240" align="left" class="size12px"><div style="float:left;  color:#505050;">
+     <script type="text/javascript"> 
+function getNowDate(){
+var today=new Date();
+var d=new Array("星期日","星期一","星期二","星期三","星期四","星期五","星期六");
+var nowDate= "";
+nowDate = showLocale();// 获取当前时间 年月日 时分秒
+nowDate = nowDate+ "&nbsp;&nbsp;&nbsp;&nbsp;"+ d[today.getDay()];// 获取当前星期
+
+//nowDate = nowDate+ "&nbsp;&nbsp;&nbsp;&nbsp;"+SolarTerm(today); // 显示二十四节气
+nowDate = nowDate+ "&nbsp;&nbsp;&nbsp;&nbsp;"+getHoursMin(today);
+return nowDate;
+}
+
+function showLocale(){
+var str;
+var objD;
+objD = new Date();
+var yy = objD.getYear();
+if(yy<1900){
+yy = yy+1900;
+}
+var MM = objD.getMonth()+1;
+if(MM<10){
+MM = '0' + MM;
+}
+var dd = objD.getDate();
+if(dd<10){
+dd = '0' + dd;
+}
+var hh = objD.getHours();
+if(hh<10){
+hh = '0' + hh;
+}
+var mm = objD.getMinutes();
+if(mm<10){
+mm = '0' + mm;
+}
+var ss = objD.getSeconds();
+if(ss<10){
+ss = '0' + ss;
+}
+var ww = objD.getDay();
+// + hh + ":" + mm + ":" + ss +
+str = yy + "年" + MM + "月" + dd + "日";
+return(str);
+}
+
+function DaysNumberofDate(DateGL){
+return parseInt((Date.parse(DateGL)-Date.parse(DateGL.getFullYear()+"/1/1"))/86400000)+1;
+}
+
+function CnDateofDate(DateGL){
+var CnData= new Array(
+0x16,0x2a,0xda,0x00,0x83,0x49,0xb6,0x05,0x0e,0x64,0xbb,0x00,0x19,0xb2,0x5b,0x00,
+0x87,0x6a,0x57,0x04,0x12,0x75,0x2b,0x00,0x1d,0xb6,0x95,0x00,0x8a,0xad,0x55,0x02,
+0x15,0x55,0xaa,0x00,0x82,0x55,0x6c,0x07,0x0d,0xc9,0x76,0x00,0x17,0x64,0xb7,0x00,
+0x86,0xe4,0xae,0x05,0x11,0xea,0x56,0x00,0x1b,0x6d,0x2a,0x00,0x88,0x5a,0xaa,0x04,
+0x14,0xad,0x55,0x00,0x81,0xaa,0xd5,0x09,0x0b,0x52,0xea,0x00,0x16,0xa9,0x6d,0x00,
+0x84,0xa9,0x5d,0x06,0x0f,0xd4,0xae,0x00,0x1a,0xea,0x4d,0x00,0x87,0xba,0x55,0x04
+);
+var CnMonth=new Array();
+var CnMonthDays=new Array();
+var CnBeginDay;
+var LeapMonth;
+var Bytes=new Array();
+var I;
+var CnMonthData;
+var DaysCount;
+var CnDaysCount;
+var ResultMonth;
+var ResultDay;
+var yyyy=DateGL.getFullYear();
+var mm=DateGL.getMonth()+1;
+var dd=DateGL.getDate();
+if(yyyy<100){
+yyyy+=1900;
+}
+if ((yyyy < 1997) || (yyyy > 2021)){
+return 0;
+}
+Bytes[0] = CnData[(yyyy - 1997) * 4];
+Bytes[1] = CnData[(yyyy - 1997) * 4 + 1];
+Bytes[2] = CnData[(yyyy - 1997) * 4 + 2];
+Bytes[3] = CnData[(yyyy - 1997) * 4 + 3];
+if ((Bytes[0] & 0x80) != 0) {
+CnMonth[0] = 12;
+} else {
+CnMonth[0] = 11;
+}
+CnBeginDay = (Bytes[0] & 0x7f);
+CnMonthData = Bytes[1];
+CnMonthData = CnMonthData << 8;
+CnMonthData = CnMonthData | Bytes[2];
+LeapMonth = Bytes[3];
+for (I=15;I>=0;I--){
+CnMonthDays[15 - I] = 29;
+if (((1 << I) & CnMonthData) != 0 ){
+CnMonthDays[15 - I]++;
+}
+if (CnMonth[15 - I] == LeapMonth ){
+CnMonth[15 - I + 1] = - LeapMonth;
+} else{
+if (CnMonth[15 - I] < 0 ){
+CnMonth[15 - I + 1] = - CnMonth[15 - I] + 1;
+} else {
+CnMonth[15 - I + 1] = CnMonth[15 - I] + 1;
+}
+if (CnMonth[15 - I + 1] > 12 ){
+CnMonth[15 - I + 1] = 1;
+}
+}
+}
+DaysCount = DaysNumberofDate(DateGL) - 1;
+if (DaysCount <= (CnMonthDays[0] - CnBeginDay)){
+if ((yyyy > 1901) && (CnDateofDate(new Date((yyyy - 1)+"/12/31")) < 0)){
+ResultMonth = - CnMonth[0];
+} else {
+ResultMonth = CnMonth[0];
+}
+ResultDay = CnBeginDay + DaysCount;
+}else{
+CnDaysCount = CnMonthDays[0] - CnBeginDay;
+I = 1;
+while ((CnDaysCount < DaysCount) && (CnDaysCount + CnMonthDays[I] < DaysCount)){
+CnDaysCount+= CnMonthDays[I];
+I++;
+}
+ResultMonth = CnMonth[I];
+ResultDay = DaysCount - CnDaysCount;
+}
+if (ResultMonth > 0){
+return ResultMonth * 100 + ResultDay;
+} else{
+return ResultMonth * 100 - ResultDay;
+}
+}
+
+function CnYearofDate(DateGL){
+var YYYY=DateGL.getFullYear();
+var MM=DateGL.getMonth()+1;
+var CnMM=parseInt(Math.abs(CnDateofDate(DateGL))/100);
+if(YYYY<100){
+YYYY+=1900;
+}
+if(CnMM>MM){
+YYYY--;
+}
+YYYY-=1864;
+
+return CnEra(YYYY)+"年";
+}
+
+function CnMonthofDate(DateGL){
+var CnMonthStr=new Array("零","一","二","三","四","五","六","七","八","九","十","十一","十二");
+var Month;
+Month = parseInt(CnDateofDate(DateGL)/100);
+if (Month < 0){
+return "闰" + CnMonthStr[-Month] + "月";
+}else{
+return CnMonthStr[Month] + "月";
+}
+}
+
+
+
+
+function CnDayofDate(DateGL){
+var CnDayStr=new Array("零",
+"初一", "初二", "初三", "初四", "初五",
+"初六", "初七", "初八", "初九", "初十",
+"十一", "十二", "十三", "十四", "十五",
+"十六", "十七", "十八", "十九", "二十",
+"廿一", "廿二", "廿三", "廿四", "廿五",
+"廿六", "廿七", "廿八", "廿九", "三十");
+var Day;
+Day = (Math.abs(CnDateofDate(DateGL)))%100;
+
+return CnDayStr[Day];
+}
+
+function DaysNumberofMonth(DateGL){
+var MM1=DateGL.getFullYear();
+MM1<100 ? MM1+=1900:MM1;
+var MM2=MM1;
+MM1+="/"+(DateGL.getMonth()+1);
+MM2+="/"+(DateGL.getMonth()+2);
+MM1+="/1";
+MM2+="/1";
+
+return parseInt((Date.parse(MM2)-Date.parse(MM1))/86400000);
+}
+
+
+
+function CnEra(YYYY){
+var Tiangan=new Array("甲","乙","丙","丁","戊","己","庚","辛","壬","癸");
+var Dizhi=new Array("子","丑","寅","卯","辰","巳","午","未","申","酉","戌","亥");
+
+return Tiangan[YYYY%10]+Dizhi[YYYY%12];
+}
+
+
+
+function CnDateofDateStr(DateGL){
+if(CnMonthofDate(DateGL)=="零月"){
+return "　";
+}else{
+return "农历"+CnYearofDate(DateGL)+ " " + CnMonthofDate(DateGL) + CnDayofDate(DateGL);
+}
+}
+
+
+
+function SolarTerm(DateGL){
+var SolarTermStr=new Array(
+"小寒","大寒","立春","雨水","惊蛰","春分",
+"清明","谷雨","立夏","小满","芒种","夏至",
+"小暑","大暑","立秋","处暑","白露","秋分",
+"寒露","霜降","立冬","小雪","大雪","冬至");
+var DifferenceInMonth=new Array(
+1272060,1275495,1281180,1289445,1299225,1310355,
+1321560,1333035,1342770,1350855,1356420,1359045,
+1358580,1355055,1348695,1340040,1329630,1318455,
+1306935,1297380,1286865,1277730,1274550,1271556);
+
+var DifferenceInYear=31556926;
+var BeginTime=new Date(1901/1/1);
+
+BeginTime.setTime(947120460000);
+for(;DateGL.getFullYear()<BeginTime.getFullYear();){
+BeginTime.setTime(BeginTime.getTime()-DifferenceInYear*1000);
+}
+for(;DateGL.getFullYear()>BeginTime.getFullYear();){
+BeginTime.setTime(BeginTime.getTime()+DifferenceInYear*1000);
+}
+for(var M=0;DateGL.getMonth()>BeginTime.getMonth();M++){
+BeginTime.setTime(BeginTime.getTime()+DifferenceInMonth[M]*1000);
+}
+if(DateGL.getDate()>BeginTime.getDate()){
+BeginTime.setTime(BeginTime.getTime()+DifferenceInMonth[M]*1000);
+M++;
+}
+if(DateGL.getDate()>BeginTime.getDate()){
+BeginTime.setTime(BeginTime.getTime()+DifferenceInMonth[M]*1000);
+M==23?M=0:M++;
+}
+// var JQ="二十四节气:";
+var JQ = "" ;
+if(DateGL.getDate()==BeginTime.getDate()){
+JQ+=" 今日 <font color='#598F03'><b>"+SolarTermStr[M] + "</b></font>";
+}else if(DateGL.getDate()==BeginTime.getDate()-1){
+JQ+=" 明日 <font color='#598F03'><b>"+SolarTermStr[M] + "</b></font>";
+}else if(DateGL.getDate()==BeginTime.getDate()-2){
+JQ+=" 后日 <font color='#598F03'><b>"+SolarTermStr[M] + "</b></font>";
+} else{
+// JQ=" 二十四节气:";
+JQ = "";
+if(DateGL.getMonth()==BeginTime.getMonth()){
+JQ+=" 本月";
+} else{
+JQ+=" 下月";
+}
+JQ+=BeginTime.getDate()+"日 "+"<font color='#598F03'><b>"+SolarTermStr[M]+"</b></font>";
+}
+return JQ;
+}
+
+function getHoursMin(DateGL)
+{
+var str = "";
+str = DateGL.getHours()+'时';
+str = str + DateGL.getMinutes()+'分';
+return str;
+}
+
+	</script> 
+    </div>
+    <div id="time" style="float:left; margin-left:8px; margin-top:0px; color:#000; line-height:45px;"></div>
+<div style=" float:left; margin-left:8px">
+<!--<iframe allowtransparency="true" frameborder="0" width="200" height="45" scrolling="no" src="http://www.changchun.gov.cn/kzgn/cctq/"></iframe>-->
+</div>
+
+<div style="clear:both;"></div>
+    </td>
+<!-- 头部时间天气-->
+    </div>
+    <div class="txt_r">
+ <a id="toolbarSwitch" href="javascript:void(0);" style=" display:inline-block;width:100px; height:22px; text-align:center; color:#FFF; background:#184390; border-radius:6px; line-height:22px;">无障碍试运行</a>
+   <script type="text/javascript" src="../../../../images/userInfo_4.js"></script>
+<a  a href="javascript:void(0);" onclick="goOneSearch()"  style=" display:inline-block;width:60px; height:22px; text-align:center; color:#FFF; background:#184390; border-radius:6px; line-height:22px;">一网搜</a>
+<a href="javascript:void(0);"  id="loginBtn" style=" margin-right:5px;">登录</a>|
+<a href="javascript:void(0);"  id="tcBtn" style="display:none;margin-right:10px; margin-left:0px!important;">退出</a>
+<a href="javascript:void(0);"  id="zcBtn" style="margin-right:10px;margin-left:0px!important;">注册</a>
+<div style="display: none;">
+<iframe src="https://user.jl.gov.cn/v1/apigw/none/user/authentication/checklogin?appId=575ecd1d2d70450ea4c5a6b468c50c7f&amp;version=1.0.0&amp;format=json&amp;charset=utf-8&amp;timestamp=2019-08-10%2016:46:13&amp;backUrl=http://www.changchun.gov.cn/userInfo/login/"  id="gjdl"></iframe> 
+</div>
+<script language="javascript" type="text/javascript">
+function goOneSearch(){
+
+   var st=document.getElementById("mdgov_searchInputStart")
+   var text = st.value;
+   if(text=="请输入搜索关键词"){
+     text = '';
+   }
+   var url = 'http://intellsearch.jl.gov.cn:8000/search/index.html?a=1&q='+ text;
+   window.location.href= url;
+
+}
+</script> 
+<a href="http://yzw.changchun.gov.cn/" target="_blank" style="margin:0;!important">政务服务</a>
+
+
+
+<a href="http://www.gov.cn/" target="_blank">中国政府网</a>
+<a href="http://www.jl.gov.cn/" target="_blank">省政府网</a>
+
+<a href="http://en.changchun.gov.cn/">English</a>
+<a target="_blank" href="http://ru.changchun.gov.cn/">Русский</a>
+<a href="http://kr.changchun.gov.cn/">한국어</a>
+<a  href="javascript:void(0)">日本語</a>
+<!--<a  href="javascript:void(0)">한국어</a>-->
+<!--<a  href="javascript:void(0)">Русский</a>-->
+<!--临时关停
+<a target="_blank" href="http://en.changchun.gov.cn/">English</a>
+<a target="_blank" href="http://jp.changchun.gov.cn/">日本語</a>
+<a target="_blank" href="http://kr.changchun.gov.cn/">한국어</a>
+<a target="_blank" href="http://ru.changchun.gov.cn/">Русский</a>
+-->
+<a href="javascript:void(0);" class="site_nav" >站群导航</a></div>
+  </div>
+      <!-----------768导航------------>
+      <div class="app_head">
+    <div class="header-cyy">
+          <div class="header-cyy_main"> <a target="_blank" href="/" class="app_logo"></a>
+        <div class="hidded-nav-jit">
+<!--<form id="form_cds0" name="form_cds0" method="get" action="http://intellsearch.changchun.gov.cn/was5/web/search"  target="_blank">
+<input type="hidden" name="presearchword" value /> 
+<input type="hidden" name="searchword1" />
+<input type="hidden" name="channelid" value="291010" />
+<input type="hidden" name="StringEncoding" value="UTF-8" />
+         <input type="text" id="mdgov_searchInputStart" class="search-icon-cyy" value="请输入搜索关键词" onFocus="if(this.value!=''){this.value='';}" onblur="if(this.value==''){this.value='请输入搜索关键词';}" name="searchword" />
+<input type="button" class="search-btn-jit" onClick="form_cds0.submit()" />
+</form>-->
+ <a href="javascript:void(0);" title="搜索" class="search-icon-cyy"></a>
+ <a href="javascript:void(0);" title="汉堡菜单" class="hmb-icon-cyy"></a> 
+
+              <script>
+            $(".hmb-icon-cyy").click(function () {
+                $(this).toggleClass("open");
+            });
+           </script>
+</div>
+      </div>
+        </div>
+    <div class="search-jit-hid">
+          <div class="search-frame clearfix">
+<form id="form_cds1" name="form_cds1" method="get" action="http://intellsearch.changchun.gov.cn/was5/web/search"  target="_blank">
+<input type="hidden" name="presearchword" value /> 
+<input type="hidden" name="searchword1" />
+<input type="hidden" name="channelid" value="291010" />
+<input type="hidden" name="StringEncoding" value="UTF-8" />
+        
+        <input type="text" id="mdgov_searchInputStart" class="search-box-jit" value="请输入搜索关键词" onFocus="if(this.value!=''){this.value='';}" onblur="if(this.value==''){this.value='请输入搜索关键词';}" name="searchword" />
+        <input type="button" value="" class="search-btn-jit" onClick="form_cds1.submit()" />
+</form>
+      </div>
+        </div>
+    <div class="nav-jit-hid">
+          <li><a target="_blank" href="../../../yw/">党政信息</a></li>
+          <li><a target="_blank" href="../../../">政务</a></li>
+          <li><a target="_blank" href="http://zwfw.jl.gov.cn/ccszwfww/">政务服务</a></li>
+          <li><a target="_blank" href="../../../../hd/">互动</a></li>
+          <li><a target="_blank" href="../../../../zjzc/">走进长春</a></li>
+        </div>
+  </div>
+      <!-----------导航------------>
+      <div class="nav">
+    <div class="logo_bg"><a target="_blank" href="/"><img src="../../../../images/logo_bg.png" alt="" /></a>
+                         <span style="margin-top:5px!important">政务</span></div>
+    <ul>
+          <li><a target="_blank" href="../../../yw/">党政信息</a></li>
+          <li><a target="_blank" href="../../../">政务</a></li>
+          <li><a target="_blank" href="http://zwfw.jl.gov.cn/ccszwfww/" >政务服务<br></a></li>
+          <li><a target="_blank" href="../../../../hd/">互动</a></li>
+          <li><a target="_blank" href="../../../../zjzc/">走进长春</a></li>
+        </ul>
+    <div class="searchBox">
+
+
+        <form id="form_cds2" name="form_cds2" method="get" action="http://intellsearch.changchun.gov.cn/was5/web/search"  target="_blank">
+                          <input type="hidden" name="presearchword" value /> 
+                          <input type="hidden" name="searchword1" />
+                          <input type="hidden" name="channelid" value="291010" />
+                          <input type="hidden" name="StringEncoding" value="UTF-8" />
+              
+              <input type="text" id="mdgov_searchInputStart" class="searchInput" value="请输入搜索关键词" onFocus="if(this.value!=''){this.value='';}" onblur="if(this.value==''){this.value='请输入搜索关键词';}" name="searchword" />
+              <input class="searchbut" value="" type="button" onClick="form_cds2.submit()" />
+        </form>
+<script>
+function tongbu(s1,s2){
+        //alert(document.getElementById(s1).value);
+	document.getElementById(s2).value=document.getElementById(s1).value;
+
+}
+</script>
+
+
+         
+
+
+
+        </div>
+
+  </div>
+    </div>
+
+<!-- 站群导航-->
+<!--站群导航-->
+    <script type="text/javascript">
+        $(document).ready(function(){
+            var h3 = $(window).height();
+            if(h3<600){
+                $(window).scroll(function(){
+
+                    var xh = $(window).scrollTop();
+                    //alert (xh);
+                    if (xh > 200) {
+
+                    }
+                });
+            }
+            $(".list").css("height",h3-25);
+
+            $(".site_nav").click(function(){
+                $(".list").addClass("show_on");
+
+            });
+
+            $(".close").click(function(){
+
+                $(".list").removeClass("show_on");
+            })
+        });
+    </script>
+<div class="list" style="height: 315px; ">
+                     <a href="javascript:void(0)" class="close" title="关闭">关闭</a>
+                    <div class="list_tit">
+                        <h2>行政区划</h2>
+                    </div>
+                    <div class="list_link">
+ 
+
+                           <a href="http://chaoyang.changchun.gov.cn/" target="_blank">朝阳区</a>
+ 
+
+                           <a href="http://www.nanguan.gov.cn/" target="_blank">南关区</a>
+ 
+
+                           <a href="http://www.jckc.gov.cn/" target="_blank">宽城区</a>
+ 
+
+                           <a href="http://www.ccerdao.gov.cn/" target="_blank">二道区</a>
+ 
+
+                           <a href="http://www.luyuan.gov.cn/" target="_blank">绿园区</a>
+ 
+
+                           <a href="http://www.shuangyang.gov.cn/" target="_blank">双阳区</a>
+ 
+
+                           <a href="http://www.jiutai.gov.cn/" target="_blank">九台区</a>
+ 
+
+                           <a href="http://www.gongzhuling.gov.cn/" target="_blank">公主岭市</a>
+ 
+
+                           <a href="http://www.yushu.gov.cn/" target="_blank">榆树市</a>
+ 
+
+                           <a href="http://www.dehui.gov.cn/" target="_blank">德惠市</a>
+ 
+
+                           <a href="http://www.nongan.gov.cn/" target="_blank">农安县</a>
+ 
+                                       
+                    </div>
+                    <div class="list_tit">
+                        <h2>开发区</h2>
+                    </div>
+                    <div class="list_link">
+
+
+                           <a href="http://www.ccxq.gov.cn" target="_blank">长春新区</a>
+ 
+
+                           <a href="http://www.cetdz.gov.cn/" target="_blank">长春经济技术开发区</a>
+ 
+
+                           <a href="http://www.jingyue.gov.cn/" target="_blank">长春净月高新技术产业开发区</a>
+ 
+
+                           <a href="http://www.caida.gov.cn/" target="_blank">长春汽车经济技术开发区</a>
+ 
+
+                           <a href="http://www.cclm.gov.cn/" target="_blank">长春莲花山生态旅游度假区</a>
+ 
+                      </div>     
+                     <div class="list_tit">
+                        <h2>部门网站</h2>
+                    </div>
+                    <div class="list_link">
+
+
+                           <a href="http://drc.changchun.gov.cn/" target="_blank">市发展和改革委员会</a>
+ 
+
+                           <a href="http://jyj.changchun.gov.cn" target="_blank">市教育局</a>
+ 
+
+                           <a href="http://kjj.changchun.gov.cn/" target="_blank">市科学技术局</a>
+ 
+
+                           <a href="http://gxj.changchun.gov.cn/" target="_blank">市工业和信息化局</a>
+ 
+
+                           <a href="http://mw.changchun.gov.cn" target="_blank">市民族事务委员会</a>
+ 
+
+                           <a href="http://mzj.changchun.gov.cn/" target="_blank">市民政局</a>
+ 
+
+                           <a href="http://sfj.changchun.gov.cn/" target="_blank">市司法局</a>
+ 
+
+                           <a href="http://czj.changchun.gov.cn/" target="_blank">市财政局</a>
+ 
+
+                           <a href="http://ccrs.changchun.gov.cn/" target="_blank">市人力资源和社会保障局</a>
+ 
+
+                           <a href="http://gzj.changchun.gov.cn" target="_blank">市规划和自然资源局</a>
+ 
+
+                           <a href="http://hjj.changchun.gov.cn/" target="_blank">市生态环境局</a>
+ 
+
+                           <a href="http://jw.changchun.gov.cn" target="_blank">市城乡建设委员会</a>
+ 
+
+                           <a href="http://fdj.changchun.gov.cn/" target="_blank">市住房保障和房屋管理局</a>
+ 
+
+                           <a href="http://srhwj.changchun.gov.cn/" target="_blank">市城市管理局</a>
+ 
+
+                           <a href="http://ccsjtysj.changchun.gov.cn/" target="_blank">市交通运输局</a>
+ 
+
+                           <a href="http://nw.changchun.gov.cn/" target="_blank">市农业农村局</a>
+ 
+
+                           <a href="http://xmj.changchun.gov.cn/" target="_blank">市畜牧业管理局</a>
+ 
+
+                           <a href="http://swj.changchun.gov.cn/" target="_blank">市商务局</a>
+ 
+
+                           <a href="http://wglj.changchun.gov.cn" target="_blank">市文化广播电视和旅游局（长春市文物局）</a>
+ 
+
+                           <a href="http://wjw.changchun.gov.cn/" target="_blank">市卫生健康委员会</a>
+ 
+
+                           <a href="http://ajj.changchun.gov.cn/" target="_blank">市应急局</a>
+ 
+
+                           <a href="http://sjj.changchun.gov.cn/" target="_blank">市审计局</a>
+ 
+
+                           <a href="http://ccfao.changchun.gov.cn/" target="_blank">市政府外事办公室</a>
+ 
+
+                           <a href="http://scjg.changchun.gov.cn/" target="_blank">市市场监督管理局</a>
+ 
+
+                           <a href="http://ccgzw.changchun.gov.cn/" target="_blank">市政府国有资产监督管理委员会</a>
+ 
+
+                           <a href="http://tyj.changchun.gov.cn/" target="_blank">市体育局</a>
+ 
+
+                           <a href="http://ccyb.changchun.gov.cn" target="_blank">市医疗保障局</a>
+ 
+
+                           <a href="http://jgj.changchun.gov.cn/" target="_blank">市机关事务管理局</a>
+ 
+
+                           <a href="http://ccls.changchun.gov.cn/" target="_blank">市粮食和物资储备局</a>
+ 
+
+                           <a href="http://rmfk.changchun.gov.cn/" target="_blank">市人民防空办公室</a>
+ 
+
+                           <a href="http://zsj.changchun.gov.cn/" target="_blank">市政务服务和数字化建设管理局</a>
+ 
+
+                           <a href="http://ccylj.changchun.gov.cn/" target="_blank">市林业和园林局</a>
+ 
+
+                           <a href="http://zfgjj.changchun.gov.cn/" target="_blank">市住房公积金</a>
+ 
+
+                           <a href="http://ccshbx.changchun.gov.cn/" target="_blank">市社会保险局</a>
+ 
+
+                           <a href="http://tjj.changchun.gov.cn/" target="_blank">市统计局</a>
+ 
+
+                           <a href="http://tyjrswj.changchun.gov.cn/" target="_blank">市退役军人事务局</a>
+                
+                      </div> 
+                    <!--<div class="list_tit">
+                        <h2>公用服务</h2>
+                    </div>
+                    <div class="list_link">
+
+                      </div>-->           
+                     <!--<div class="list_tit">
+                        <h2>推荐网站</h2>
+                    </div>
+                    <div class="list_link">
+
+                      </div>-->          
+                </div>
+<!-- 站群导航-->
+
+    
+    </div>
+<script src="https://auth.mangren.com/boots/changchun.gov.cn/esdToolsInit.js" charset="UTF-8"></script><!-- 无障碍js-->
+<!-- 一级头部结束 -->
+
+<div class="contents">
+
+	<div class="xyh_information">
+		<div class="xyh_xxy" >
+           
+<!--  面包屑开始 -->
+<!-- 面包屑 -->
+                        <div class="xyh_location">当前位置:&nbsp;
+                             <span>首页</span>&nbsp;>&nbsp;
+                             <span>政务</span>&nbsp;>&nbsp;
+                             <span>市政府文件</span>
+                        </div>
+<!-- 面包屑结束 -->
+            <div class="xyh_xxynrq">
+
+				<!-- 引题 -->
+				<h4></h4>
+				<!-- 主标题 -->
+				<h2>长春市人民政府关于</br>支持居民自住性和改善性住房需求</br>促进房地产市场平稳健康发展的若干意见</h2>
+				<!-- 副标题 -->
+				<h3>长府发〔2015〕6 号</h3>
+				<div class="pages-date" >
+					<span class="font">时间：2015-06-04 14:46
+                                              来源：
+						<script>
+							var ly = '长春市政府';
+							if(ly == ''){ly="长春市政府";}
+							document.write(ly);
+						</script>
+					</span>
+					<div class="pages_print">
+						<span class="font index_switchsize">【字体：<span class="bigger"><a href="javascript:doZoom(18)">大</a></span> <span id="medium"><a href="javascript:doZoom(16)">中</a></span> <span class="smaller"><a href="javascript:doZoom(14)">小</a></span>】</span><span class="font printIco" id="btnPrint"><a onclick=" newprint();">打印</a></span>
+					</div>
+				</div>
+				<div id="Zoom" class="PrintArea area1 all">
+					
+					<p class="xyh_xxynr">
+						<div id="DOCHTMLCON" style=" display:none;"><div class=TRS_Editor><p>各县（市）、区人民政府，开发区管委会，市政府各委办局、各直属机构：</p>
+<p style="text-indent: 23pt">为贯彻落实国家六部委《关于个人住房贷款政策有关问题的通知》、《关于调整个人住房转让营业税政策的通知》和《关于优化2015年住房及用地供应结构促进房地产市场平稳健康发展的通知》等文件精神，满足居民合理住房需求，促进我市房地产市场平稳健康发展，按照市委、市政府的决策部署，制定如下意见：</p>
+<p style="text-indent: 23pt">一、取消住房限购政策，有效激发市场活力。在本市内购买新建商品住房或二手住房不受购房套数限制。非本市户籍居民家庭不需提供纳税证明和社保证明即可在本市行政区域内购买新建商品住房或二手住房。</p>
+<p style="text-indent: 23pt">二、加强住房金融服务，增强购房支付能力。提高住房公积金贷款使用效率，缩短放款时限。对首次申请住房公积金贷款购买除别墅外的新建商品住房，最低首付比例为20%，对已结清相应购房贷款且家庭只有一套住房再次申请住房公积金贷款购买面积在144平方米以下新建商品住房的，执行首套房贷款政策。加大对住房公积金缴存职工的购房支持力度，城区住房公积金新建普通商品住房贷款额度提高至80万元，存量住房贷款额度提高至70万元；月还款额小于或等于借款人家庭（本人及配偶）月工资总收入的60%。允许父母与子女组合申请住房公积金贷款，具体实施细则另行制定。</p>
+<p style="text-indent: 23pt">对申请商业性个人住房贷款购买首套普通自住房的家庭，贷款最低首付比例为30%，对拥有1套住房且相应购房贷款未结清的居民家庭，为改善居住条件再次申请商业性个人住房贷款购房的，最低首付比例不低于40%。鼓励省内各金融机构对居民首套房贷款给予适当利率优惠，对于信用状况和还款能力较好的优质客户贷款利率不高于基准利率；鼓励银行业金融机构发放商业性个人住房贷款与住房公积金委托贷款的组合贷款。</p>
+<p style="text-indent: 23pt">三、落实税收优惠政策，减轻居民购房负担。个人将购买不足2年的住房对外销售的，全额征收营业税；个人将购买2年以上的非普通住房对外销售的，按照其销售收入减去购买房屋的价款后的差额征收营业税；个人将购买2年以上的普通住房对外销售的，免征营业税。个人无籍房登记后首次转让的，计税起始时间以房屋入住时间为准。对个人出租房屋（包括住宅和非住宅）统一按综合税率5.03%征税。</p>
+<p style="text-indent: 23pt">四、加快无籍房屋确权，盘活存量房屋市场。继续放宽历史遗留未登记住宅房屋确权年限，将2005年年底以前，主体资格消失的企事业单位在国有土地上建设开发并投入使用但未办理产权登记的建筑列入清理范围，支持无籍房确权后上市交易。适时启动未登记非住宅房屋确权工作，完善确权程序，补齐相关税费后，直接为购房人办理房屋所有权证。</p>
+<p style="text-indent: 23pt">五、优化住房供应结构，满足居民住房需求。允许开发建设单位依法调整住宅户型结构，申请变更《建设工程规划许可证》。政府可直接购买或租赁符合公共租赁住房或棚改回迁房条件的商品住房。建立库存商品住房数据库，被保障对象和棚改回迁居民按照对住房的区位、户型等实际需求进行自主选择。</p>
+<p style="text-indent: 23pt">六、加大政策扶持力度，缓解企业资金压力。允许开发企业在缴清土地出让金并办理土地使用证后，在建工程抵押项目可以按共用宗地办理分摊登记，标明土地对应的房屋，便于办理商品房预售许可证和抵押登记。允许开发建设单位按照《建设工程规划许可证》按栋分期建设，分期建设完成后可以分期按栋申请规划核实。已取得商品房预售许可证，但整栋房屋均未销售的，房地产开发企业可申请撤销该栋房屋的预售许可，办理商品房预售许可变更手续。</p>
+<p style="text-indent: 23pt">物业维修资金按实际销售情况交纳，销售量达到90%时剩余部分由开发企业全额代交。</p>
+<p style="text-indent: 23pt">七、落实征拆主体责任，加快房屋灭籍办理。对已取得土地使用权但因征拆主体未及时办理房屋所有权注销登记（即“灭籍”）且近期暂时不能办理的，由市土地储备中心和各城区政府、开发区管委会调查未灭籍房屋具体情况，并出具书面承诺，承诺明确办理房屋灭籍的时间和承担的相应责任。出具承诺后可先行办理商品房预售许可证。自本意见施行之日起出让的土地，必须在土地出让前办理完灭籍手续。</p>
+<p style="text-indent: 23pt">八、围绕重点区域项目，稳步推进棚改工作。以中心城区和铁路沿线为重点区域，以结转地块、集中连片棚户区和“夹馅”棚户区为重点项目，加大棚户区征拆工作力度，完善配套设施，促进城市面貌和居住环境明显改善。鼓励房屋征收以货币化安置为主，并为被征收人购房提供便利。</p>
+<p style="text-indent: 23pt">九、实行用地分宗管理，推进项目开发建设。对已签订《国有建设用地使用权出让合同》，但因历史原因未达到净地条件且开发企业尚未缴清全部出让价款的土地，符合以下情形可分宗与开发企业签订土地出让补充合同：</p>
+<p style="text-indent: 23pt">（一）原规划条件中项目用地为若干独立地块，且每个地块的规划容积率、商住比例无变化，绿地率、建筑密度、停车泊位等指标及配套公共服务设施，在本地块内能独立满足规划要求的，可直接分宗签订补充合同。</p>
+<p style="text-indent: 23pt">（二）前款规定以外情形需要分宗的，由开发建设单位持市国土资源主管部门同意分宗的意见向市城乡规划主管部门申请变更规划条件。市城乡规划主管部门依据经市规委会专业委员会审定的修建性详细规划出具变更后的规划条件。变更后的规划条件，原则上应保证各地块规划控制指标的平衡和公正，先期变更、先期建设的地块还要按比例配建托幼、绿地、停车、物业、养老等设施。</p>
+<p style="text-indent: 23pt">（三）土地出让价款按补充合同约定分宗缴纳，市财政部门按补充合同分宗履行清算手续，市国土部门分宗办理国有土地使用证。对其中未达到净地条件的宗地，开发企业应缴纳不低于该宗地20%的土地出让价款作为保证金，该宗地达到净地条件后补齐剩余出让价款，办理国有土地使用证。</p>
+<p style="text-indent: 23pt">十、妥善解决历史问题，完善用地审批手续。对已签订《国有建设用地使用权出让合同》，且符合以下情形的，可按下述规定办理土地手续：</p>
+<p style="text-indent: 23pt">（一）完善历史上已出让的居住项目用地审批手续。对2006年12月12日国土资源部《限制用地项目目录》颁布前已出让的居住用地，因规划调整、验收，需要补缴土地出让金的，计算方式按国土资源部协议出让土地规范执行，其中容积率小于1.0的，国土部门可继续办理相关用地审批手续。</p>
+<p style="text-indent: 23pt">（二）完善历史上已出让的商业用地审批手续。对2013年4月8日国土资源部《关于发布&lt;国有建设用地使用权出让地价评估技术规范（试行）&gt;的通知》颁布前已出让的独立商业用地，依法调整规划容积率的，补缴土地出让金额按照协议出让土地规范执行；对2013年4月8日后出让的独立商业用地，依法调整规划容积率的，补缴土地出让金额按照地价评估技术规范执行。</p>
+<p style="text-indent: 23pt">十一、盘活存量土地资源，调整土地供应节奏。房地产开发用地要充分利用现有闲置土地，城镇低效利用和征而未供等存量土地，限制使用新增建设用地，对新增的房地产开发项目用地，除特殊区域外，近期国土部门不再安排新的征地报批。结合市场实际需求，合理确定土地供应节奏、布局和规模。对住房建设量明显供大于求的区域，减少直至暂停土地供应；对住房供应不足区域，适度增加住房用地供应量。</p>
+<p align="right">长春市人民政府</p>
+<p align="right">2015年6月4日</p></div></div>
+							<script>
+							var str=document.getElementById("DOCHTMLCON").innerHTML;
+							var arrEntities={'lt':'<','gt':'>','nbsp':' ','amp':'&','quot':'"'};
+							document.write(str.replace(/&(lt|gt|nbsp|amp|quot);/ig,function(all,t){return arrEntities[t];}));
+							</script>
+					</p>
+					
+					<!-- 附件下载 -->
+					<table id="noAboutfj" width="98%" border="0" cellspacing="0" cellpadding="0" style="line-height:24px;">
+                      <tr>
+                       <script language="javascript">
+
+                          var file_appendix='';
+
+
+                         if(file_appendix!=""){
+                          document.write("<tr><td align='left' height='20'><font color='#CC3300'><b><font color='#000099'>附件：</font></b></font></td></tr>");
+                          }
+                      </script>
+
+                        <td align="left"><a  target="_blank" href=""> </a></td>
+                      </tr>
+                    </table>
+
+                    <table id="noAbout" width="98%" border="0" cellspacing="0" cellpadding="0">
+                      <tr>
+                        <td align="left">
+                         <script language="javascript">
+                           //判断相关文档是否存在
+                           var str_relnews="";
+                           
+                           if(str_relnews!=""){
+                                     document.write('<tr><td align="left" height="30" style="color:#000099;font-weight:bold">相关文档</td></tr>');
+                              }
+                        </script></td>
+                      </tr>
+                    </table>
+					<!-- 附件下载1  -->
+					
+					<p class="xxy_gly">编 辑:
+						<script>
+						  var ly = '乔砚';
+						  if(ly == ''){
+							var name = 'kanglei';
+
+							 if(name =='床前明月光' || name=='狂飙为我从天落' || name == '永不言弃'|| name =='筱筱' || name=='xxz2017'|| name=='水云天' || name == 'a含羞草')
+							 {
+							   name = 'kanglei';
+							 }
+                                                         else
+                                                        {
+							   name="管理员";
+							 }
+							 
+							 ly = name;
+						  }
+						  document.write(ly);
+						</script>
+					</p>
+				</div>						
+		   </div>
+                           
+		</div>
+		<!-- 分享开始 --> 
+		<div class="xyh_xf">
+			<div class="bshare-custom icon-medium-plus">
+			<a title="分享到QQ好友" class="bshare-qqim"></a>
+			<a title="分享到微信" class="bshare-weixin"></a>
+			<a title="分享到新浪微博" class="bshare-sinaminiblog"></a>
+
+			</div>
+			<script type="text/javascript" charset="utf-8" src="http://static.bshare.cn/b/buttonLite.js#style=-1&amp;uuid=&amp;pophcol=2&amp;lang=zh"></script>
+			<script type="text/javascript" charset="utf-8" src="../../../../images/bshareC0.js"></script>
+		</div> 
+        <!-- 分享结束 -->
+		<div class="clearfix"></div>
+	</div>
+</div>
+<script type="text/javascript">  
+    $(document).ready(function() {    
+        iBShare.init();    //初始化    
+    });    
+            
+    //bShare分享    
+    var iBShare = {    
+        //初始化    
+        init: function() {    
+            var $shareBox = $(".bshare-custom");  
+            $shareBox.children("a").click(function() {    
+                var parents = $(this).parent();    
+                bShare.addEntry({    
+                    title: parents.attr("title"),    
+                    url: parents.attr("url"),    
+                    summary: parents.attr("summary"),    
+                    pic: parents.attr("pic")    
+                });    
+            });    
+        }    
+    }  
+</script> 
+<!--底部-->
+
+<!--<script type="text/javascript">
+
+   var screenWidth= screen.width;
+    if(screenWidth <= 768){
+　　document.write( '<iframe src="http://www.changchun.gov.cn/kzgn/dbdh/" width="100%" height="760px"  frameborder="no" border="0"  marginwidth="0" marginheight="0" scrolling="no" allowtransparency="yes"></iframe>');
+     }
+    else
+    {
+　document.write( '<iframe src="http://www.changchun.gov.cn/kzgn/dbdh/" width="100%" height="562px"  frameborder="no" border="0"  marginwidth="0" marginheight="0" scrolling="no" allowtransparency="yes"></iframe>');
+    }
+
+</script>-->
+		<style>
+.zqdh_index {
+	border-top: none !important;
+}
+.zqdh_index {
+	margin-bottom: 30px;
+	display: none;
+}
+.metro li.eq_tur {
+	color: #a4a3a3!important;
+}
+.eq_tur {
+	background: #E7E8E8 !important;
+	cursor: default
+}
+.eq_tur.focus {
+	color: #a4a3a3!important;
+}
+
+</style>
+<!--下拉列表样式过滤 -->
+<script type="text/javascript">
+$(document).ready(function(){
+$("#select_option_tr li:contains('--行政区划--')").addClass("eq_tur");
+$("#select_option_tr li:contains('--开发区--')").addClass("eq_tur");
+$("#select_option_tr li:contains('--部门网站--')").addClass("eq_tur");
+$("#select_option_tr li:contains('--公用服务--')").addClass("eq_tur");
+$("#select_option_tr li:contains('--推荐网站--')").addClass("eq_tur");
+
+}) 
+
+</script>
+<div class="footer ">
+  <div class="Navigation clearfix">
+    <div class="Navigation_main">
+     <!-- <div class="Navigation_con clearfix">-->
+      <div class="clearfix">
+        <dl>
+          <dt> 市政府 </dt>
+          <dd>
+            <a href="http://www.changchun.gov.cn/szf/zfld/sz/" target="_blank">政府领导</a>
+            
+            <a href="http://www.changchun.gov.cn/szf/zfjg/201612/t20161205_1991701.html"  target="_blank">政府机构</a> 
+            
+            <a href="../../../yw/zwdt_74/zwdt/
+            " target="_blank">政务动态</a> <a href="../../../xxgk/zyhy_108289/
+            " target="_blank">重要会议</a> <a href="../../../rsrm/
+            " target="_blank">人事信息</a> </dd>
+        </dl>
+        <dl>
+          <dt> 政务 </dt>
+          <dd> <a href="../../../yw/
+            " target="_blank">党政信息</a> <a href="../
+            " target="_blank">文件法规</a> <a href="../../zcjd/
+            " target="_blank">政策解读</a> 
+            <!--<a href="../../../tjzt/" target="_blank">推荐专题</a>--> 
+            <a href="../../../tpxx/
+            " target="_blank">图片新闻</a> </dd>
+        </dl>
+        <dl>
+          <dt> 服务 </dt>
+          <dd> <a href="http://zwfw.jl.gov.cn/ccszwfww/frbs/?area=220100" target="_blank">网上办事</a>
+<a href="http://zwfw.jl.gov.cn/ccszwfww/grbs/" target="_blank">便民服务</a>
+<a href="http://zwfw.jl.gov.cn/ccszwfww/bszn/?area=220100" target="_blank">办事指南</a>
+<!--<a href="https://yzw.changchun.gov.cn/zwbz/" target="_blank">办事帮助</a>--> </dd>
+        </dl>
+        <dl>
+          <dt> 互动 </dt>
+          <dd> <a href="http://12345.changchun.gov.cn/" target="_blank">市长电话</a>
+               <a href="http://www.changchun.gov.cn/zw_33994/tsfk/" target="_blank">市长回音</a>
+               <a href="../../../xwfb/xwfbh0506/" target="_blank">新闻发布</a>
+               <a href="../../../../hd/zxft/xwqhg/ " target="_blank">在线访谈</a>
+               
+            
+          </dd>
+        </dl>
+        <dl>
+          <dt> 走进长春 </dt>
+          <dd> 
+            <!--<a href="" target="_blank">了解长春</a>--> 
+            <a href="../../../../zjzc/wgsjb/jjlj/
+            " target="_blank">经济量级</a> <a href="../../../../zjzc/wgsjb/csnj/
+            " target="_blank">城市能级</a> <a href="../../../../zjzc/wgsjb/msgs/
+            " target="_blank">民生改善</a> <a href="../../../../zjzc/wgsjb/shzl/
+            " target="_blank">社会治理</a> <a href="../../../../zjzc/wgsjb/stwm/
+            " target="_blank">生态文明</a> </dd>
+        </dl>
+      </div>
+    </div>
+    <div class="Relevant clearfix">
+      <h2>相关链接</h2>
+      <div class="Relevant_down"> 
+        <!--option value 是否为空--> 
+        <script>
+			function isValueNull(value){
+			   if(value != "")
+			    {
+			       window.open(value,'_blank','');
+			    }
+			}
+     	</script> 
+        <!--option value 是否为空-->
+        <!--<div class="information_inputbox">
+          <select class="dropdown" tabindex="8" onChange="javascript:isValueNull(this.value)" data-settings="{&quot;wrapperClass&quot;:&quot;metro metro_width&quot;}">
+            <option value="">--国家部门网站--</option>
+            
+              <option value="http://www.fmprc.gov.cn
+              ">
+              外交部
+              </option>
+            
+              <option value="http://www.sdpc.gov.cn
+              ">
+              国家发展和改革委员会
+              </option>
+            
+              <option value="http://www.moe.edu.cn
+              ">
+              教育部
+              </option>
+            
+              <option value="http://www.most.gov.cn
+              ">
+              科学技术部
+              </option>
+            
+              <option value="http://www.seac.gov.cn
+              ">
+              国家民族事务委员会
+              </option>
+            
+              <option value="http://www.mos.gov.cn
+              ">
+              监察部
+              </option>
+            
+              <option value="http://www.mca.gov.cn
+              ">
+              民政部
+              </option>
+            
+              <option value="http://www.legalinfo.gov.cn
+              ">
+              司法部
+              </option>
+            
+              <option value="http://www.mof.gov.cn
+              ">
+              财政部
+              </option>
+            
+              <option value="http://www.mohrss.gov.cn/
+              ">
+              人力资源和社会保障部
+              </option>
+            
+              <option value="http://www.mlr.gov.cn
+              ">
+              国土资源部
+              </option>
+            
+              <option value="http://www.miit.gov.cn
+              ">
+              工业和信息化部
+              </option>
+            
+              <option value="http://www.mwr.gov.cn
+              ">
+              水利部
+              </option>
+            
+              <option value="http://www.agri.gov.cn
+              ">
+              农业部
+              </option>
+            
+              <option value="http://www.mofcom.gov.cn
+              ">
+              商务部
+              </option>
+            
+              <option value="http://www.mcprc.gov.cn/
+              ">
+              文化部
+              </option>
+            
+              <option value="http://www.pbc.gov.cn
+              ">
+              中国人民银行
+              </option>
+            
+              <option value="http://www.audit.gov.cn
+              ">
+              审计署
+              </option>
+            
+              <option value="http://www.customs.gov.cn
+              ">
+              海关总署
+              </option>
+            
+              <option value="http://www.chinatax.gov.cn
+              ">
+              国家税务总局
+              </option>
+            
+              <option value="http://www.sarft.gov.cn
+              ">
+              国家广播电影电视总局
+              </option>
+            
+              <option value="http://www.sport.gov.cn
+              ">
+              国家体育总局
+              </option>
+            
+              <option value="http://www.stats.gov.cn
+              ">
+              国家统计局
+              </option>
+            
+              <option value="http://www.saic.gov.cn
+              ">
+              国家工商行政管理局
+              </option>
+            
+              <option value="http://www.ncac.gov.cn
+              ">
+              国家版权局
+              </option>
+            
+              <option value="http://www.chinagrain.gov.cn
+              ">
+              国家粮食局
+              </option>
+            
+              <option value="http://www.forestry.gov.cn
+              ">
+              国家林业局
+              </option>
+            
+              <option value="http://www.aqsiq.gov.cn
+              ">
+              国家质量监督检验检疫总局
+              </option>
+            
+              <option value="http://www.chinasafety.gov.cn
+              ">
+              国家安全生产监督管理局
+              </option>
+            
+              <option value="http://www.sda.gov.cn
+              ">
+              国家食品药品监督管理局
+              </option>
+            
+              <option value="http://www.cnta.gov.cn/
+              ">
+              国家旅游局
+              </option>
+            
+              <option value="http://www.xinhua.org/
+              ">
+              新华通讯社
+              </option>
+            
+              <option value="http://www.cas.cn/
+              ">
+              中国科学院
+              </option>
+            
+              <option value="http://www.cae.cn/
+              ">
+              中国工程院
+              </option>
+            
+              <option value="http://www.drc.gov.cn/
+              ">
+              国务院发展研究中心
+              </option>
+            
+              <option value="http://www.cma.gov.cn/
+              ">
+              中国气象局
+              </option>
+            
+              <option value="http://www.csrc.gov.cn/pub/newsite/
+              ">
+              中国证券监督管理委员会
+              </option>
+            
+              <option value="http://www.circ.gov.cn/web/site0/
+              ">
+              中国保险监督管理委员会
+              </option>
+            
+              <option value="http://www.tobacco.gov.cn/html/
+              ">
+              国家烟草专卖局
+              </option>
+            
+              <option value="http://www.safea.gov.cn/
+              ">
+              国家外国专家局
+              </option>
+            
+              <option value="http://www.soa.gov.cn/
+              ">
+              国家海洋局
+              </option>
+            
+              <option value="http://www.satcm.gov.cn/
+              ">
+              国家中医药管理局
+              </option>
+            
+              <option value="http://www.safe.gov.cn/
+              ">
+              国家外汇管理局
+              </option>
+            
+          </select>
+        </div>-->
+        <!--<div class="information_inputbox">
+          <select class="dropdown" tabindex="8" onChange="javascript:isValueNull(this.value)" data-settings="{&quot;wrapperClass&quot;:&quot;metro metro_width&quot;}">
+            <option value="">--吉林省政府部门--</option>
+            
+              <option value="http://www.jldrc.gov.cn/
+              ">
+              省发改委
+              </option>
+            
+              <option value="http://gxt.jl.gov.cn
+              ">
+              省工业和信息化厅
+              </option>
+            
+              <option value="http://www.jledu.gov.cn
+              ">
+              省教育厅
+              </option>
+            
+              <option value="http://kjt.jl.gov.cn
+              ">
+              省科技厅
+              </option>
+            
+              <option value="http://mw.jl.gov.cn
+              ">
+              省民委（省宗教局）
+              </option>
+            
+              <option value="http://gat.jl.gov.cn
+              ">
+              省公安厅
+              </option>
+            
+              <option value="http://mzt.jl.gov.cn
+              ">
+              省民政厅
+              </option>
+            
+              <option value="http://sft.jl.gov.cn
+              ">
+              省司法厅
+              </option>
+            
+              <option value="http://czt.jl.gov.cn
+              ">
+              省财政厅
+              </option>
+            
+              <option value="http://hrss.jl.gov.cn
+              ">
+              省人力资源和社会保障厅
+              </option>
+            
+              <option value="http://dlr.jl.gov.cn
+              ">
+              省国土资源厅
+              </option>
+            
+              <option value="http://hbt.jl.gov.cn
+              ">
+              省环境保护厅
+              </option>
+            
+              <option value="http://jst.jl.gov.cn
+              ">
+              省住房和城乡建设厅
+              </option>
+            
+              <option value="http://www.jljt.gov.cn
+              ">
+              省交通运输厅
+              </option>
+            
+              <option value="http://www.jlagri.gov.cn
+              ">
+              省农委
+              </option>
+            
+              <option value="http://slt.jl.gov.cn
+              ">
+              省水利厅
+              </option>
+            
+              <option value="http://lyt.jl.gov.cn
+              ">
+              省林业厅
+              </option>
+            
+              <option value="http://www.jldofcom.gov.cn
+              ">
+              省商务厅
+              </option>
+            
+              <option value="http://wht.jl.gov.cn
+              ">
+              省文化厅
+              </option>
+            
+              <option value="http://sjt.jl.gov.cn
+              ">
+              省审计厅
+              </option>
+            
+              <option value="http://wb.jl.gov.cn
+              ">
+              省外办
+              </option>
+            
+          </select>
+        </div>-->
+        <div class="information_inputbox">
+          <select class="dropdown" tabindex="8" onChange="javascript:isValueNull(this.value)" data-settings="{&quot;wrapperClass&quot;:&quot;metro metro_width&quot;}">
+            <option value="">--省内政府网站--</option>
+            
+              <option value="http://www.changchun.gov.cn
+              ">
+              长春市政府
+              </option>
+            
+              <option value="http://www.jlcity.gov.cn
+              ">
+              吉林市政府
+              </option>
+            
+              <option value="http://www.siping.gov.cn
+              ">
+              四平市政府
+              </option>
+            
+              <option value="http://www.liaoyuan.gov.cn
+              ">
+              辽源市政府
+              </option>
+            
+              <option value="http://www.tonghua.gov.cn/
+              ">
+              通化市政府
+              </option>
+            
+              <option value="http://www.cbs.gov.cn
+              ">
+              白山市政府
+              </option>
+            
+              <option value="http://www.jlsy.gov.cn
+              ">
+              松原市政府
+              </option>
+            
+              <option value="http://www.jlbc.gov.cn/
+              ">
+              白城市政府
+              </option>
+            
+              <option value="http://www.yanbian.gov.cn
+              ">
+              延边州政府
+              </option>
+            
+          </select>
+        </div>
+        <!-- <div class="information_inputbox"> 
+       	<select class="dropdown" tabindex="8" onchange="javascript:isValueNull(this.value)" data-settings="{&quot;wrapperClass&quot;:&quot;metro metro_width&quot;}"> 
+       		<option value="">--友情链接--</option> 
+	       	
+	       		<option value="http://www.beijing.gov.cn">北京</option> 
+	       	
+	       		<option value="http://www.shanghai.gov.cn">上海</option> 
+	       	
+	       		<option value="http://www.tianjin.gov.cn">天津</option> 
+	       	
+	       		<option value="http://www.cq.gov.cn">重庆</option> 
+	       	
+	       		<option value="http://www.harbin.gov.cn">哈尔滨</option> 
+	       	
+	       		<option value="http://www.shenyang.gov.cn">沈阳</option> 
+	       	
+	       		<option value="http://www.dl.gov.cn">大连</option> 
+	       	
+	       		<option value="http://www.jinan.gov.cn">济南</option> 
+	       	
+	       		<option value="http://www.qingdao.gov.cn">青岛</option> 
+	       	
+	       		<option value="http://www.nanjing.gov.cn">南京</option> 
+	       	
+	       		<option value="http://www.hangzhou.gov.cn">杭州</option> 
+	       	
+	       		<option value="http://www.ningbo.gov.cn">宁波</option> 
+	       	
+	       		<option value="http://www.xm.gov.cn">厦门</option> 
+	       	
+	       		<option value="http://www.guangzhou.gov.cn/">广州</option> 
+	       	
+	       		<option value="http://www.shenzhen.gov.cn">深圳</option> 
+	       	
+	       		<option value="http://www.wh.gov.cn">武汉</option> 
+	       	
+	       		<option value="http://www.chengdu.gov.cn">成都</option> 
+	       	
+	       		<option value="http://www.xian.gov.cn">西安</option> 
+	       	
+	       		<option value="http://www.sjz.gov.cn">石家庄</option> 
+	       	
+	       		<option value="http://www.fuzhou.gov.cn">福州</option> 
+	       	
+	       		<option value="http://www.zhengzhou.gov.cn">郑州</option> 
+	       	
+	       		<option value="http://www.changsha.gov.cn">长沙</option> 
+	       	
+	       		<option value="http://www.km.gov.cn">昆明</option> 
+	       	
+	       		<option value="http://www.nc.gov.cn">南昌</option> 
+	       	
+	       		<option value="http://www.taiyuan.gov.cn">太原</option> 
+	       	
+	       		<option value="http://www.hefei.gov.cn">合肥</option> 
+	       	
+	       		<option value="http://www.lz.gansu.gov.cn">兰州</option> 
+	       	
+	       		<option value="http://www.nanning.gov.cn">南宁市</option> 
+	       	
+	       		<option value="http://www.urumqi.gov.cn">乌鲁木齐</option> 
+	       	
+	       		<option value="http://www.gygov.gov.cn">贵阳</option> 
+	       	
+	       		<option value="http://www.huhhot.gov.cn">呼和浩特</option> 
+	       	
+	       		<option value="http://www.haikou.gov.cn">海口</option> 
+	       	
+	       		<option value="http://www.xining.gov.cn">西宁</option> 
+	       	
+	       		<option value="http://www.yinchuan.gov.cn">银川</option> 
+	       	
+	       		<option value="http://www.qhd.gov.cn">秦皇岛</option> 
+	       	
+	       		<option value="http://www.chengde.gov.cn">承德</option> 
+	       	
+	       		<option value="http://www.dt.gov.cn">大同</option> 
+	       	
+	       		<option value="http://www.qqhr.gov.cn">齐齐哈尔</option> 
+	       	
+	       		<option value="http://www.yangzhou.gov.cn">扬州</option> 
+	       	
+	       		<option value="http://www.wuxi.gov.cn">无锡</option> 
+	       	
+	       		<option value="http://www.suzhou.gov.cn">苏州</option> 
+	       	
+	       		<option value="http://www.xz.gov.cn">徐州</option> 
+	       	
+	       		<option value="http://www.lyg.gov.cn">连云港</option> 
+	       	
+	       		<option value="http://www.wenzhou.gov.cn">温州</option> 
+	       	
+	       		<option value="http://www.bengbu.gov.cn">蚌埠</option> 
+	       	
+	       		<option value="http://www.jiujiang.gov.cn">九江</option> 
+	       	
+	       		<option value="http://www.yantai.gov.cn">烟台</option> 
+	       	
+	       		<option value="http://www.weihai.gov.cn">威海</option> 
+	       	
+	       		<option value="http://www.nanyang.gov.cn">南阳</option> 
+	       	
+	       		<option value="http://www.xiangtan.gov.cn">湘潭</option> 
+	       	
+	       		<option value="http://www.zjj.gov.cn">张家界</option> 
+	       	
+	       		<option value="http://www.zhuhai.gov.cn">珠海</option> 
+	       	
+	       		<option value="http://www.mianyang.gov.cn">绵阳</option> 
+	       	
+	       		<option value="http://www.zunyi.gov.cn">遵义</option> 
+	       	
+	       		<option value="http://www.yuxi.gov.cn">玉溪</option> 
+	       	
+	       		<option value="http://www.yanan.gov.cn">延安</option> 
+	       	
+	       		<option value="http://www.cj.gov.cn">昌吉</option> 
+	       	
+	       		<option value="http://www.sx.gov.cn">绍兴</option> 
+	       	
+	       		<option value="http://www.wuhu.gov.cn">芜湖</option> 
+	       	
+	       		<option value="http://www.zhoushan.gov.cn">舟山</option> 
+	       	
+	       		<option value="http://www.changzhou.gov.cn">常州</option> 
+	       	
+	       		<option value="http://www.changsha.gov.cn">长沙</option> 
+	       	
+	       		<option value="http://www.zs.gov.cn/main/index.action">中山</option> 
+	       	
+	       		<option value="http://www.zhuhai.gov.cn">珠海</option> 
+	       	
+	       		<option value="http://www.guilin.gov.cn">桂林</option> 
+	       	
+	       		<option value="http://www.xianyang.gov.cn">咸阳</option> 
+	       	
+	       		<option value="http://www.tlf.gov.cn/">吐鲁番</option> 
+	       	
+	       		<option value="http://www.bingtuan.gov.cn">新疆生产建设兵团</option> 
+	       	
+	       		<option value="http://www.shantou.gov.cn">汕头</option> 
+	       	
+	       		<option value="http://www.changde.gov.cn">常德</option> 
+	       	
+	       		<option value="http://www.jdz.gov.cn">景德镇</option> 
+	       	
+	       		<option value="http://www.taian.gov.cn">泰安</option> 
+	       	
+	       		<option value="http://www.zibo.gov.cn">淄博</option> 
+	       	
+	       		<option value="http://www.tangshan.gov.cn">唐山</option> 
+	       	
+	       		<option value="http://www.hd.gov.cn">邯郸</option> 
+	       	
+	       		<option value="http://www.dt.gov.cn">大同</option> 
+	       	
+	       		<option value="http://www.baotou.gov.cn">包头</option> 
+	       	
+	       		<option value="http://www.anshan.gov.cn">鞍山</option> 
+	       	
+	       		<option value="http://www.jz.gov.cn">锦州</option> 
+	       	
+	       		<option value="http://www.yingkou.gov.cn">营口</option> 
+	       	
+	       		<option value="http://www.qqhr.gov.cn">齐齐哈尔</option> 
+	       	
+	       		<option value="http://www.daqing.gov.cn">大庆</option> 
+	       	
+	       		<option value="http://www.sanya.gov.cn">三亚</option> 
+	       	          	
+       	
+       	</select> 
+      </div> -->
+        <div class="information_inputbox" id="select_option_tr">
+          <select class="dropdown" tabindex="8" onChange="javascript:isValueNull(this.value)" data-settings="{&quot;wrapperClass&quot;:&quot;metro metro_width&quot;}">
+            <option value="">--站群导航--</option>
+            <option value="">--行政区划--</option>
+            
+              <option value="http://chaoyang.changchun.gov.cn/
+              ">
+              朝阳区
+              </option>
+            
+              <option value="http://www.nanguan.gov.cn/
+              ">
+              南关区
+              </option>
+            
+              <option value="http://www.jckc.gov.cn/
+              ">
+              宽城区
+              </option>
+            
+              <option value="http://www.ccerdao.gov.cn/
+              ">
+              二道区
+              </option>
+            
+              <option value="http://www.luyuan.gov.cn/
+              ">
+              绿园区
+              </option>
+            
+              <option value="http://www.shuangyang.gov.cn/
+              ">
+              双阳区
+              </option>
+            
+              <option value="http://www.jiutai.gov.cn/
+              ">
+              九台区
+              </option>
+            
+              <option value="http://www.gongzhuling.gov.cn/
+              ">
+              公主岭市
+              </option>
+            
+              <option value="http://www.yushu.gov.cn/
+              ">
+              榆树市
+              </option>
+            
+              <option value="http://www.dehui.gov.cn/
+              ">
+              德惠市
+              </option>
+            
+              <option value="http://www.nongan.gov.cn/
+              ">
+              农安县
+              </option>
+            
+            <option value="">--开发区--</option>
+            
+              <option value="http://www.ccxq.gov.cn
+              ">
+              长春新区
+              </option>
+            
+              <option value="http://www.cetdz.gov.cn/
+              ">
+              长春经济技术开发区
+              </option>
+            
+              <option value="http://www.jingyue.gov.cn/
+              ">
+              长春净月高新技术产业开发区
+              </option>
+            
+              <option value="http://www.caida.gov.cn/
+              ">
+              长春汽车经济技术开发区
+              </option>
+            
+              <option value="http://www.cclm.gov.cn/
+              ">
+              长春莲花山生态旅游度假区
+              </option>
+            
+            <option value="">--部门网站--</option>
+            
+              <option value="http://drc.changchun.gov.cn/
+              ">
+              市发展和改革委员会
+              </option>
+            
+              <option value="http://jyj.changchun.gov.cn
+              ">
+              市教育局
+              </option>
+            
+              <option value="http://kjj.changchun.gov.cn/
+              ">
+              市科学技术局
+              </option>
+            
+              <option value="http://gxj.changchun.gov.cn/
+              ">
+              市工业和信息化局
+              </option>
+            
+              <option value="http://mw.changchun.gov.cn
+              ">
+              市民族事务委员会
+              </option>
+            
+              <option value="http://mzj.changchun.gov.cn/
+              ">
+              市民政局
+              </option>
+            
+              <option value="http://sfj.changchun.gov.cn/
+              ">
+              市司法局
+              </option>
+            
+              <option value="http://czj.changchun.gov.cn/
+              ">
+              市财政局
+              </option>
+            
+              <option value="http://ccrs.changchun.gov.cn/
+              ">
+              市人力资源和社会保障局
+              </option>
+            
+              <option value="http://gzj.changchun.gov.cn
+              ">
+              市规划和自然资源局
+              </option>
+            
+              <option value="http://hjj.changchun.gov.cn/
+              ">
+              市生态环境局
+              </option>
+            
+              <option value="http://jw.changchun.gov.cn
+              ">
+              市城乡建设委员会
+              </option>
+            
+              <option value="http://fdj.changchun.gov.cn/
+              ">
+              市住房保障和房屋管理局
+              </option>
+            
+              <option value="http://srhwj.changchun.gov.cn/
+              ">
+              市城市管理局
+              </option>
+            
+              <option value="http://ccsjtysj.changchun.gov.cn/
+              ">
+              市交通运输局
+              </option>
+            
+              <option value="http://nw.changchun.gov.cn/
+              ">
+              市农业农村局
+              </option>
+            
+              <option value="http://xmj.changchun.gov.cn/
+              ">
+              市畜牧业管理局
+              </option>
+            
+              <option value="http://swj.changchun.gov.cn/
+              ">
+              市商务局
+              </option>
+            
+              <option value="http://wglj.changchun.gov.cn
+              ">
+              市文化广播电视和旅游局（长春市文物局）
+              </option>
+            
+              <option value="http://wjw.changchun.gov.cn/
+              ">
+              市卫生健康委员会
+              </option>
+            
+              <option value="http://ajj.changchun.gov.cn/
+              ">
+              市应急局
+              </option>
+            
+              <option value="http://sjj.changchun.gov.cn/
+              ">
+              市审计局
+              </option>
+            
+              <option value="http://ccfao.changchun.gov.cn/
+              ">
+              市政府外事办公室
+              </option>
+            
+              <option value="http://scjg.changchun.gov.cn/
+              ">
+              市市场监督管理局
+              </option>
+            
+              <option value="http://ccgzw.changchun.gov.cn/
+              ">
+              市政府国有资产监督管理委员会
+              </option>
+            
+              <option value="http://tyj.changchun.gov.cn/
+              ">
+              市体育局
+              </option>
+            
+              <option value="http://ccyb.changchun.gov.cn
+              ">
+              市医疗保障局
+              </option>
+            
+              <option value="http://jgj.changchun.gov.cn/
+              ">
+              市机关事务管理局
+              </option>
+            
+              <option value="http://ccls.changchun.gov.cn/
+              ">
+              市粮食和物资储备局
+              </option>
+            
+              <option value="http://rmfk.changchun.gov.cn/
+              ">
+              市人民防空办公室
+              </option>
+            
+              <option value="http://zsj.changchun.gov.cn/
+              ">
+              市政务服务和数字化建设管理局
+              </option>
+            
+              <option value="http://ccylj.changchun.gov.cn/
+              ">
+              市林业和园林局
+              </option>
+            
+              <option value="http://zfgjj.changchun.gov.cn/
+              ">
+              市住房公积金
+              </option>
+            
+              <option value="http://ccshbx.changchun.gov.cn/
+              ">
+              市社会保险局
+              </option>
+            
+              <option value="http://tjj.changchun.gov.cn/
+              ">
+              市统计局
+              </option>
+            
+              <option value="http://tyjrswj.changchun.gov.cn/
+              ">
+              市退役军人事务局
+              </option>
+            
+            <!--<option value="">--公用服务--</option>-->
+            
+            <!--<option value="">--推荐网站--</option>-->
+            
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="clearfix"></div>
+ 
+</div>
+<!--<div class="copyright_box">
+  <div class="copyright clearfix">
+    <p>
+<script type="text/javascript">
+document.write(unescape("%3Cspan id='_ideConac' %3E%3C/span%3E%3Cscript src='http://dcs.conac.cn/js/09/151/0000/60529522/CA091510000605295220003.js' type='text/javascript'%3E%3C/script%3E"));
+</script>
+<a class="hqs_20181016">吉ICP备 11002904号</a>&nbsp; <a class="hqs_20181016"><img src="../../../../images/icon_ba_20180129.png" />吉公网安备 22010202000494号</a>&nbsp; 政府网站标识码：2201000014
+Copyright © 2016 长春市政府门户网站&nbsp;主办单位：长春市人民政府办公厅&nbsp;电话：0431-12345 </a>
+    <script id="_jiucuo_" sitecode='2201000014' src='../../../../images/jiucuo.js'></script>
+    <ul>
+      <li><a target="_blank" href="
+        ../../../../kzgn/gywm/201612/t20161206_1528641.html
+        
+        ">关于我们</a>|</li>
+      <li><a target="_blank" href="
+        ../../../../kzgn/wztg/201612/t20161206_1528781.html
+        
+        ">网站通告</a></li>
+    </ul>
+    <div class="clearfix"></div>
+    <div class="lga_zuijiafenbianlv">最佳分辨率:1920*1080 1366*768 1024*768</div>
+  </div>
+</div>-->
+
+
+<!--后改结构-->
+<div class="copyright_box">
+  <div class="copyright clearfix">
+    <div class="copyright_left">
+    	<div class="copyright_p">
+                <script type="text/javascript">
+                     document.write(unescape("%3Cspan id='_ideConac' %3E%3C/span%3E%3Cscript src='http://dcs.conac.cn/js/09/151/0000/60529522/CA091510000605295220003.js' type='text/javascript'%3E%3C/script%3E"));
+                </script>
+	        <div class="lianjie"> 
+            	<div class="lianjie_1">
+			<a target="_blank" href="https://beian.miit.gov.cn/">吉ICP备 11002904号</a>&nbsp; 
+    			<a target="_blank" href="http://www.beian.gov.cn/portal/registerSystemInfo?recordcode=22010202000494"><img src="../../../../images/icon_ba_20180129.png" />吉公网安备 22010202000494号 </a>
+                </div>
+                <div class="lianjie_2">
+    			<a style="cursor:default;color: #000000">政府网站标识码：2201000014</a>
+                <a style="cursor:default;color: #000000">  版权所有：长春市人民政府门户网站 </a>
+                </div>
+    			<div class="kuandu"> <a style="cursor:default;color: #000000">主办单位：长春市人民政府办公厅&nbsp;</a><a style="cursor:default;color: #000000">电话：0431-12345; 地址：长春市人民大街10111号  邮编：130022</a></div>
+                <div class="clearfix_div"></div>
+     	       </div>
+                <script id="_jiucuo_" sitecode='2201000014' src='../../../../images/jiucuo.js'></script>
+   		<div class="clearfix_div"></div>
+    	</div>
+      	<div class="clearfix_div"></div>
+    </div>
+    <div class="copyright_right">
+             <ul>
+              <li><a href="http://www.changchun.gov.cn/kzgn/wzdt/201806/t20180607_1528775.html" target="_blank">网站地图</a>
+             </ul>
+             <div class="lga_zuijiafenbianlv">最佳分辨率:1920*1080 1366*768 1024*768</div>
+  	 <div class="clearfix_div"></div>
+ </div>
+ <div class="clearfix_div"></div>
+ </div>
+ </div>
+ <!--后改结构结束-->
+ <!--后改样式-->
+ <style>
+ .lga_zuijiafenbianlv{ float: right;}
+ .copyright_left{ width: 79%; float: left;}
+.copyright_right{ float: right; width: 20%;}
+#_span_jiucuo{ float: left;}
+.kuandu{ float: left;color: black;  }
+.lianjie{ float: left; margin-top: 10px; width:78%; margin-left: 30px;}
+.lianjie_1{ float: left;}
+.lianjie_2{ float: left; margin-left: 5px;}
+.kuandu01{ margin-top:15px; color: black;}
+
+.copyright_p {
+	
+	padding-left: 0px;
+	width: 100%;
+	line-height: 32px;
+	font-size: 16px;
+	float: left
+}
+.copyright .kuandu{ padding-left: 0;}
+
+        @media screen and (max-width: 1920px){
+	.kuandu{ width: 100%;}
+	}
+        @media screen and (max-width: 1440px) {
+         .copyright_left{ width: 70%; float: left;}
+        .copyright_right{ width: 25%;}
+	 .lianjie{ width: 65%; margin-left: 50px;}
+	 }
+        @media screen and (max-width: 1366px) {
+	.fudong{ float: left; clear: left;}
+        .copyright_right{ width: 26%;}
+        .copyright_left{ width: 73%;}
+        .lianjie{ width: 62%; margin-left: 30px;}
+        .kuandu{ clear: left; float: none;}
+        .lianjie_2{ margin-left: 0;}
+	}
+	@media screen and (max-width: 1280px) {
+	.copyright_left{ width: 75%;}
+        .copyright_right{ width: 23%;}
+        .lianjie{ width: 65%;margin-left: 45px; margin-top: 0;}
+	}
+	@media screen and (max-width: 1024px) {
+        .copyright_right{ width: 19%;}
+	.copyright_left{ width: 81%;}
+	.lianjie{ width: 69%; margin-left: 0;}
+	}
+	@media screen and (max-width: 768px) {
+	.lga_zuijiafenbianlv{ float: none; text-align: center;}
+	.lianjie_1{ float:none;}
+	.lianjie_2{ float: none;}
+	.copyright{ height: 342px;}
+	.copyright_left{ position: absolute; top: 90px; left: 0; text-align: center; width: 100%;}
+	.kuandu{ width:100%;}
+	.copyright_right{ position: absolute; left: 0; top: 75%; }
+	.lianjie{ width:100%;}
+	.copyright_right{ width: 100%;}
+	.copyright ul{ width: 235px;}
+	}
+	@media screen and (max-width: 480px) {
+	.kuandu{ font-size: 14px;}
+	.lianjie_1{ font-size: 14px;}
+	.lianjie_2{ font-size: 14px;}
+	.copyright_right{ top: 75%;}
+	}
+
+
+	@media screen and (max-width: 375px) {
+        .copyright_p {	line-height: 30px;}
+	.copyright_left{ top: 70px;}
+	.copyright_right{ top: 80%;}
+        .copyright ul{padding-bottom:0px;}
+        .copyright ul li{line-height:35px;}
+        }
+	
+ </style>
+<!--后改样式结束-->
+
+
+
+
+<script id="_trs_ta_js" src="http://ta.trs.cn/c/js/ta.js?mpid=1008" async defer></script>
+<!--<iframe src="http://www.changchun.gov.cn/kzgn/dbdh/" width="100%" height="562px"  frameborder="no" border="0"  marginwidth="0" marginheight="0" scrolling="no" allowtransparency="yes"></iframe>-->
+</body>
+</html>
