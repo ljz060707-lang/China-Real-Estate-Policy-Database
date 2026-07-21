@@ -75,7 +75,11 @@ def ensure_review_schema(settings: Settings | None = None) -> Settings:
                 record_id VARCHAR,
                 review_type VARCHAR NOT NULL CHECK (review_type IN (
                     'missing_title','missing_source','invalid_url','low_confidence',
-                    'unmatched_t4','unexplained_t2','duplicate_record','other'
+                    'unmatched_t4','unexplained_t2','duplicate_record','model_disagreement',
+                    'glm_no_evidence','rule_glm_numeric_conflict',
+                    'classifier_direction_conflict','low_frequency_instrument',
+                    'out_of_distribution','action_duplicate','interpretation_false_positive',
+                    'revision_uncertain','intensity_outlier','other'
                 )),
                 field_name VARCHAR,
                 source_sheet VARCHAR,

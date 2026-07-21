@@ -57,7 +57,10 @@ def build_database(
                     'missing_title','missing_source','invalid_url','low_confidence',
                     'unmatched_t4','unexplained_t2','duplicate_record','coverage_gap',
                     'source_scope_unresolved','field_conflict','low_field_confidence',
-                    'source_health_issue','other'
+                    'source_health_issue','model_disagreement','glm_no_evidence',
+                    'rule_glm_numeric_conflict','classifier_direction_conflict',
+                    'low_frequency_instrument','out_of_distribution','action_duplicate',
+                    'interpretation_false_positive','revision_uncertain','intensity_outlier','other'
                 )),
                 field_name VARCHAR,
                 source_sheet VARCHAR,
@@ -81,7 +84,7 @@ def build_database(
                 "WHERE table_name='manual_review_tasks'"
             ).fetchall()
         )
-        if "coverage_gap" not in review_constraints:
+        if "model_disagreement" not in review_constraints:
             con.execute(
                 "CREATE OR REPLACE TABLE manual_review_tasks_v2 AS "
                 "SELECT * FROM manual_review_tasks"
@@ -432,6 +435,48 @@ def build_database(
                           bool_or(has_policy) AS has_policy,
                           avg(data_completeness_score)::DOUBLE data_completeness_score
                    FROM v_city_month_policy_panel_105 GROUP BY ALL"""
+            )
+        if (
+            (settings.curated / "policy_actions.parquet").exists()
+            and (settings.curated / "policy_intensity_scores.parquet").exists()
+        ):
+            con.execute(
+                """CREATE OR REPLACE VIEW v_policy_action_intensity AS
+                   SELECT a.action_id,a.record_id,a.document_version_id,a.instrument,
+                          a.direction,a.clause_text,a.evidence_start,a.evidence_end,
+                          a.text_completeness,a.formal_eligible,a.action_status,
+                          s.textual_policy_design_intensity,
+                          s.textual_implementation_commitment_intensity,
+                          s.instrument_calibration_intensity,
+                          s.authority_adjusted_intensity,s.quality_adjusted_intensity,
+                          s.weight_version,s.score_version,s.formal_status,
+                          s.decision_confidence,s.review_required
+                   FROM policy_actions a JOIN policy_intensity_scores s USING(action_id)"""
+            )
+            con.execute(
+                """CREATE OR REPLACE VIEW v_policy_textual_intensity AS
+                   SELECT r.record_id,r.record_date,r.title,r.official_status,r.official_level,
+                          count(DISTINCT i.action_id)::BIGINT AS action_count,
+                          avg(i.textual_policy_design_intensity)::DOUBLE
+                            AS mean_textual_policy_design_intensity,
+                          sum(i.textual_policy_design_intensity)::DOUBLE
+                            AS gross_textual_policy_design_intensity,
+                          avg(i.textual_implementation_commitment_intensity)::DOUBLE
+                            AS textual_implementation_commitment_intensity,
+                          avg(i.instrument_calibration_intensity)::DOUBLE
+                            AS instrument_calibration_intensity,
+                          bool_and(i.formal_status='formal') AS all_actions_formal,
+                          bool_or(i.review_required) AS review_required,
+                          min(i.decision_confidence)::DOUBLE AS minimum_decision_confidence
+                   FROM records r JOIN v_policy_action_intensity i USING(record_id)
+                   GROUP BY ALL"""
+            )
+        intensity_panel = settings.research / "city_month_policy_intensity.parquet"
+        if intensity_panel.exists():
+            panel_sql = str(intensity_panel).replace("'", "''").replace("\\", "/")
+            con.execute(
+                "CREATE OR REPLACE VIEW v_city_month_textual_policy_intensity AS "
+                f"SELECT * FROM read_parquet('{panel_sql}')"
             )
         for migration in deferred_migrations:
             con.execute(migration.read_text(encoding="utf-8"))
