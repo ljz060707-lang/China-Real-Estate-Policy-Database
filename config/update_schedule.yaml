@@ -1,0 +1,45 @@
+version: 2
+enabled: false
+timezone: Asia/Shanghai
+layers:
+  daily:
+    mode: official_update
+    overlap_days: 3
+    max_candidates: 500
+    max_fetches: 200
+    run_glm: true
+    run_verification: true
+    processing_mode: full
+    rebuild_database: true
+    run_validation: true
+  weekly:
+    mode: smart
+    overlap_days: 10
+    max_candidates: 1500
+    max_fetches: 500
+    run_glm: true
+    run_verification: true
+    processing_mode: full
+    rebuild_database: true
+    run_validation: true
+  monthly:
+    mode: recover_missing
+    overlap_days: 40
+    max_candidates: 3000
+    max_fetches: 1000
+    run_glm: false
+    run_verification: false
+    processing_mode: staged_only
+    rebuild_database: false
+    run_validation: false
+  quarterly:
+    mode: source_health
+    overlap_days: 100
+    max_candidates: 5000
+    max_fetches: 2000
+    run_glm: false
+    run_verification: false
+    processing_mode: staged_only
+    rebuild_database: false
+    run_validation: true
+

@@ -9,6 +9,7 @@ import polars as pl
 from pydantic import BaseModel, Field, ValidationError
 
 from policydb.crawl.checkpoint import append_unique
+from policydb.crawl.dedup import glm_cache_key, normalized_text_hash
 from policydb.settings import Settings
 from policydb.transform.normalization import stable_id
 
@@ -133,9 +134,13 @@ class GLMEnricher:
         raise ValueError(f"GLM structured output validation failed: {type(error).__name__}")
 
     def extract(self, content_sha256: str, text: str) -> GLMExtraction | None:
+        text_hash = normalized_text_hash(text)
+        cache_key = glm_cache_key(text_hash, self.model, self.prompt_version, self.schema_version)
         if self.cache_path.exists():
             cached = pl.read_parquet(self.cache_path).filter(
-                (pl.col("content_sha256") == content_sha256)
+                (pl.col("cache_key") == cache_key)
+                & (pl.col("model_name") == self.model)
+                & (pl.col("prompt_version") == self.prompt_version)
                 & (pl.col("schema_version") == self.schema_version)
                 & (pl.col("status") == "complete")
             )
@@ -161,9 +166,7 @@ class GLMEnricher:
                 output = None
                 error_type = str(exc)
         row = {
-            "extraction_id": stable_id(
-                content_sha256, self.model, self.prompt_version, self.schema_version, prefix="LLM"
-            ),
+            "extraction_id": stable_id(cache_key, prefix="LLM"),
             "content_sha256": content_sha256,
             "model_name": self.model,
             "prompt_version": self.prompt_version,
@@ -178,6 +181,7 @@ class GLMEnricher:
             "called_at": now if self.api_key else None,
             "created_at": now,
             "updated_at": now,
+            "cache_key": cache_key,
         }
         append_unique(self.cache_path, [row], "extraction_id")
         return result
@@ -188,13 +192,11 @@ class GLMEnricher:
         text: str,
         extraction: GLMExtraction,
     ) -> GLMVerification | None:
-        verification_id = stable_id(
-            content_sha256,
-            self.model,
-            self.prompt_version,
-            "independent-verification-v1",
-            prefix="LLMVERIFY",
+        text_hash = normalized_text_hash(text)
+        cache_key = glm_cache_key(
+            text_hash, self.model, self.prompt_version + ":verify", self.schema_version
         )
+        verification_id = stable_id(cache_key, prefix="LLMVERIFY")
         if self.verification_cache_path.exists():
             cached = pl.read_parquet(self.verification_cache_path).filter(
                 (pl.col("verification_id") == verification_id)
@@ -254,6 +256,7 @@ class GLMEnricher:
             "called_at": now if self.api_key else None,
             "created_at": now,
             "updated_at": now,
+            "cache_key": cache_key,
         }
         append_unique(self.verification_cache_path, [row], "verification_id")
         return result

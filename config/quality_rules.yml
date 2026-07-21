@@ -16,3 +16,22 @@ thresholds:
   classification_low_confidence: 0.65
   geography_low_confidence: 0.80
   duplicate_similarity: 92
+  normalized_text_duplicate: 1.0
+  possible_reprint_similarity: 0.96
+  possible_version_similarity: 0.86
+  field_confidence_high: 0.85
+  field_confidence_review: 0.65
+  source_coverage_complete: 1.0
+versions:
+  dedup_rules: v2.0.0
+  field_confidence_scoring: v2.0.0
+  source_coverage: v2.0.0
+field_confidence_weights:
+  source_authority: 0.30
+  evidence_coverage: 0.25
+  cross_source_agreement: 0.20
+  extraction_certainty: 0.15
+  entity_match: 0.10
+record_confidence_weights:
+  critical_field_mean: 0.70
+  critical_field_minimum: 0.30

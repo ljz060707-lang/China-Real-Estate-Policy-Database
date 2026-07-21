@@ -44,15 +44,20 @@ def build_database(
     settings.database.parent.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect(str(settings.database))
     try:
-        for migration in sorted((settings.root / "migrations").glob("*.sql")):
-            con.execute(migration.read_text(encoding="utf-8"))
+        migrations = sorted((settings.root / "migrations").glob("*.sql"))
+        deferred_migrations = [path for path in migrations if path.name >= "021_"]
+        for migration in migrations:
+            if migration not in deferred_migrations:
+                con.execute(migration.read_text(encoding="utf-8"))
         con.execute(
             """CREATE TABLE IF NOT EXISTS manual_review_tasks (
                 task_id VARCHAR PRIMARY KEY,
                 record_id VARCHAR,
                 review_type VARCHAR NOT NULL CHECK (review_type IN (
                     'missing_title','missing_source','invalid_url','low_confidence',
-                    'unmatched_t4','unexplained_t2','duplicate_record','other'
+                    'unmatched_t4','unexplained_t2','duplicate_record','coverage_gap',
+                    'source_scope_unresolved','field_conflict','low_field_confidence',
+                    'source_health_issue','other'
                 )),
                 field_name VARCHAR,
                 source_sheet VARCHAR,
@@ -69,6 +74,20 @@ def build_database(
                 updated_at TIMESTAMP WITH TIME ZONE NOT NULL
             )"""
         )
+        review_constraints = " ".join(
+            str(row[0])
+            for row in con.execute(
+                "SELECT constraint_text FROM duckdb_constraints() "
+                "WHERE table_name='manual_review_tasks'"
+            ).fetchall()
+        )
+        if "coverage_gap" not in review_constraints:
+            con.execute(
+                "CREATE OR REPLACE TABLE manual_review_tasks_v2 AS "
+                "SELECT * FROM manual_review_tasks"
+            )
+            con.execute("DROP TABLE manual_review_tasks")
+            con.execute("ALTER TABLE manual_review_tasks_v2 RENAME TO manual_review_tasks")
         for parquet in sorted(settings.curated.glob("*.parquet")):
             name = parquet.stem
             parquet_sql = str(parquet).replace("'", "''").replace("\\", "/")
@@ -414,6 +433,8 @@ def build_database(
                           avg(data_completeness_score)::DOUBLE data_completeness_score
                    FROM v_city_month_policy_panel_105 GROUP BY ALL"""
             )
+        for migration in deferred_migrations:
+            con.execute(migration.read_text(encoding="utf-8"))
     finally:
         con.close()
     return settings.database

@@ -11,6 +11,8 @@ from typing import Annotated
 import typer
 
 from policydb.api import PolicyDB
+from policydb.confidence import materialize_field_confidence
+from policydb.coverage_audit import run_coverage_audit
 from policydb.crawl.health import disable_unhealthy, enable_recommended, evaluate_sources
 from policydb.crawl.pipeline import CrawlPipeline
 from policydb.enrich.glm import GLMEnricher
@@ -20,15 +22,18 @@ from policydb.geography import materialize_geography
 from policydb.ingest.excel import import_excel, inventory_excel
 from policydb.jobs import CrawlJobRequest, JobManager
 from policydb.jobs.worker import run_job
+from policydb.migration_v2 import apply_migration, migration_plan, verify_migration
 from policydb.query.database import build_database
 from policydb.recovery import recover_review_sources
 from policydb.review import apply_corrections, generate_review_tasks
 from policydb.review_automation import automate_review_tasks
 from policydb.scope import materialize_city_scope
 from policydb.settings import Settings
+from policydb.source_quality import export_source_audit, unresolved_sources, validate_registry
 from policydb.sources import bootstrap_sources_from_excel
 from policydb.transform.collections import build_collection_layer
 from policydb.transform.t4_matching import build_t4_match_candidates
+from policydb.update.v2 import start_update
 from policydb.validate.quality import validate as validate_db
 
 app = typer.Typer(no_args_is_help=True, help="中国房地产与城市政策研究数据库")
@@ -38,12 +43,20 @@ crawl_app = typer.Typer(no_args_is_help=True, help="断点续跑的政策网页�
 enrich_app = typer.Typer(no_args_is_help=True, help="可选的结构化模型辅助提取")
 jobs_app = typer.Typer(no_args_is_help=True, help="后台抓取任务")
 report_app = typer.Typer(no_args_is_help=True, help="运行报告")
+migrate_v2_app = typer.Typer(no_args_is_help=True, help="V2 schema migration")
+update_app = typer.Typer(no_args_is_help=True, help="Layered V2 updates")
+confidence_app = typer.Typer(no_args_is_help=True, help="Field evidence confidence")
+audit_app = typer.Typer(no_args_is_help=True, help="V2 coverage and quality audits")
 app.add_typer(review_app, name="review")
 app.add_typer(sources_app, name="sources")
 app.add_typer(crawl_app, name="crawl")
 app.add_typer(enrich_app, name="enrich")
 app.add_typer(jobs_app, name="jobs")
 app.add_typer(report_app, name="report")
+app.add_typer(migrate_v2_app, name="migrate-v2")
+app.add_typer(update_app, name="update")
+app.add_typer(confidence_app, name="confidence")
+app.add_typer(audit_app, name="audit")
 
 
 @app.command()
@@ -82,8 +95,8 @@ def build_database_cmd():
 
 
 @app.command()
-def validate():
-    report = validate_db()
+def validate(group: str = typer.Option("all", "--group")):
+    report = validate_db(group=group)
     typer.echo(json.dumps(report, ensure_ascii=False, indent=2))
     if not report["passed"]:
         raise typer.Exit(1)
@@ -231,6 +244,101 @@ def sources_disable_unhealthy():
     typer.echo(json.dumps(disable_unhealthy(), ensure_ascii=False, indent=2))
 
 
+@sources_app.command("validate-registry")
+def sources_validate_registry():
+    result = validate_registry()
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    if not result["passed"]:
+        raise typer.Exit(1)
+
+
+@sources_app.command("matrix")
+def sources_matrix(
+    output: Annotated[Path, typer.Option("--output")] = Path("outputs/source_matrix.csv"),
+):
+    typer.echo(json.dumps(export_source_audit(output), ensure_ascii=False, indent=2))
+
+
+@sources_app.command("unresolved")
+def sources_unresolved():
+    typer.echo(unresolved_sources().write_csv())
+
+
+@sources_app.command("export-audit")
+def sources_export_audit(
+    output: Annotated[Path, typer.Option("--output")] = Path("outputs/source_audit.parquet"),
+):
+    typer.echo(json.dumps(export_source_audit(output), ensure_ascii=False, indent=2))
+
+
+@migrate_v2_app.command("dry-run")
+def migrate_v2_dry_run():
+    typer.echo(json.dumps(migration_plan(), ensure_ascii=False, indent=2))
+
+
+@migrate_v2_app.command("apply")
+def migrate_v2_apply():
+    result = apply_migration()
+    if result["verified"]:
+        build_database()
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    if not result["verified"]:
+        raise typer.Exit(1)
+
+
+@migrate_v2_app.command("verify")
+def migrate_v2_verify():
+    result = verify_migration()
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    if not result["verified"]:
+        raise typer.Exit(1)
+
+
+@confidence_app.command("build")
+def confidence_build():
+    result = materialize_field_confidence()
+    build_database()
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@audit_app.command("coverage")
+def audit_coverage(
+    sample_size: Annotated[int, typer.Option("--sample-size", min=1, max=500)] = 30,
+):
+    typer.echo(
+        json.dumps(
+            run_coverage_audit(sample_size=sample_size),
+            ensure_ascii=False,
+            indent=2,
+            default=str,
+        )
+    )
+
+
+def _start_layered_update(layer: str) -> None:
+    typer.echo(json.dumps(start_update(layer), ensure_ascii=False, indent=2))
+
+
+@update_app.command("daily")
+def update_daily():
+    _start_layered_update("daily")
+
+
+@update_app.command("weekly")
+def update_weekly():
+    _start_layered_update("weekly")
+
+
+@update_app.command("monthly")
+def update_monthly():
+    _start_layered_update("monthly")
+
+
+@update_app.command("quarterly")
+def update_quarterly():
+    _start_layered_update("quarterly")
+
+
 def _date(value: str) -> date:
     if value == "today":
         return date.today()
@@ -249,16 +357,8 @@ def crawl_backfill(
     """按已审核并启用的来源规划和执行历史回溯。"""
     if scope != "large-cities-105":
         raise typer.BadParameter("Only large-cities-105 is configured")
-    pipeline = CrawlPipeline()
-    plan = pipeline.plan(
-        run_type="backfill",
-        start_date=_date(from_),
-        end_date=_date(to),
-        official_first=official_first,
-    )
-    result = pipeline.run(plan["run_id"])
-    build_database()
-    typer.echo(json.dumps({**plan, **result}, ensure_ascii=False, indent=2))
+    _ = official_first
+    _job_mode("historical_105", from_, to, 10000, False)
 
 
 @crawl_app.command("update")
@@ -266,15 +366,7 @@ def crawl_update(scope: str = typer.Option("large-cities-105", "--scope")):
     """只抓取注册表中已启用来源的增量入口。"""
     if scope != "large-cities-105":
         raise typer.BadParameter("Only large-cities-105 is configured")
-    pipeline = CrawlPipeline()
-    plan = pipeline.plan(
-        run_type="incremental",
-        start_date=date.today() - timedelta(days=7),
-        end_date=date.today(),
-    )
-    result = pipeline.run(plan["run_id"])
-    build_database()
-    typer.echo(json.dumps({**plan, **result}, ensure_ascii=False, indent=2))
+    _job_mode("official_update", "overlap3", "today", 100, False)
 
 
 @crawl_app.command("audit")

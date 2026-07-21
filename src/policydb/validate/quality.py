@@ -6,10 +6,15 @@ from datetime import UTC, datetime
 import duckdb
 
 from policydb.settings import Settings
+from policydb.source_quality import validate_registry
+
+VALIDATION_GROUPS = {"all", "source", "coverage", "dedup", "confidence", "research", "release"}
 
 
-def validate(settings: Settings | None = None) -> dict:
+def validate(settings: Settings | None = None, *, group: str = "all") -> dict:
     settings = settings or Settings.discover()
+    if group not in VALIDATION_GROUPS:
+        raise ValueError(f"unknown validation group: {group}")
     with duckdb.connect(str(settings.database), read_only=True) as con:
         sheet_count = con.execute(
             "SELECT count(*) FROM glob(?)",
@@ -73,6 +78,28 @@ def validate(settings: Settings | None = None) -> dict:
             if "policy_applicable_cities" in available
             else 0
         )
+        v2_checks: dict[str, object] = {}
+        if "v_city_month_coverage" in available:
+            coverage_rows, coverage_cities = con.execute(
+                "SELECT count(*),count(DISTINCT city_id) FROM v_city_month_coverage"
+            ).fetchone()
+            invalid_zero_count = con.execute(
+                "SELECT count(*) FROM v_city_month_policy_panel_research_ready "
+                "WHERE policy_count=0 AND coverage_status<>'complete_confirmed_zero'"
+            ).fetchone()[0]
+            v2_checks.update(
+                coverage_row_count=coverage_rows,
+                coverage_city_count=coverage_cities,
+                invalid_zero_count=invalid_zero_count,
+            )
+        if "dedup_decisions" in available:
+            v2_checks["dedup_decision_count"] = con.execute(
+                "SELECT count(*) FROM dedup_decisions"
+            ).fetchone()[0]
+        if "field_confidence" in available:
+            v2_checks["invalid_confidence_count"] = con.execute(
+                "SELECT count(*) FROM field_confidence WHERE confidence_score NOT BETWEEN 0 AND 1"
+            ).fetchone()[0]
     report = {
         "created_at": datetime.now(UTC).isoformat(),
         "sheet_count": sheet_count,
@@ -107,6 +134,8 @@ def validate(settings: Settings | None = None) -> dict:
         "large_city_scope_count": city_scope_count,
         "large_city_scope_unique_count": city_scope_unique_count,
         "policy_applicable_city_relation_count": applicable_city_relation_count,
+        "validation_group": group,
+        **v2_checks,
         "passed": sheet_count == 28
         and main_count == 3011
         and completeness[0] == completeness[2]
@@ -114,7 +143,25 @@ def validate(settings: Settings | None = None) -> dict:
         and city_scope_count == 105
         and city_scope_unique_count == 105,
     }
+    group_passed = {
+        "source": validate_registry(settings)["passed"],
+        "coverage": report.get("coverage_city_count") == 105
+        and report.get("invalid_zero_count", 0) == 0,
+        "dedup": "dedup_decision_count" in report,
+        "confidence": report.get("invalid_confidence_count", 0) == 0
+        and "invalid_confidence_count" in report,
+        "research": report.get("coverage_row_count", 0) > 0
+        and report.get("invalid_zero_count", 0) == 0,
+        "release": bool(report["passed"]),
+    }
+    if group != "all":
+        report["passed"] = bool(group_passed[group])
+    else:
+        report["v2_group_results"] = group_passed
     out = settings.root / "data" / "staging" / "validation_report.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    v2_output = settings.root / "outputs" / "validation" / f"v2_{group}_validation.json"
+    v2_output.parent.mkdir(parents=True, exist_ok=True)
+    v2_output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     return report
