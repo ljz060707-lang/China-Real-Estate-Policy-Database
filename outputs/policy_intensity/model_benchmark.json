@@ -1,0 +1,62 @@
+{
+  "generated_at": "2026-07-21T18:07:43.875327+00:00",
+  "rules": {
+    "status": "not_run",
+    "metrics": {},
+    "research_ready": false
+  },
+  "baselines": {
+    "status": "blocked_missing_gold",
+    "training_rows": 0,
+    "models": [
+      "tfidf_logistic_regression",
+      "tfidf_linear_svm"
+    ],
+    "metrics": {},
+    "research_ready": false
+  },
+  "transformer": {
+    "status": "blocked_missing_gold",
+    "model_name": "hfl/chinese-macbert-base",
+    "training_rows": 0,
+    "metrics": {},
+    "research_ready": false
+  },
+  "glm": {
+    "status": "completed_small_pilot",
+    "api_configured": true,
+    "valid_extractions": 1,
+    "valid_independent_verifications": 1,
+    "rejected_pre_fix_evidence_spans": 4,
+    "metrics": {},
+    "minimum_known_token_usage": 2533,
+    "token_usage_complete": false,
+    "cost": null,
+    "research_ready": false,
+    "note": "One action passed schema and unique-source-span alignment. This is an integration pilot, not an accuracy benchmark; three earlier failed calls occurred before usage instrumentation."
+  },
+  "hybrid": {
+    "status": "completed_small_hybrid_pilot",
+    "decisions": 3677,
+    "review_required_in_current_applicable_run": 0,
+    "glm_evidenced_actions": 1,
+    "stored_decision_versions": 3678,
+    "router_version": "1.0.0",
+    "metrics": {},
+    "research_ready": false
+  },
+  "formal_thresholds": {
+    "action_macro_f1": 0.85,
+    "instrument_macro_f1": 0.85,
+    "direction_macro_f1": 0.9,
+    "numeric_accuracy": 0.95,
+    "pairing_accuracy": 0.95,
+    "inter_annotator_kappa": 0.75,
+    "expert_spearman": 0.8
+  },
+  "research_ready": false,
+  "blocking_reasons": [
+    "no adjudicated gold",
+    "no formal held-out benchmark"
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "status": "blocked_missing_gold",
+  "model_name": "hfl/chinese-macbert-base",
+  "training_rows": 0,
+  "metrics": {},
+  "research_ready": false
+}

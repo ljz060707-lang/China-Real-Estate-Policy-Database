@@ -20,6 +20,17 @@ from policydb.export.excel_compatible import export_excel_compatible
 from policydb.export.release import create_release
 from policydb.geography import materialize_geography
 from policydb.ingest.excel import import_excel, inventory_excel
+from policydb.intensity.annotations import prepare_annotations
+from policydb.intensity.baselines import train_baselines
+from policydb.intensity.benchmark import build_benchmark
+from policydb.intensity.glm import glm_extract_pending, glm_verify_pending
+from policydb.intensity.operations import (
+    create_model_review_tasks,
+    route_predictions,
+    validate_intensity,
+)
+from policydb.intensity.service import PolicyIntensityService
+from policydb.intensity.transformer import train_transformer
 from policydb.jobs import CrawlJobRequest, JobManager
 from policydb.jobs.worker import run_job
 from policydb.migration_v2 import apply_migration, migration_plan, verify_migration
@@ -47,6 +58,10 @@ migrate_v2_app = typer.Typer(no_args_is_help=True, help="V2 schema migration")
 update_app = typer.Typer(no_args_is_help=True, help="Layered V2 updates")
 confidence_app = typer.Typer(no_args_is_help=True, help="Field evidence confidence")
 audit_app = typer.Typer(no_args_is_help=True, help="V2 coverage and quality audits")
+intensity_app = typer.Typer(
+    no_args_is_help=True,
+    help="房地产政策动作识别、多模型路由和文本强度指数",
+)
 app.add_typer(review_app, name="review")
 app.add_typer(sources_app, name="sources")
 app.add_typer(crawl_app, name="crawl")
@@ -57,6 +72,7 @@ app.add_typer(migrate_v2_app, name="migrate-v2")
 app.add_typer(update_app, name="update")
 app.add_typer(confidence_app, name="confidence")
 app.add_typer(audit_app, name="audit")
+app.add_typer(intensity_app, name="intensity")
 
 
 @app.command()
@@ -580,3 +596,122 @@ def review_recover_sources(limit: int = typer.Option(20, "--limit", min=1, max=5
     """优先回抓已有URL，再搜索已启用的官方来源注册表。"""
     result = recover_review_sources(limit=limit)
     typer.echo(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+
+
+def _write_intensity_metric(name: str, payload: dict) -> Path:
+    output = Settings.discover().root / "outputs" / "policy_intensity"
+    output.mkdir(parents=True, exist_ok=True)
+    path = output / name
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return path
+
+
+@intensity_app.command("literature-audit")
+def intensity_literature_audit():
+    root = Settings.discover().root
+    names = [
+        "policy_intensity_literature_review.md",
+        "policy_intensity_algorithm_mapping.md",
+        "policy_intensity_method_decisions.md",
+    ]
+    result = {name: (root / "docs" / name).exists() for name in names}
+    typer.echo(json.dumps({"passed": all(result.values()), "documents": result}, ensure_ascii=False, indent=2))
+
+
+@intensity_app.command("prepare-annotations")
+def intensity_prepare_annotations(
+    documents: int = typer.Option(500, "--documents", min=1),
+    clauses: int = typer.Option(3000, "--clauses", min=1),
+):
+    result = prepare_annotations(document_count=documents, clause_count=clauses)
+    _write_intensity_metric("annotation_metrics.json", result)
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@intensity_app.command("train-baselines")
+def intensity_train_baselines():
+    result = train_baselines()
+    _write_intensity_metric("baseline_metrics.json", result)
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@intensity_app.command("train-transformer")
+def intensity_train_transformer(
+    model: str = typer.Option("hfl/chinese-macbert-base", "--model"),
+):
+    result = train_transformer(model_name=model)
+    _write_intensity_metric("transformer_metrics.json", result)
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@intensity_app.command("glm-extract")
+def intensity_glm_extract(limit: int = typer.Option(50, "--limit", min=1, max=1000)):
+    result = glm_extract_pending(limit=limit)
+    _write_intensity_metric("glm_metrics.json", {"stage": "extract", **result, "research_ready": False})
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@intensity_app.command("glm-verify")
+def intensity_glm_verify(limit: int = typer.Option(50, "--limit", min=1, max=1000)):
+    result = glm_verify_pending(limit=limit)
+    _write_intensity_metric("glm_verification_metrics.json", result)
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@intensity_app.command("benchmark")
+def intensity_benchmark():
+    result = build_benchmark()
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@intensity_app.command("route")
+def intensity_route():
+    result = route_predictions()
+    _write_intensity_metric("hybrid_metrics.json", {**result, "metrics": {}, "research_ready": False})
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@intensity_app.command("score")
+def intensity_score(
+    limit: int | None = typer.Option(None, "--limit", min=1),
+    formal_only: bool = typer.Option(False, "--formal-only"),
+):
+    service = PolicyIntensityService()
+    extraction = service.extract(limit=limit, formal_only=formal_only)
+    scoring = service.score()
+    service.rebuild_database()
+    typer.echo(json.dumps({"extraction": extraction, "scoring": scoring}, ensure_ascii=False, indent=2))
+
+
+@intensity_app.command("aggregate")
+def intensity_aggregate():
+    service = PolicyIntensityService()
+    result = service.aggregate()
+    service.rebuild_database()
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@intensity_app.command("validate")
+def intensity_validate():
+    result = validate_intensity()
+    _write_intensity_metric("validation_metrics.json", result)
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    if not result["passed_structural"]:
+        raise typer.Exit(1)
+
+
+@intensity_app.command("review")
+def intensity_review():
+    result = create_model_review_tasks()
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@intensity_app.command("report")
+def intensity_report():
+    result = {
+        "validation": validate_intensity(),
+        "benchmark": build_benchmark(),
+        "research_ready": False,
+    }
+    _write_intensity_metric("acceptance_report.json", result)
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))

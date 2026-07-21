@@ -1,0 +1,17 @@
+{
+  "passed_structural": true,
+  "files": {
+    "policy_actions.parquet": true,
+    "policy_action_calibrations.parquet": true,
+    "policy_intensity_dimensions.parquet": true,
+    "policy_intensity_scores.parquet": true
+  },
+  "formal_scores": 607,
+  "provisional_scores": 251,
+  "formal_benchmark_passed": false,
+  "research_ready": false,
+  "blocking_reasons": [
+    "adjudicated gold is empty",
+    "held-out model thresholds not evaluated"
+  ]
+}

@@ -1173,3 +1173,19 @@ Raw Data · Traceable Entities · AI Enrichment · Research Panels
 这版 README 与仓库实际命令保持一致：项目要求 Python 3.12及以上，核心依赖包括 DuckDB、Polars、PyArrow、Pydantic、PyMuPDF、Trafilatura、Streamlit 和 Typer。
 
 其中“首次完整构建”使用的命令均已在当前 CLI 中实现，包括 `build-city-scope`、`normalize-geography`、`match-t4`、`sources bootstrap-from-excel`、`review auto`、`crawl backfill/update` 和 `enrich glm/verify`。
+
+## 房地产政策文本强度（实验阶段）
+
+强度系统以政策动作为最小单元，分开保存文本设计、实施承诺、工具校准、来源权威和数据质量。当前无裁决金标准，页面和报告会保持 `research_ready=false`。
+
+```powershell
+uv run policydb intensity literature-audit
+uv run policydb intensity prepare-annotations
+uv run policydb intensity score --limit 100 --formal-only
+uv run policydb intensity route
+uv run policydb intensity aggregate
+uv run policydb intensity validate
+uv run policydb intensity benchmark
+```
+
+传统模型与 Transformer 分别是可选依赖；详细方法、人工标注和 GLM 使用方式见 `docs/policy_intensity_operator_guide.md`。

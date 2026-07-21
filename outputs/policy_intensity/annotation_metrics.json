@@ -1,0 +1,9 @@
+{
+  "generated_at": "2026-07-21T17:42:10.048610+00:00",
+  "document_sample": 500,
+  "clause_sample": 3000,
+  "double_coded": 0,
+  "adjudicated_gold": 0,
+  "status": "awaiting_human_annotation",
+  "research_ready": false
+}

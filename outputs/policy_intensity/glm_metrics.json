@@ -1,0 +1,13 @@
+{
+  "status": "completed_small_pilot",
+  "api_configured": true,
+  "valid_extractions": 1,
+  "valid_independent_verifications": 1,
+  "rejected_pre_fix_evidence_spans": 4,
+  "metrics": {},
+  "minimum_known_token_usage": 2533,
+  "token_usage_complete": false,
+  "cost": null,
+  "research_ready": false,
+  "note": "One action passed schema and unique-source-span alignment. This is an integration pilot, not an accuracy benchmark; three earlier failed calls occurred before usage instrumentation."
+}

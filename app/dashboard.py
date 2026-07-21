@@ -20,6 +20,7 @@ from app.geography_panel import (  # noqa: E402
     query_region_panel,
     tianditu_map_html,
 )
+from app.intensity_panel import render_intensity_panel  # noqa: E402
 from app.quality_center import render_quality_center  # noqa: E402
 from app.review_center import render_review_center  # noqa: E402
 from app.settings_page import render_settings_page  # noqa: E402
@@ -58,6 +59,7 @@ page = st.sidebar.radio(
         "时间趋势",
         "地区比较",
         "专题页面",
+        "政策强度",
         "数据质量",
         "人工审核中心",
         "智能抓取",
@@ -73,6 +75,7 @@ PAGE_HEADERS = {
     "时间趋势": ("时间趋势", "观察政策发布频率及其随时间的结构变化。"),
     "地区比较": ("地区比较", "比较不同城市的政策数量与研究覆盖情况。"),
     "专题页面": ("专题研究", "面向供给侧、城市更新、白名单等专题提取研究样本。"),
+    "政策强度": ("政策文本强度", "以政策动作为最小单元，比较模型证据、定性维度和数值校准。"),
     "数据质量": ("覆盖与质量", "区分未扫描、部分覆盖、发现政策和确认零政策，并审计来源、去重与字段证据。"),
     "智能抓取": ("智能抓取", "后台执行来源发现、抓取、解析、复核和报告生成。"),
     "个人设置": ("个人设置", "安全管理模型、地图、搜索和抓取偏好。"),
@@ -508,6 +511,8 @@ elif page == "专题页面":
     }
     frame = db._query(f"SELECT * FROM {views.get(topic, 'v_policy_master')} LIMIT 200")
     safe_dataframe(frame, height=430)
+elif page == "政策强度":
+    render_intensity_panel(db, ROOT)
 elif page == "数据质量":
     render_quality_center(db)
 elif page == "人工审核中心":

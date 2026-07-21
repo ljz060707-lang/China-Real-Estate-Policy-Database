@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from pathlib import Path
-from typing import get_args, get_origin, Union
-import types
 import shutil
+import types
+from pathlib import Path
+from typing import Union, get_args, get_origin
+
 import yaml
 
 from policydb.crawl.models import RegisteredSource
