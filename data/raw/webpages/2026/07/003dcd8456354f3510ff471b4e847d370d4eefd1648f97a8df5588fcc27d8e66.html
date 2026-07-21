@@ -1,0 +1,247 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <meta charset="utf-8">
+<meta name="SiteName" content="佛山市住房和城乡建设局">
+<meta name="SiteDomain" content="fszj.foshan.gov.cn">
+<meta name="SiteIDCode" content="4406000027">
+
+
+<meta name="ColumnName" content="通知公告">
+
+<meta name="ColumnDescription" content="与我局职能相关发布的通知公告">
+<meta name="ColumnKeywords" content="通知公告">
+<meta name="ColumnType" content="通知公告">
+     <meta name="ArticleTitle" content="《关于进一步完善人才住房政策的补充通知》操作指引">
+<meta name="PubDate" content="2019-12-04 17:53">
+<meta name="contentSource" content="本网">
+<meta name="articleId" content="3253392">
+    <title>佛山市住房和城乡建设局</title>
+    <link rel="stylesheet" type="text/css" href="/css/css.css" />
+    <link rel="stylesheet" type="text/css" href="/css/public.css" />
+    <script type="text/javascript" src="/js/jquery.min.js"></script>
+    <link rel="stylesheet" href="//g.alicdn.com/de/prismplayer/2.7.4/skins/default/aliplayer-min.css" />
+<script charset="utf-8" type="text/javascript" src="//g.alicdn.com/de/prismplayer/2.7.4/aliplayer-min.js"></script>
+<script type="text/javascript" src="/js/jquery.share.min.js"></script>
+<link type="text/css" href="/css/share.css" rel="stylesheet" />
+    <script type="text/javascript">	
+
+   $(function(){
+	var getTimestamp=new Date().getTime();
+            let http = window.location.href.includes('https')?'https':'http';
+		$.ajax({
+   url: http+"://fszj.foshan.gov.cn/postmeta/i/4689.json?time="+getTimestamp,
+   dataType: "json",
+   success: function(msg){
+     $("#parentCat").text(msg.category.name);
+     $.each(msg.children, function(i, n){
+            temp=n.jump_url==""?"http://fszj.foshan.gov.cn/"+n.pub_point: n.jump_url;
+            if(n.name=='通知公告'){
+                     
+                     $("#ul").append("<dl> <dt><a href='"+temp+"' title='"+n.display_name+"' class='hover'>"+n.display_name+"</a><span class='white_img'></span></dt></dl>");
+                }else{
+                   $("#ul").append("<dl> <dt><a href='"+temp+"' title='"+n.display_name+"'>"+n.display_name+"</a><span class='gray_img'></span></dt></dl>");
+                }
+         
+});
+
+   }
+});
+
+ });
+
+
+
+</script>
+    
+</head>
+<body>
+<!-- 头部 -->
+<link rel="stylesheet" href="//g.alicdn.com/de/prismplayer/2.7.4/skins/default/aliplayer-min.css" />
+<script charset="utf-8" type="text/javascript" src="//g.alicdn.com/de/prismplayer/2.7.4/aliplayer-min.js"></script>
+<!-- 头部 -->
+<div class="header">
+	<!-- 无障碍代码 -->
+	<style>
+		.wza{position: absolute;right: 12px;font-size: 16px;line-height: 32px;color: #fff;}
+		.wza:hover{text-decoration: none;}
+		.header .main{position: relative;margin-top: 0;}
+	</style>
+	<div class="main">
+		<a href="javascript:void(0);" class="wza">无障碍版</a>
+	</div>
+	<script src="//service.gd.gov.cn/wza/wza.js?app=fszj.foshan.gov.cn" referrerpolicy="origin"></script>
+	<script>
+		$(function(){
+			$(".wza").on("click", function() {
+				// 执行实例的init方法
+				cnillWzaInstance.init(); // cnillWzaInstance为全局变量
+			})
+		})
+	</script>
+	<!-- 无障碍代码end -->
+</div>
+    <div class="memu">
+        <div class="w1000">
+            <ul>
+                					<li><a href="http://fszj.foshan.gov.cn/fszjj/index.html">首页</a></li>			
+		        
+                					<li><a href="http://fszj.foshan.gov.cn/zwgk/index.html">政务公开</a></li>			
+		        
+                					<li><a href="http://fszj.foshan.gov.cn/zwzt/index.html">政务专题</a></li>			
+		        
+                					<li><a href="http://fszj.foshan.gov.cn/bsfw/index.html">办事服务</a></li>			
+		        
+
+					<li><a href="http://www.gdzwfw.gov.cn/portal/branch-hall?orgCode=574466125">政务服务</a></li>		
+
+
+                						<li><a href="http://fszj.foshan.gov.cn/zmhd/index.html">政民互动</a></li>		
+		        
+                						<li><a href="http://fszj.foshan.gov.cn/zthd/index.html">专项工作</a></li>		
+		        				 						<li><a href="http://gddata.gd.gov.cn/data/dataSet/toDataSet/dept/38">数据开放</a></li>		
+		                        					<li><a href="http://fszj.foshan.gov.cn/lxwm/index.html">联系我们</a></li>			
+		          
+                
+            </ul>
+        </div>
+    </div>
+<script type="text/javascript" src="/js/layer.js"></script>
+<script type="text/javascript" src="/js/doSome.js"></script>
+<link href="/css/layer.css" rel="stylesheet" type="text/css">
+<!-- 头部 end-->
+<!-- 头部 end-->
+<div class="main">
+    <!-- 左导航 -->
+    <div class="m_left">
+        <!-- 政务公开 -->
+        <div class="nav_zoom" id="ul">
+        
+    
+         
+        </div>
+         <!-- 政务公开 end-->
+
+
+   </div>
+    
+<script>
+$(function() {
+// 头部导航
+     var nav_path_1= $(".path").children("a").eq(2).html();
+     var nav_path_2= $(".path").children("a").eq(3).html();
+     var nav_path_3= $(".path").children("a").eq(4).html();
+     var $nav_names = $(".memu li a");
+     $nav_names.removeClass("nav_hover");
+     var nav_array= arrayGet($nav_names);
+     for (var i = 0; i < nav_array.length; i++) {
+        if (nav_path_1 == nav_array[i]) {
+            // 头部导航
+            $nav_names.eq(i).addClass("nav_hover");
+            // 动态改变ny_banner
+            var ny_banner_index="ny_banner_"+i;           
+            $(".ny_banner").addClass(ny_banner_index); 
+
+           
+        }
+    }
+ // 数组生成，传入JQuery集合
+ function arrayGet(elements){
+    var navArray = new Array();   
+    var nav_length = elements.length;
+    var n = 0;
+    for (var i = 0; i < nav_length; i++) {
+        navArray.push(elements.eq(i).html());
+    }
+    return navArray;
+      }
+// 去除列表下边框
+$(".m_right ul:last").addClass("bordernone");
+})
+</script>
+    <!-- 左导航  end-->
+    <div class="m_right" style="width: 670px">
+        <div class="position"><span class="path" >当前位置：<a href="http://fszj.foshan.gov.cn/">首页</a>&gt;&gt;<a href="http://fszj.foshan.gov.cn/fszjj/">佛山住建局</a>&gt;&gt;<a href="http://fszj.foshan.gov.cn/zwgk/">政务公开</a>&gt;&gt;<a href="http://fszj.foshan.gov.cn/zwgk/txgg/">通知公告</a></span> </div>
+        <div class="details">
+            <h3>《关于进一步完善人才住房政策的补充通知》操作指引</h3>
+            <div class="details_tit">
+                <span style="float: left;padding-left:20px;">信息来源：本网</span>
+                <span style="float: left">发布时间：2019-12-04 17:53</span>
+                <span class="bdsharebuttonbox" style="float: right;width: 200px;padding-top: 0px;">
+                    <a href="#" style="background: none">分享至:</a>
+					    <span class="bdsharebuttonbox share-component social-share" id="share-1" style="margin-left:0;float:right;" ></span>
+                    <!-- <a title="分享到QQ空间" href="#" class="bds_qzone" data-cmd="qzone"></a>
+                    <a title="分享到新浪微博" href="#" class="bds_tsina" data-cmd="tsina"></a>
+                    <a title="分享到腾讯微博" href="#" class="bds_tqq" data-cmd="tqq"></a>
+                    <a title="分享到人人网" href="#" class="bds_renren" data-cmd="renren"></a>
+                    <a title="分享到微信" href="#" class="bds_weixin" data-cmd="weixin"></a> -->
+                </span>
+                <!-- <script>window._bd_share_config={"common":{"bdText":"","bdMini":"2","bdMiniList":false,"bdStyle":"0","bdSize":"16"},"share":{},"viewText":"分享到：","viewSize":"16"};with(document)0[(getElementsByTagName('head')[0]||body).appendChild(createElement('script')).src='http://bdimg.share.baidu.com/static/api/js/share.js?v=89860593.js?cdnversion='+~(-new Date()/36e5)];</script> -->
+            </div>
+            <style>
+                .line{line-height:30px;}
+                .padd-t{padding-top:10px;}
+
+
+            </style>
+
+            <div class="details_list" style="margin-top:20px;">
+                  <div class="TRS_Editor"><p class="p18" style="margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="mso-spacerun:&#39;yes&#39;; font-size:16.0000pt; font-family:&#39;仿宋_GB2312&#39;; ">&nbsp; &nbsp; 为落实《佛山市人力资源和社会保障局&nbsp;佛山市住房和城乡建设局</span><span style="mso-spacerun:&#39;yes&#39;; font-size:16.0000pt; font-family:&#39;仿宋_GB2312&#39;; ">关于进一步完善人才住房政策的补充通知》要求，现</span><span style="mso-spacerun:&#39;yes&#39;; font-size:16.0000pt; font-family:&#39;仿宋_GB2312&#39;; ">制定本操作指南，请遵照执行。</span><span style="font-size: 16pt; font-family: 黑体;"><o:p></o:p></span></p><p class="p18" style="margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-size: 16pt; font-family: 黑体;">&nbsp;&nbsp;&nbsp;&nbsp;一</span><span style="font-weight: bold; font-size: 16pt; font-family: 黑体;">、实施内容</span><span style="font-weight: bold; font-size: 16pt; font-family: 黑体;"><o:p></o:p></span></p><p class="p18" style="text-indent: 32pt; margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-size: 16pt; font-family: 仿宋_GB2312;">（一）持有优粤佛山卡A卡、B卡、</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">C卡、T卡的非本市户籍</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">人才，享受</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">我市户籍人口购房政策。</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;"><o:p></o:p></span></p><p class="p18" style="text-indent: 32pt; margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-size: 16pt; font-family: 仿宋_GB2312;">（二）</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">在我市工作、具有本科及以上学历或中级工及以上职业资格的非本市户籍人才，</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">首套购房</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">不受户籍和个税、社保缴存限制</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">。</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;"><o:p></o:p></span></p><p class="p18" style="text-indent: 32pt; margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-size: 16pt; font-family: 仿宋_GB2312;">（三）住房套数认定以家庭（夫妻双方及未成年子女）为单位。</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;"><o:p></o:p></span></p><p class="p18" style="text-indent: 32pt; margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-weight: bold; font-size: 16pt; font-family: 黑体;">二、提交材料</span><span style="font-weight: bold; font-size: 16pt; font-family: 黑体;"><o:p></o:p></span></p><p class="p18" style="text-indent: 32pt; margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-weight: bold; font-size: 16pt; font-family: 楷体;">（一）持有优粤佛山卡A卡、B卡、C卡、T卡的人才，须提前登录优粤佛山卡APP</span><span style="font-weight: bold; font-size: 16pt; font-family: 楷体;">确认购房资格</span><span style="font-weight: bold; font-size: 16pt; font-family: 楷体;">，在我市限购区域购房的，需提交下列材料：</span><span style="font-weight: bold; font-size: 16pt; font-family: 楷体;"><o:p></o:p></span></p><p class="p18" style="margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-size: 16pt; font-family: 仿宋_GB2312;">&nbsp;&nbsp;&nbsp;&nbsp;1.《购房人申明陈述书》；</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;"><o:p></o:p></span></p><p class="p18" style="margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-size: 16pt; font-family: 仿宋_GB2312;">&nbsp;&nbsp;&nbsp;&nbsp;2.婚姻状况材料、本人及家庭成员（配偶及未成年子女）身份证件、居民户口簿等家庭关系材料（验原件收复印件）；</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;"><o:p></o:p></span></p><p class="p18" style="margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-size: 16pt; font-family: 仿宋_GB2312;">&nbsp;&nbsp;&nbsp;&nbsp;3.优粤佛山卡（验原件收复印件</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">）。</span><span style="text-decoration-line: underline; font-size: 16pt; font-family: 仿宋_GB2312;"><o:p></o:p></span></p><p class="p18" style="margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-size: 16pt; font-family: 仿宋_GB2312;">&nbsp;&nbsp;&nbsp;&nbsp;</span><span style="font-weight: bold; font-size: 16pt; font-family: 楷体;">（二）在我市工作、具有本科及以上学历或中级工及以上职业资格的非本市户籍人才，在我市限购区域购房的，需提交下列材料：</span><span style="font-weight: bold; font-size: 16pt; font-family: 楷体;"><o:p></o:p></span></p><p class="p18" style="margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-size: 16pt; font-family: 仿宋_GB2312;">&nbsp;&nbsp;&nbsp;&nbsp;1.《购房人申明陈述书》；</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;"><o:p></o:p></span></p><p class="p18" style="margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-size: 16pt; font-family: 仿宋_GB2312;">&nbsp;&nbsp;&nbsp;&nbsp;2.婚姻状况材料、本人及家庭成员（配偶及未成年子女）身份证件、居民户口簿等家庭关系材料（验原件收复印件）；</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;"><o:p></o:p></span></p><p class="p18" style="text-indent: 32pt; margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-size: 16pt; font-family: 仿宋_GB2312;">3.</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">在</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">佛山</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">工作</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">的</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">情况</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">材料：</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;"><o:p></o:p></span></p><p class="p18" style="text-indent: 32pt; margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-size: 16pt; font-family: 仿宋_GB2312;">（1）</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">有工作单位的</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">，需提供下列4项材料之一：劳动合同、聘用合同、</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">个人城镇职工社会保险参保材料</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">、个人所得税纳税记录。</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;"><o:p></o:p></span></p><p class="p18" style="text-indent: 32pt; margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-size: 16pt; font-family: 仿宋_GB2312;">（2）自主</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">创业</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">或灵活就业的，需</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">提供</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">下列3项材料之一：</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">营业执照复印件</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">、</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">个人城镇职工社会保险参保材料</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">、个人所得税纳税记录。</span><span style="font-style: italic; font-size: 16pt; font-family: 仿宋_GB2312;"><o:p></o:p></span></p><p class="p18" style="text-indent: 32pt; margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-size: 16pt; font-family: 仿宋_GB2312;">4.本科及以上学历证书，或中级工及以上职业资格证书（验原件收复印件）。</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;"><o:p></o:p></span></p><p class="p18" style="text-indent: 32pt; margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-size: 16pt; font-family: 黑体;">三、购房申请流程</span><span style="font-size: 16pt; font-family: 黑体;"><o:p></o:p></span></p><p class="p18" style="margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-size: 16pt; font-family: 仿宋_GB2312;">&nbsp;</span><span style="font-weight: bold; font-size: 16pt; font-family: 楷体;">&nbsp;&nbsp;&nbsp;（一）购买新建商品房申请流程：</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;"><o:p></o:p></span></p><p class="p18" style="text-indent: 32pt; margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-size: 16pt; font-family: 仿宋_GB2312;">1.</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">购房人</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">如实</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">填</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">写</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">《</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">购房人申明陈述书</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">》，向</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">房地产</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">开发企业提交</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">购房相关</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">材料</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">；</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;"><o:p></o:p></span></p><p class="p18" style="text-indent: 32pt; margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-size: 16pt; font-family: 仿宋_GB2312;">2.房地产</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">开发企业对购房人提交的材料</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">原件进行查验</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">，</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">并</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">在所有留存的复印件上注明“原件已核”并盖章</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">。</span><span style="text-decoration-line: underline; font-style: italic; font-size: 16pt; font-family: 仿宋_GB2312;"><o:p></o:p></span></p><p class="p18" style="text-indent: 32pt; margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-size: 16pt; font-family: 仿宋_GB2312;">3.对</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">符合购房资格的，购房人与</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">房地产</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">开发企业</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">进行合同</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">网签</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">；</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;"><o:p></o:p></span></p><p class="p18" style="text-indent: 32pt; margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-size: 16pt; font-family: 仿宋_GB2312;">4.办理网签合同备案时，由合同备案业务</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">部门对</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">购房</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">人</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">提交的材料</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">进行审核，</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">并</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">办理商品住房预</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">（</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">销</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">）</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">售合同备案。</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;"><o:p></o:p></span></p><p class="p18" style="margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-size: 16pt; font-family: 仿宋_GB2312;">&nbsp;&nbsp;&nbsp;&nbsp;</span><span style="font-weight: bold; font-size: 16pt; font-family: 楷体;">（二）购买存量房申请流程：</span><span style="font-weight: bold; font-size: 16pt; font-family: 楷体;"><o:p></o:p></span></p><p class="p18" style="text-indent: 32pt; margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-size: 16pt; font-family: 仿宋_GB2312;">1.购房人如实填写</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">《</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">购房人申明陈述书</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">》</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">；</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;"><o:p></o:p></span></p><p class="p18" style="text-indent: 32pt; margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-size: 16pt; font-family: 仿宋_GB2312;">2.买卖双方进行合同网签；</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;"><o:p></o:p></span></p><p class="p18" style="text-indent: 32pt; margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-size: 16pt; font-family: 仿宋_GB2312;">3.</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">买卖双方凭网签合同</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">及购房相关</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">资料</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">，申请</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">办理缴税、</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">产权转移</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">登记等手续</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">；</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;"><o:p></o:p></span></p><p class="p18" style="text-indent: 32pt; margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-size: 16pt; font-family: 仿宋_GB2312;">4.产权转移登记业务部门</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">对</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">购房</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">人</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">提交的材料</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">进行审核</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">，办理产权转移</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">登记手续</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">。</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;"><o:p></o:p></span></p><p class="p18" style="text-indent: 32pt; margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-weight: bold; font-size: 16pt; font-family: 黑体;">四、其他规定</span><span style="font-weight: bold; font-size: 16pt; font-family: 黑体;"><o:p></o:p></span></p><p class="p18" style="text-indent: 32pt; margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-size: 16pt; font-family: 仿宋_GB2312;">（一）对提交中级工及以上职业资格证书的，通过国家职业资格证书全国联网查询平台查询验证。</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;"><o:p></o:p></span></p><p class="p18" style="text-indent: 32pt; margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-size: 16pt; font-family: 仿宋_GB2312;">http://zscx.osta.org.cn/?tdsourcetag=s_pcqq_aiomsg</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;"><o:p></o:p></span></p><p class="p18" style="text-indent: 32pt; margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-size: 16pt; font-family: 仿宋_GB2312;">（二）对提交本科及以上学历证书的，通过学信网或教育部留学服务中心国（境）外学历认证系统等渠道查询验证。</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;"><o:p></o:p></span></p><p class="p18" style="text-indent: 32pt; margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-size: 16pt; font-family: 仿宋_GB2312;">国内学历：</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">http://www.chsi.com.cn/</span></p><p class="p18" style="text-indent: 32pt; margin-bottom: 0pt; margin-top: 0pt; line-height: 30pt;"><span style="font-weight: bold; font-size: 16pt; font-family: 黑体;">五、执行时间</span><span style="font-weight: bold; font-size: 16pt; font-family: 黑体;"><o:p></o:p></span></p><p class="p0" style="text-indent:32.0000pt; margin-bottom:0pt; margin-top:0pt; text-autospace:ideograph-numeric; text-autospace:ideograph-other; text-align:justify; line-height:30.0000pt; vertical-align:; "><span style="font-size: 16pt; font-family: 仿宋_GB2312;">本操作指南自《佛山市人力资源和社会保障局佛山市住房和城乡建设局</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;">关于进一步完善人才住房政策的补充通知》发布之日起施行。</span><span style="font-size: 16pt; font-family: 仿宋_GB2312;"><o:p></o:p></span></p><p class="p0" style="text-indent:32.0000pt; margin-bottom:0pt; margin-top:0pt; text-autospace:ideograph-numeric; text-autospace:ideograph-other; text-align:justify; line-height:30.0000pt; vertical-align:; "><span style="font-size: 16pt; font-family: 仿宋_GB2312;"><br/></span></p><p class="p0" style="text-indent:32.0000pt; margin-bottom:0pt; margin-top:0pt; text-autospace:ideograph-numeric; text-autospace:ideograph-other; text-align:justify; line-height:30.0000pt; vertical-align:; "><span style="font-size: 16pt; font-family: 仿宋_GB2312;"><o:p></o:p></span></p><p class="p0" style="text-indent:32.0000pt; margin-bottom:0pt; margin-top:0pt; text-autospace:ideograph-numeric; text-autospace:ideograph-other; text-align:justify; line-height:30.0000pt; vertical-align:; "><span style="font-size: 16pt; font-family: 仿宋_GB2312;">《</span><a target="_blank" download="购房人申明陈述书.doc" class="nfw-cms-attachment" attachment-id="290674" href="http://fszj.foshan.gov.cn/attachment/0/290/290674/3253392.doc" alt="购房人申明陈述书.doc" style="font-size: 16pt; font-family: 仿宋_GB2312; text-decoration: underline;"><span style="font-size: 16pt; font-family: 仿宋_GB2312;">购房人申明陈述书</span></a><span style="font-size: 16pt; font-family: 仿宋_GB2312;">》</span></p><p class="p0" style="text-indent:32.0000pt; margin-bottom:0pt; margin-top:0pt; text-autospace:ideograph-numeric; text-autospace:ideograph-other; text-align:justify; line-height:30.0000pt; vertical-align:; "><span style="mso-spacerun:&#39;yes&#39;; color:#000000; font-size:16.0000pt; font-family:&#39;仿宋_GB2312&#39;; "><a href="/webpic/W0201912/W020191204/W020191204644864913257.pdf" oldsrc="/webpic/W0201912/W020191204/W020191204644864913257.pdf">《关于进一步完善人才住房政策的补充通知》</a></span><span style="font-size: 16pt; font-family: 仿宋_GB2312;"><o:p></o:p></span></p></div>
+                   <div id="glgj" style="margin-top:20px;">
+              <b>关联稿件：</b>
+              <ul  id="related">
+                                </ul>
+            </div>
+            <div id="xgfj" style="margin-top:20px;">
+              <b>相关附件：</b>
+              <ul  id="attachment">
+                                </ul>
+          </div>
+
+              <script type="text/javascript">
+              $(function(){
+                  //img
+              var htm=$("#attachment").html();
+              var htm2=$("#related").html();
+                  if($.trim(htm)==""){
+                      $("#xgfj").css('display','none');
+                  }
+                  if($.trim(htm2)==""){
+                      $("#glgj").css('display','none');
+              }
+                  
+              });
+$('#share-1').share({sites: ['wechat','weibo','qq','qzone']});
+              </script>
+    
+            </div>
+        </div>
+    </div>
+    <div class="clear"></div>
+</div>
+<!-- 脚部 -->
+<div class="footer_ny">
+    
+        <div class="w1000" style="position: relative">
+        <div align="left" style="position: absolute;left: 80px;width: 80px;height: 80px;"><script type="text/javascript">document.write(unescape("%3Cspan id='_ideConac' %3E%3C/span%3E%3Cscript src='https://dcs.conac.cn/js/20/313/0000/60085387/CA203130000600853870002.js' type='text/javascript'%3E%3C/script%3E"));</script></div>
+   
+            <p>版权所有：佛山市住房和城乡建设局&nbsp;&nbsp;&nbsp;备案编号：粤ICP备05029467号&nbsp;&nbsp;&nbsp;</p>
+            <p>地址：佛山市禅城区城门头西路4号 网站标识码：4406000027<a href="http://fszj.foshan.gov.cn/wzdt/content/post_10144.html" style="font-size: 16px;font-weight: bold;" target="_blank">网站地图</a> &nbsp;
+            <!-- <script type="text/javascript">var cnzz_protocol = (("https:" == document.location.protocol) ? " https://" : " http://");document.write(unescape("%3Cspan id='cnzz_stat_icon_1272815135'%3E%3C/span%3E%3Cscript src='" + cnzz_protocol + "s22.cnzz.com/stat.php%3Fid%3D1272815135%26show%3Dpic1' type='text/javascript'%3E%3C/script%3E"));</script> -->
+            </p>
+            <p>投诉举报：（0757）12345  传真：（0757）83822991&nbsp;&nbsp;&nbsp;信访邮箱:<a href="mailto:fszjfgk@fszj.foshan.gov.cn">fszjfgk@fszj.foshan.gov.cn</a> </p>
+            <div style="width:300px;margin:0 auto; ">
+		<a target="_blank" href="http://www.beian.gov.cn/portal/registerSystemInfo?recordcode=44060402000401" style="display:inline-block;text-decoration:none;height:20px;line-height:20px;"><img src="/images/ba.png" style="float:left;" />
+                <p style="float:left;height:20px;line-height:20px;margin: 0px 0px 0px 5px; ">粤公网安备 44060402000401号</p></a>
+            </div>
+            <script id="_jiucuo_" sitecode='4406000027' src='https://zfwzgl.www.gov.cn/exposure/jiucuo.js'></script>
+            <style>#_span_jiucuo{position: absolute;right: 80px;top:20px;}</style>
+        </div>
+    </div>
+    <script>window.NFCMS_SITE_ID=757017;window.NFCMS_PUB_TYPE="post";window.NFCMS_POST_ID="3253392";window.NFCMS_CAT_ID="4908";</script><script src="//statistics.gd.gov.cn/scripts/s.js?t=1761290907" async></script>
+<meta name="Keywords" content="" />
+<meta name="description" content="" />
+<!-- 脚部 end-->
+</body>
+</html>

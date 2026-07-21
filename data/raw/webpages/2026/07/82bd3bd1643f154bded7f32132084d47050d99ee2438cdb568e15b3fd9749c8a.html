@@ -1,0 +1,1765 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+	<head><script src="/cms_files/default/script/jslib/jquery.js"></script>
+ <script src="/cms_files/default/script/jslib/jquery.cookie.js"></script>
+ <script src="/cms_files/default/script/layui/layui.all.js"></script>
+ <script src="/cms_files/default/script/layui/layer/layer.js"></script>
+ <script src="/script/webglobal.js"></script>
+ <script src="/script/webgray.js"></script>
+ <script src="/script/webgray_vCnObJtn6bfPyZnV52CXl.js"></script>
+ <script src="/plugins/libs/require.js"></script>
+ <script src="/plugins/libs/load.js"></script>
+ <link rel="stylesheet" href="/cms_files/default/css/iconfont.css" />
+<link rel="stylesheet" href="/cms_files/default/script/layui/css/layui.css" />
+
+		<meta http-equiv="X-UA-Compatible" content="IE=8">
+		<meta http-equiv="X-UA-Compatible" content="IE=edge">
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+		
+		<link rel="stylesheet" type="text/css" href="/cms_files/webjinanzhufanggongjijinzhongxin/pubtplobject/defaultSet/45675/images/jngjj.css">
+		<link rel="stylesheet" type="text/css" href="/cms_files/webjinanzhufanggongjijinzhongxin/pubtplobject/defaultSet/45675/images/Button.css">
+		<script type="text/javascript" src="/cms_files/webjinanzhufanggongjijinzhongxin/pubtplobject/defaultSet/45675/images/JNGJJ.js"></script>
+		<!-- <link href="/cms_files/webjinanzhufanggongjijinzhongxin/pubtplobject/defaultSet/45675/images/font-awesome.css" rel="stylesheet"> -->
+		<script language="javascript" src="/cms_files/webjinanzhufanggongjijinzhongxin/pubtplobject/defaultSet/45675/images/urite.min.js"></script>
+		<script language="javascript" src="/cms_files/webjinanzhufanggongjijinzhongxin/pubtplobject/defaultSet/45675/images/web_font.js"></script>
+		<script language="javascript" src="/cms_files/webjinanzhufanggongjijinzhongxin/pubtplobject/defaultSet/45675/images/jiaodian.js"></script>
+		<script id="barrierfree" src="/accessiblereading/load.js"></script>
+		<!--无障碍开始-->
+		
+		<script type="text/javascript">
+			function GongGaoShow() {
+				var HtmlStr = "<tr>";
+				HtmlStr = HtmlStr + '<td height="5" colspan="2"></td></tr>';
+
+				jQuery.ajax({
+					url: "/NewList/TongZhiGongGaoJsonIndex",
+					async: false,
+					data: null,
+					datatype: "json",
+					error: function(event, request, settings) {
+
+					},
+					success: function(dataList) {
+						for (var i = 0; i < dataList.length; i++) {
+							if (dataList[i].NewsTitle.length > 13) {
+								dataList[i].NewsTitle = dataList[i].NewsTitle.substring(0, 13) + "...";
+							}
+							HtmlStr = HtmlStr + '<tr>';
+							HtmlStr = HtmlStr +
+								'<td align="left"><img src="/cms_files/webjinanzhufanggongjijinzhongxin/pubtplobject/defaultSet/45675/images/dot.jpg" width="9" height="23" /><a href="#"></a><a href="NewList/NewsConTongZhiGongGao?NewsID=' +
+								dataList[i].NewsID + '" target="_blank" class="font">' + dataList[i].NewsTitle +
+								'</a></td>';
+							HtmlStr = HtmlStr + '<td style="font-size:10px;">[' +
+								FormatColValueDateYYYYMMDD(dataList[i].UpLoadDate).substring(2, 10) +
+								']</td>';
+							HtmlStr = HtmlStr + '</tr> ';
+						}
+
+					}
+				})
+
+
+				HtmlStr = HtmlStr + '<tr><td background="/cms_files/webjinanzhufanggongjijinzhongxin/pubtplobject/defaultSet/45675/images/left_10.gif" height="7" colspan="2"></td> </tr>';
+				HtmlStr = HtmlStr +
+					'<tr><td height="12">  </td> <td height="12" style="text-align:right;"><a href="/NewList/TongZhiGongGao">更多... </a> </td> </tr>';
+				$("#GongGaoTable").html(HtmlStr);
+			}
+
+			 /***nav***/
+            function MenuBJ(MenuID) {
+                $("[class='MenuButten']").css("background-image", "url(/cms_files/webjinanzhufanggongjijinzhongxin/pubtplobject/defaultSet/45675/images/MenuBJ1.png)");
+                $("[class='MenuButten']").css("color", "#FFFFFF");
+                $("[class='MenuButten']").css("font-weight", "normal");
+
+                $("#" + MenuID.id).css("background-image", "url(/cms_files/webjinanzhufanggongjijinzhongxin/pubtplobject/defaultSet/45675/images/MenuBJ.png)");
+                $("#" + MenuID.id).css("color", "#1833b4");
+                $("#" + MenuID.id).css("font-weight", "bold");
+                $("[class='MenuDiv']").hide();
+                $("#" + MenuID.id + "Div").show();
+            }
+			///不读取缓存获取模块
+			function GetAccessCount() {
+				try {
+					jQuery.ajax({
+						url: "/Simple/GetAccessWebCount",
+						async: false,
+						cache: false,
+						data: null,
+						type: "Get",
+						error: function(event, request, settings) {
+							GetModelesErr();
+						},
+						success: function(data) {
+							if (data == "") {
+
+							} else {
+								$("#AccessCount").html(data);
+							}
+						}
+					})
+				} catch (e) {
+
+				}
+			}
+		</script>
+
+	<title>济南住房公积金中心</title>
+<meta name="ColId" content="vCnObJtn6bfPyZnV52CXl">
+<meta name="SiteName" content="济南住房公积金中心">
+<meta name="SiteDomain" content="http://gjj.jinan.gov.cn">
+<meta name="SiteIDCode" content="3701000044">
+<meta name="server" content="http://gjj.jinan.gov.cn/index.html">
+<meta name="SiteID" content="54">
+
+<meta id="pagetype" content="0">
+</head>
+
+	<body id="page_type" alt="综合页" style="font-size: 12px;"><div id='barrierfree_container'>
+		<script src="/cms_files/filemanager/1695/script/202411/DA8B5611EB1A57C356FA304B137ABA2C.js"></script>
+		<div id="barrierfree_container">
+			<table width="100%" border="0" cellspacing="0" cellpadding="0">
+				<tbody>
+					<tr>
+						<td>
+							<div style="position:fixed;right:0;bottom:0;z-index:88;width:320px; height:230px;" id="cloud01">
+  <style>
+    #wrapper {
+      width: 320px;
+      margin: 50px auto;
+      height: 180px;
+      position: relative;
+      color: #fff;
+      text-shadow: rgba(0, 0, 0, 0.1) 2px 2px 0px;
+    }
+
+    #slider-wrap {
+      width: 320px;
+      height: 180px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    #slider-wrap ul#slider {
+      width: 100%;
+      height: 100%;
+
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+
+    #slider-wrap ul#slider li {
+      float: left;
+      position: relative;
+      width: 320px;
+      height: 180px;
+    }
+
+    #slider-wrap ul#slider li>div {
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+
+    #slider-wrap ul#slider li>div h3 {
+      font-size: 36px;
+      text-transform: uppercase;
+    }
+
+    #slider-wrap ul#slider li>div span {
+      font-family: Neucha, Arial, sans serif;
+      font-size: 21px;
+    }
+
+    #slider-wrap ul#slider li i {
+      text-align: center;
+      line-height: 400px;
+      display: block;
+      width: 100%;
+      font-size: 90px;
+    }
+
+
+    /*左右按钮样式*/
+    .btns {
+      position: absolute;
+      width: 32px;
+      height: 61px;
+      top: 50%;
+      margin-top: -25px;
+      line-height: 57px;
+      text-align: center;
+      cursor: pointer;
+      background: rgba(255, 255, 255, 0.3);
+      z-index: 100;
+
+
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -khtml-user-select: none;
+      -ms-user-select: none;
+
+      -webkit-transition: all 0.1s ease;
+      -moz-transition: all 0.1s ease;
+      -o-transition: all 0.1s ease;
+      -ms-transition: all 0.1s ease;
+      transition: all 0.1s ease;
+    }
+
+    .btns:hover {
+      background: rgba(0, 0, 0, 0.3);
+    }
+
+    /* 左箭头 */
+    #previous {
+      left: 0;
+      background: url(/cms_files/filemanager/1695/picture/202411/a9ff05a6c9994b3094859b8bd348dc68.png) no-repeat;
+      border-radius: 0px 7px 7px 7px;
+    }
+
+    /* 右箭头 */
+    #next {
+      right: 0;
+      background: url(/cms_files/filemanager/1695/picture/202411/d3879ab13a194fc9b56975a07fc905d1.png) no-repeat;
+      border-radius: 7px 0px 0px 7px;
+    }
+
+    #counter {
+      top: 30px;
+      right: 35px;
+      width: auto;
+      position: absolute;
+    }
+
+    #slider-wrap.active #next {
+      right: 0px;
+    }
+
+    #slider-wrap.active #previous {
+      left: 0px;
+    }
+
+
+    /*bar*/
+    #pagination-wrap {
+      min-width: 20px;
+      margin-top: 155px;
+      margin-left: auto;
+      margin-right: auto;
+      height: 15px;
+      position: relative;
+      text-align: center;
+    }
+
+    #pagination-wrap ul {
+      width: 100%;
+    }
+
+    #pagination-wrap ul li {
+      margin: 0 4px;
+      display: inline-block;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: #fff;
+      opacity: 0.5;
+      position: relative;
+      top: 0;
+
+
+    }
+
+    #pagination-wrap ul li.active {
+      width: 12px;
+      height: 12px;
+      top: 3px;
+      opacity: 1;
+      box-shadow: rgba(0, 0, 0, 0.1) 1px 1px 0px;
+    }
+
+    /*ANIMATION*/
+    #slider-wrap ul,
+    #pagination-wrap ul li {
+      -webkit-transition: all 0.3s cubic-bezier(1, .01, .32, 1);
+      -moz-transition: all 0.3s cubic-bezier(1, .01, .32, 1);
+      -o-transition: all 0.3s cubic-bezier(1, .01, .32, 1);
+      -ms-transition: all 0.3s cubic-bezier(1, .01, .32, 1);
+      transition: all 0.3s cubic-bezier(1, .01, .32, 1);
+    }
+  </style>
+
+  <div id="wrapper">
+    <div id="slider-wrap" class="">
+      <span style="font-size:30px; display:inline-block; position:absolute; right:10px;top:0; color:#fff; z-index:99999999; cursor:pointer" onclick="javascript:document.getElementById('cloud01').style.display='none';">
+        <img src="/cms_files/filemanager/1695/picture/202411/e6dcdad9c5c94543b57fd40eee4da600.png"><!-- 关闭按钮 -->
+      </span>
+      <ul id="slider">
+        <li>
+          <div>
+            <a title="泉融通" href="https://www.quanrongtong.com/#/home" target="_blank">
+              <img src="/cms_files/jcms1/web54/site/picture/0/35838e9f81ed4977adfbed6a85d0917b.png" width="320" height="180">
+            </a>
+          </div>
+        </li>
+        <li>
+          <div>
+            <a title="全力争创全国法治政府建设示范市" href="http://jnssfj.jinan.gov.cn/col/col82327/index.html" target="_blank">
+              <img src="/cms_files/jcms1/web54/site/picture/0/26bd5223ec154528830bdad0fe88cd2e.png" width="320" height="180">
+            </a>
+          </div>
+        </li>
+        <li>
+          <div>
+            <a title="弘扬宪法精神，建设法治中国" href="http://gjj.jinan.gov.cn/col26924/art/2022/art_26924_4748857.html" target="_blank">
+              <img src="/cms_files/jcms1/web54/site/picture/0/c211cd4a6bb74a5b8448d77d2337aa72.png" width="320" height="180">
+            </a>
+          </div>
+        </li>
+        <li>
+          <div>
+            <a title="“典”亮生活，伴民同行" href="http://www.gov.cn/xinwen/2020-06/01/content_5516649.htm" target="_blank">
+              <img src="/cms_files/jcms1/web54/site/picture/0/f49dbe7dd6be46a585ebd0026f68cdfb.png" width="320" height="180">
+            </a>
+          </div>
+        </li>
+        <li>
+          <div>
+            <a title="电子证照证明“用证”事项清单" href="http://www.jinan.gov.cn//col/col110510/index.html" target="_blank">
+              <img src="/cms_files/jcms1/web54/site/picture/0/439bcbf2e74241c0a24a4950a27e1069.png" width="320" height="180">
+            </a>
+          </div>
+        </li>
+        <li>
+          <div>
+            <a title="“泉惠企”平台惠企政策" href="http://www.quanhuiqi.cn/zcfw/index.html" target="_blank">
+              <img src="/cms_files/complat3/1695/picture/202511/cf327fc67f7f478bb381595b98e036a9.png" width="320" height="180">
+            </a>
+          </div>
+        </li>
+        <li>
+          <div>
+            <a title="济南市助企纾困政策专区" href="http://www.quanhuiqi.cn/zcfw/fingerpost.html?isHelper=true&value=" target="_blank">
+              <img src="/cms_files/jcms1/web54/site/picture/0/b650c26dd30b4630b8785799fc385876.png" width="320" height="180">
+            </a>
+          </div>
+        </li>
+        <li>
+          <div>
+            <a title="企业诉求 接诉即办" href="http://12345.e23.cn/jnjsjb/index.html?from=gjj" target="_blank">
+              <img src="/cms_files/jcms1/web54/site/picture/0/d5c787fe6ff146b9819cced919cd3cf0.png" width="320" height="180">
+            </a>
+          </div>
+        </li>
+      </ul>
+      <div class="btns" id="next" readexclude="" tabindex="-1">
+        <i class="fa fa-arrow-right" style="font-size: 45px; color: #fff; font-weight: 100;" readexclude="" tabindex="-1"></i>
+      </div>
+      <div class="btns" id="previous" readexclude="" tabindex="-1">
+        <i class="fa fa-arrow-left" style="font-size: 45px; color: #fff; font-weight: 100;" readexclude="" tabindex="-1"></i>
+      </div>
+      <div id="pagination-wrap">
+        <ul>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+<script type="text/javascript">
+  //current position
+  var pos = 0;
+  //number of slides
+  var totalSlides = $('#slider-wrap ul li').length;
+  //get the slide width
+  var sliderWidth = $('#slider-wrap').width();
+  $(document).ready(function () {
+    /*****************
+     BUILD THE SLIDER
+    *****************/
+    //set width to be 'x' times the number of slides
+    $('#slider-wrap ul#slider').width(sliderWidth * totalSlides);
+    //next slide 	
+    $('#next').click(function () {
+      slideRight();
+    });
+    //previous slide
+    $('#previous').click(function () {
+      slideLeft();
+    });
+    /*************************
+     //*> OPTIONAL SETTINGS
+    ************************/
+    //automatic slider
+    var autoSlider = setInterval(slideRight, 15000);
+
+    //for each slide 
+    $.each($('#slider-wrap ul li'), function () {
+      //set its color
+      var c = $(this).attr("data-color");
+      $(this).css("background", c);
+
+      //create a pagination
+      var li = document.createElement('li');
+      $('#pagination-wrap ul').append(li);
+    });
+    //counter
+    countSlides();
+    //pagination
+    pagination();
+    //hide/show controls/btns when hover
+    //pause automatic slide when hover
+    $('#slider-wrap').hover(
+      function () { $(this).addClass('active'); clearInterval(autoSlider); },
+      function () { $(this).removeClass('active'); autoSlider = setInterval(slideRight, 15000); }
+    );
+  });//DOCUMENT READY
+  /***********
+   SLIDE LEFT
+  ************/
+  function slideLeft() {
+    pos--;
+    if (pos == -1) { pos = totalSlides - 1; }
+    $('#slider-wrap ul#slider').css('left', -(sliderWidth * pos));
+
+    //*> optional
+    countSlides();
+    pagination();
+  }
+  /************
+   SLIDE RIGHT
+  *************/
+  function slideRight() {
+    pos++;
+    if (pos == totalSlides) { pos = 0; }
+    $('#slider-wrap ul#slider').css('left', -(sliderWidth * pos));
+
+    //*> optional 
+    countSlides();
+    pagination();
+  }
+  /************************
+   //*> OPTIONAL SETTINGS
+  ************************/
+  function countSlides() {
+    $('#counter').html(pos + 1 + ' / ' + totalSlides);
+  }
+
+  function pagination() {
+    $('#pagination-wrap ul li').removeClass('active');
+    $('#pagination-wrap ul li:eq(' + pos + ')').addClass('active');
+  }
+</script>
+
+						</td>
+					</tr>
+				</tbody>
+			</table>
+
+			<table width="100%" border="0" cellspacing="0" cellpadding="0">
+				<tbody>
+					<tr>
+						<td>
+
+
+<script type="text/javascript">
+var yon_1 = 0;
+var xon_1 = 0;
+var xPos_1 = 0 + 300;
+var yPos_1 = 0 + 200;
+var step_1 = 1;
+var delay_1 = 16;
+var flag_1=true;
+var pause_1 = true;
+var interval_1;
+var $FlAD_1 = $("#FlAD_1");
+function changePos_1() {
+  var width=$(window).width();
+  var height =  $(window).height();
+  var f_Height = $FlAD_1.height(); 
+  var f_Width = $FlAD_1.width();
+  if(yon_1) {yPos_1=yPos_1+step_1;}else {yPos_1=yPos_1-step_1;}
+  if(yPos_1<0) {
+      yon_1=1;yPos_1=0;
+  }     if(yPos_1>=(height-f_Height)) {
+       yon_1=0;      yPos_1=(height-f_Height);
+   }   if(xon_1) {
+       xPos_1=xPos_1+step_1;
+   }else {
+      xPos_1=xPos_1-step_1;
+  }if(xPos_1<0) {
+       xon_1=1;      xPos_1=0;
+ }if(xPos_1>=(width - f_Width - 10)) {
+      xon_1=0;      xPos_1=(width - f_Width - 10);
+  }
+  $FlAD_1.css('left',xPos_1+"px");
+  $FlAD_1.css('top',yPos_1+"px");
+ if(flag_1 ==true){ 
+  $FlAD_1.css('display',"block");
+  }
+}
+function start_1() {
+    $FlAD_1.css('visibility',"visible"); interval_1=setInterval('changePos_1()',delay_1);
+    $FlAD_1.css('cursor',"pointer");
+}
+function pause_resume_1() {
+	if(pause_1) {
+	clearInterval(interval_1);
+	pause_1 = false;
+	}
+	else {
+	interval_1 = setInterval("changePos_1()",delay_1);
+	pause_1 = true;
+	}
+}
+function pause_none_1(){
+ $FlAD_1.css('display',"none");
+flag_1=false;
+}
+start_1();</script>
+
+						</td>
+					</tr>
+				</tbody>
+			</table>
+
+			<table width="100%" border="0" cellspacing="0" cellpadding="0">
+				<tbody>
+					<tr>
+						<td>
+
+<script type="text/javascript">
+var yon_0 = 0;
+var xon_0 = 0;
+var xPos_0 = 0 + 0;
+var yPos_0 = 0 + 0;
+var step_0 = 1;
+var delay_0 = 16;
+var flag_0=true;
+var pause_0 = true;
+var interval_0;
+var $FlAD_0 = $("#FlAD_0");
+function changePos_0() {
+  var width=$(window).width();
+  var height =  $(window).height();
+  var f_Height = $FlAD_0.height(); 
+  var f_Width = $FlAD_0.width();
+  if(yon_0) {yPos_0=yPos_0+step_0;}else {yPos_0=yPos_0-step_0;}
+  if(yPos_0<0) {
+      yon_0=1;yPos_0=0;
+  }     if(yPos_0>=(height-f_Height)) {
+       yon_0=0;      yPos_0=(height-f_Height);
+   }   if(xon_0) {
+       xPos_0=xPos_0+step_0;
+   }else {
+      xPos_0=xPos_0-step_0;
+  }if(xPos_0<0) {
+       xon_0=1;      xPos_0=0;
+ }if(xPos_0>=(width - f_Width - 10)) {
+      xon_0=0;      xPos_0=(width - f_Width - 10);
+  }
+  $FlAD_0.css('left',xPos_0+"px");
+  $FlAD_0.css('top',yPos_0+"px");
+ if(flag_0 ==true){
+  $FlAD_0.css('display',"block");
+  }
+}
+function start_0() {
+    $FlAD_0.css('visibility',"visible"); interval_0=setInterval('changePos_0()',delay_0);
+    $FlAD_0.css('cursor',"pointer");
+}
+function pause_resume_0() {
+	if(pause_0) {
+	clearInterval(interval_0);
+	pause_0 = false;
+	}
+	else {
+	interval_0 = setInterval("changePos_0()",delay_0);
+	pause_0 = true;
+	}
+}
+function pause_none_0(){
+ $FlAD_0.css('display',"none");
+flag_0=false;
+}
+start_0();</script>
+
+						</td>
+					</tr>
+				</tbody>
+			</table>
+			<div id="TopButton" style="text-align: center; width: 1000px; margin: 0px auto; height: 60px; display: none;">
+				<button class="button button-primary button-rounded" onClick="FontJia(); "><i class="fa fa-plus"></i>
+					<span>文体放大</span></button>
+				<button class="button button-primary button-rounded" onClick="FontJian();"><i class="fa fa-minus"></i>
+					<span>文体缩小</span></button>
+				<button class="button button-primary button-rounded" onClick="DuiBi();"><i class="fa fa-adjust"></i>
+					<span id="DuiBiDuSpan">开启对比度</span></button>
+				<button class="button button-primary  button-rounded" onClick="ShuaXin();"><i class="fa fa-refresh"></i>
+					<span>重置</span></button>
+				<button class="button button-primary button-rounded" onClick="TopButtonHide();"><i class="fa fa-remove"></i> <span>关闭</span></button>
+			</div>
+			<div style="text-align: center; width: 100%; margin: 0px auto; ">
+				<div style="text-align: center; width: 100%; margin: 0px auto; height: 28px; ">
+					<script src="/cms_files/jcms1/web54/site/script/0/1706301829105794.js"></script>
+
+
+				</div>
+				<div style=" text-align:center; width:100%;margin:0px auto;  height:160px;  ">
+
+
+					<script src="/cms_files/jcms1/web54/site/script/0/1809121516483487.js"></script>
+
+
+				</div>
+			</div>
+
+			<div style="width: 1000px; margin: 0px auto;  line-height:46px; height:46px; padding: 0px; text-align: center; background-image: url(/cms_files/jcms1/web54/site/picture/0/1804241534571663540.png);" ergodic="navigation">
+				<script src="/cms_files/jcms1/web54/site/script/261/1808151121148174.js"></script>
+
+			</div>
+			<div style="width: 1000px; height:192px;margin: 0px auto;  ">
+				<div id="MenuSYDiv" class="MenuDiv" style="display: block;">
+					<script src="/cms_files/jcms1/web54/site/script/0/1809121525123649.js"></script>
+
+				</div>
+				<div id="MenuZWGKDiv" class="MenuDiv" style="display: none;">
+					<iframe src="/col/col28155/index.html" frameborder="0" width="998" height="180" scrolling="no"></iframe>
+
+				</div>
+				<div id="MenuJGDJDiv" class="MenuDiv" style="display: none;">
+					<iframe src="/col/col28157/index.html" frameborder="0" width="998" height="180" scrolling="no"></iframe>
+
+				</div>
+				<!-- <div id="MenuXWDTDiv" class="MenuDiv" style="display: none;"> -->
+
+				<!-- </div> -->
+				<div id="MenuZCFGDiv" class="MenuDiv" style="display: none;">
+					<iframe src="/col/col26516/index.html" frameborder="0" width="948" height="180" scrolling="no"></iframe>
+
+				</div>
+				<div id="MenuFWZNDiv" class="MenuDiv" style="display: none;">
+					<iframe src="/col/col28156/index.html" frameborder="0" width="998" height="190" scrolling="no"></iframe>
+
+				</div>
+				<div id="MenuWSYWDiv" class="MenuDiv" style="display: none;">
+					<iframe src="/col/col28158/index.html" frameborder="0" width="998" height="190" scrolling="no"></iframe>
+
+				</div>
+				<div id="MenuBMFWDiv" class="MenuDiv" style="display: none;">
+					<iframe src="/col/col28159/index.html" frameborder="0" width="998" height="180" scrolling="no"></iframe>
+
+				</div>
+				<div id="MenuHDCYDiv" class="MenuDiv" style="display: none;">
+					<iframe src="/col/col28160/index.html" frameborder="0" width="998" height="180" scrolling="no"></iframe>
+
+				</div>
+				<div id="MenuXZZXDiv" class="MenuDiv" style="display: none;">
+					<iframe src="/col/col28161/index.html" frameborder="0" width="998" height="180" scrolling="no"></iframe>
+
+				</div>
+				<div id="MenuZTZLDiv" class="MenuDiv" style="display: none;">
+					<iframe src="/col/col26886/index.html" frameborder="0" width="948" height="180" scrolling="no"></iframe>
+
+				</div>
+			</div>
+			<table style=" width: 1000px; margin:0 auto; margin-top: 0px; text-align: left;" cellspacing="0" cellpadding="0" border="0">
+				<tbody>
+					<tr>
+						<td style="text-align: left; width: 725px; font-size: 12px;" valign="top">
+							<table style="text-align: left; width:723px; border: 1px solid #ccc;" cellspacing="1" cellpadding="0" border="0" bgcolor="#CCCCCC" ergodic="view">
+								<tbody>
+									<tr>
+										<td style="font-size: 12px;" align="center" bgcolor="#FFFFFF">
+											<table width="100%" cellspacing="0" cellpadding="0" border="0">
+												<tbody>
+													<tr>
+														<td style="text-align: left; font-size: 12px;" height="42" background="/cms_files/webjinanzhufanggongjijinzhongxin/pubtplobject/defaultSet/45675/images/title_bg.gif"><span class="PanelTitle" style="text-align:left; width:100%;">
+网上大厅
+
+															</span>
+														</td>
+													</tr>
+													<tr>
+														<td style="font-size: 12px;" height="2" bgcolor="#0066cc"></td>
+													</tr>
+													<tr>
+														<td style="width: 723px; height:243px; font-size: 12px;" align="center">
+															<a href="https://wt.jngjj.net/" target="_blank" title="单位业务入口"><img src="/cms_files/jcms1/web54/site/picture/0/2405161515475224127.jpg" alt="单位业务入口" /></a>
+<a href="https://wt.jngjj.net/" target="_blank" title="个人业务入口"><img src="/cms_files/jcms1/web54/site/picture/0/2405161515475829810.jpg" alt="个人业务入口" style="margin-top: 5px;" /></a>
+
+														</td>
+													</tr>
+												</tbody>
+											</table>
+										</td>
+									</tr>
+								</tbody>
+							</table>
+
+
+							<table width="95%" cellspacing="0" cellpadding="0" border="0">
+								<tbody>
+									<tr>
+										<td style="font-size: 12px;" height="10"></td>
+									</tr>
+								</tbody>
+							</table>
+							<table height="250" width="100%" cellspacing="1" cellpadding="0" border="0" bgcolor="#CCCCCC" style="width: 723px; border: 1px solid #ccc;" ergodic="view">
+								<tbody>
+									<tr>
+										<td style="font-size: 12px;" align="center" bgcolor="#FFFFFF">
+											<table style="text-align:left; width:100%;" height="250" width="100%" cellspacing="0" cellpadding="0" border="0">
+												<tbody>
+													<tr>
+														<td colspan="4" style="text-align: left; font-size: 12px;" height="42" background="/cms_files/webjinanzhufanggongjijinzhongxin/pubtplobject/defaultSet/45675/images/title_bg.gif"><span class="PanelTitle" style="text-align:left; width:100%;">
+新闻动态
+
+															</span></td>
+													</tr>
+													<tr>
+														<td colspan="4" style="font-size: 12px;" height="2" bgcolor="#0066cc"></td>
+													</tr>
+													<tr>
+														<td style="width: 6px; font-size: 12px;"> </td>
+														<td style="height: 245px; width: 300px; font-size: 12px;">
+
+  <div id="focus">
+  <ul>
+    
+      <li style="position:relative"> <a href="/col11194/art/2024/art_11194_4753678.html" target="_blank" title="济南住房公积金中心举办数据安全专题培训班"> <img src="/cms_files/jcms1/web54/site/picture/-1/240918135353339390.jpg" alt="" style="width:300px;height:220px" /> </a>
+      <div class="photo_bt"> <a href="/col11194/art/2024/art_11194_4753678.html" target="_blank" style="color:#ffffff; font-size:15px;" title="济南住房公积金中心举办数据安全专题培训班" readexclude="" tabindex="-1">济南住房公积金中心举办数...</a> </div>
+    </li>
+    
+      <li style="position:relative"> <a href="/col11194/art/2024/art_11194_4753578.html" target="_blank" title="济南住房公积金中心举办学习贯彻党的二十届三中全会精神读书班"> <img src="/cms_files/jcms1/web54/site/picture/0/s_b14aac5b1d084c108b67c316d9ead36b.jpg" alt="" style="width:300px;height:220px" /> </a>
+      <div class="photo_bt"> <a href="/col11194/art/2024/art_11194_4753578.html" target="_blank" style="color:#ffffff; font-size:15px;" title="济南住房公积金中心举办学习贯彻党的二十届三中全会精神读书班" readexclude="" tabindex="-1">济南住房公积金中心举办学...</a> </div>
+    </li>
+    
+      <li style="position:relative"> <a href="/col11194/art/2024/art_11194_4753558.html" target="_blank" title="济南住房公积金中心接听12345热线市民来电"> <img src="/cms_files/jcms1/web54/site/picture/0/s_d9ec2c5dcd3c473495eecc47f25b6faa.png" alt="" style="width:300px;height:220px" /> </a>
+      <div class="photo_bt"> <a href="/col11194/art/2024/art_11194_4753558.html" target="_blank" style="color:#ffffff; font-size:15px;" title="济南住房公积金中心接听12345热线市民来电" readexclude="" tabindex="-1">济南住房公积金中心接听1...</a> </div>
+    </li>
+    
+      <li style="position:relative"> <a href="/col11194/art/2024/art_11194_4753064.html" target="_blank" title="济南住房公积金中心举办党纪学习教育专题党课"> <img src="/cms_files/jcms1/web54/site/picture/0/s_9d741cd25d1949cdafebea655e32db4a.png" alt="" style="width:300px;height:220px" /> </a>
+      <div class="photo_bt"> <a href="/col11194/art/2024/art_11194_4753064.html" target="_blank" style="color:#ffffff; font-size:15px;" title="济南住房公积金中心举办党纪学习教育专题党课" readexclude="" tabindex="-1">济南住房公积金中心举办党...</a> </div>
+    </li>
+    
+      <li style="position:relative"> <a href="/col11194/art/2024/art_11194_4752839.html" target="_blank" title="济南住房公积金中心组织参观济南市党员领导干部“讲规矩、守纪律”警示教育展"> <img src="/cms_files/jcms1/web54/site/picture/0/s_2c34976ac9d44a38a57809d46ba3c05a.jpg" alt="" style="width:300px;height:220px" /> </a>
+      <div class="photo_bt"> <a href="/col11194/art/2024/art_11194_4752839.html" target="_blank" style="color:#ffffff; font-size:15px;" title="济南住房公积金中心组织参观济南市党员领导干部“讲规矩、守纪律”警示教育展" readexclude="" tabindex="-1">济南住房公积金中心组织参...</a> </div>
+    </li>
+    
+
+  </ul>
+</div>
+
+<style type="text/css">
+	/* 图片新闻 */
+	.picnews{width: 300px; height: 220px;}
+	#focus {width:300px; height:220px; overflow:hidden; position:relative;margin:0 auto; z-index:1}
+	#focus ul {height:660px; position:absolute;margin:0;padding:0;}
+	#focus ul li {float:left; width:300px; height:220px; overflow:hidden; position:relative; background:#000;}
+	#focus ul li div.photo_bt {position:absolute; bottom:12px; left:5px; font-size:15px; color:#ffffff; z-index:1; line-height:45px;}
+	#focus .btnBg {position:absolute; width:300px; height:45px; left:0; bottom:0; background:#000000;}
+	#focus .btn {position:absolute; height:10px; padding:14px 10px; right:0; bottom:3px; text-align:right;}
+	#focus .btn span {display:inline-block; _display:inline; _zoom:1; width:10px; height:10px; _font-size:0; margin-left:5px; cursor:pointer; background:#82a4d0;}
+	#focus .btn span.on {background:#f4a22d;}
+	#focus .preNext {width:45px; height:74px; position:absolute; top:100px; cursor:pointer;background: url(/cms_files/jcms1/web54/site/images/2151/focus_btn.png) no-repeat 0 0;}
+	#focus .pre {left:0;}
+	#focus .next {right:0; background-position:right top;}
+</style>
+
+														</td>
+														<td style="width: 6px; font-size: 12px;"> </td>
+														<td style="width: 468px; font-size: 12px;">
+															<table width="50%" cellspacing="0" cellpadding="0" border="0">
+																<tbody>
+																	<tr>
+																		<td style="width:103px;height:50px;font-size: 12px;" id="ggtb1" class="active" onMouseOver="setTab('ggtb',1,2)" onfocus="setTab('ggtb',1,2)" readlabel="" tabindex="0">
+																			<img alt="中心新闻" src="/cms_files/jcms1/web54/site/picture/-1/1706151103495214917.gif" width="103" onmouseover="this.src='/cms_files/jcms1/web54/site/picture/-1/1706151103496499887.gif'" onmouseout="this.src='/cms_files/jcms1/web54/site/picture/-1/1706151103495214917.gif'" />
+
+																		</td>
+																		<td style="width:103px;height:50px;font-size: 12px;" id="ggtb2" onMouseOver="setTab('ggtb',2,2)" onfocus="setTab('ggtb',2,2)" readlabel="" tabindex="0">
+																			<img alt="业内新闻" src="/cms_files/jcms1/web54/site/picture/-1/1706151104201544433.gif" width="103" onmouseover="this.src='/cms_files/jcms1/web54/site/picture/-1/1706151103493883122.gif'" onmouseout="this.src='/cms_files/jcms1/web54/site/picture/-1/1706151104201544433.gif'" />
+
+																		</td>
+																		<td style="font-size: 12px;"> </td>
+																	</tr>
+																</tbody>
+															</table>
+															<div class="left3_ul" style="width:95%;">
+																<li class="ggtb_1" id="con_ggtb_1" style="display:block">
+<table id="IndexNewsListTitle" width="100%" border="0" align="center" cellpadding="0" cellspacing="0">
+  <tr>
+  	<td>
+    <a style="font-size: 12px;color: #666666;width:303px;" href="/col/col11194/art/2026/art_a706032b7d0748ce8abb057215bea42b.html" class="font12" title="省住房城乡建设厅任海涛厅长到济南住房公积金中心调..." target="_blank">省住房城乡建设厅任海涛厅长到济南住房公积金中心调...</a>
+	</td>
+	<td style="color:#666;width:70px;" readlabel="" tabindex="0">
+	2026-07-06
+	</td>
+  </tr>
+  <tr>
+  <td colspan="2" style="font-size: 12px;" height="7" background="/cms_files/jcms1/web54/site/picture/-1/1706151102381097745.gif"></td> 
+</tr>
+<tr>  <td height="7" colspan="2" style="font-size: 12px;"></td> </tr>
+</table>
+	
+<table id="IndexNewsListTitle" width="100%" border="0" align="center" cellpadding="0" cellspacing="0">
+  <tr>
+  	<td>
+    <a style="font-size: 12px;color: #666666;width:303px;" href="/col/col11194/art/2026/art_8d0c5f2c08bf4d91808e62fa2a08550e.html" class="font12" title="政务公开零距离 政银协同惠民生——济南住房公积金..." target="_blank">政务公开零距离 政银协同惠民生——济南住房公积金...</a>
+	</td>
+	<td style="color:#666;width:70px;" readlabel="" tabindex="0">
+	2026-07-06
+	</td>
+  </tr>
+  <tr>
+  <td colspan="2" style="font-size: 12px;" height="7" background="/cms_files/jcms1/web54/site/picture/-1/1706151102381097745.gif"></td> 
+</tr>
+<tr>  <td height="7" colspan="2" style="font-size: 12px;"></td> </tr>
+</table>
+	
+<table id="IndexNewsListTitle" width="100%" border="0" align="center" cellpadding="0" cellspacing="0">
+  <tr>
+  	<td>
+    <a style="font-size: 12px;color: #666666;width:303px;" href="/col/col11194/art/2026/art_dee9214e2c9f46b394ed91787f68aad5.html" class="font12" title="济南住房公积金中心举办树立和践行正确政绩观学习教..." target="_blank">济南住房公积金中心举办树立和践行正确政绩观学习教...</a>
+	</td>
+	<td style="color:#666;width:70px;" readlabel="" tabindex="0">
+	2026-06-24
+	</td>
+  </tr>
+  <tr>
+  <td colspan="2" style="font-size: 12px;" height="7" background="/cms_files/jcms1/web54/site/picture/-1/1706151102381097745.gif"></td> 
+</tr>
+<tr>  <td height="7" colspan="2" style="font-size: 12px;"></td> </tr>
+</table>
+	
+<table id="IndexNewsListTitle" width="100%" border="0" align="center" cellpadding="0" cellspacing="0">
+  <tr>
+  	<td>
+    <a style="font-size: 12px;color: #666666;width:303px;" href="/col/col11194/art/2026/art_b36f04aaaa6a4cdda186eff663abb87a.html" class="font12" title="校准政绩观 筑牢廉洁线 护航新征程 ——济南住房..." target="_blank">校准政绩观 筑牢廉洁线 护航新征程 ——济南住房...</a>
+	</td>
+	<td style="color:#666;width:70px;" readlabel="" tabindex="0">
+	2026-06-22
+	</td>
+  </tr>
+  <tr>
+  <td colspan="2" style="font-size: 12px;" height="7" background="/cms_files/jcms1/web54/site/picture/-1/1706151102381097745.gif"></td> 
+</tr>
+<tr>  <td height="7" colspan="2" style="font-size: 12px;"></td> </tr>
+</table>
+	
+<table id="IndexNewsListTitle" width="100%" border="0" align="center" cellpadding="0" cellspacing="0">
+  <tr>
+  	<td>
+    <a style="font-size: 12px;color: #666666;width:303px;" href="/col/col11194/art/2026/art_1f6fa458804b4605b136793dec529fba.html" class="font12" title="住建部就《住房公积金管理条例（修订征求意见稿）》..." target="_blank">住建部就《住房公积金管理条例（修订征求意见稿）》...</a>
+	</td>
+	<td style="color:#666;width:70px;" readlabel="" tabindex="0">
+	2026-06-17
+	</td>
+  </tr>
+  <tr>
+  <td colspan="2" style="font-size: 12px;" height="7" background="/cms_files/jcms1/web54/site/picture/-1/1706151102381097745.gif"></td> 
+</tr>
+<tr>  <td height="7" colspan="2" style="font-size: 12px;"></td> </tr>
+</table>
+	
+
+<table>
+<tr><td height="12" style="font-size: 12px;width:313px;">  </td> <td height="12" style="text-align:leftt; font-size: 12px; width:70;"><a title="中心新闻更多" href="/col/col11194/index.html" target="_blank">更多... </a> </td> </tr>
+</table>
+
+																</li>
+																<li class="ggtb_2" id="con_ggtb_2" style="display:none">
+<table id="IndexNewsListTitle" width="100%" border="0" align="center" cellpadding="0" cellspacing="0">
+  <tr>
+  	<td>
+    <a style="font-size: 12px;color: #666666;width:303px;" href="/col/col11195/art/2026/art_2019acecfaf04d9a8178b488ec94375a.html" class="font12" title="国务院政策例行吹风会：《城市更新“十五五”规划》有关情况" target="_blank">国务院政策例行吹风会：《城市更新“十五五”规划》...</a>
+	</td>
+	<td style="color:#666;width:70px;" readlabel="" tabindex="0">
+	2026-06-30
+	</td>
+  </tr>
+  <tr>
+  <td colspan="2" style="font-size: 12px;" height="7" background="/cms_files/jcms1/web54/site/picture/-1/1706151102381097745.gif"></td> 
+</tr>
+<tr>  <td height="7" colspan="2" style="font-size: 12px;"></td> </tr>
+</table>
+	
+<table id="IndexNewsListTitle" width="100%" border="0" align="center" cellpadding="0" cellspacing="0">
+  <tr>
+  	<td>
+    <a style="font-size: 12px;color: #666666;width:303px;" href="/col/col11195/art/2026/art_08fb740cb58945e4b7017b4766f0b417.html" class="font12" title="国管局办公室关于开展2026年全国节能宣传周公共机构节能降碳系列宣传活动的通知" target="_blank">国管局办公室关于开展2026年全国节能宣传周公共...</a>
+	</td>
+	<td style="color:#666;width:70px;" readlabel="" tabindex="0">
+	2026-05-25
+	</td>
+  </tr>
+  <tr>
+  <td colspan="2" style="font-size: 12px;" height="7" background="/cms_files/jcms1/web54/site/picture/-1/1706151102381097745.gif"></td> 
+</tr>
+<tr>  <td height="7" colspan="2" style="font-size: 12px;"></td> </tr>
+</table>
+	
+<table id="IndexNewsListTitle" width="100%" border="0" align="center" cellpadding="0" cellspacing="0">
+  <tr>
+  	<td>
+    <a style="font-size: 12px;color: #666666;width:303px;" href="/col/col11194/art/2026/art_e790e01f53e447edb2faec915624bcda.html" class="font12" title="2026年全国节能宣传周公共机构节能降碳专题宣传活动线上指南" target="_blank">2026年全国节能宣传周公共机构节能降碳专题宣传...</a>
+	</td>
+	<td style="color:#666;width:70px;" readlabel="" tabindex="0">
+	2026-06-17
+	</td>
+  </tr>
+  <tr>
+  <td colspan="2" style="font-size: 12px;" height="7" background="/cms_files/jcms1/web54/site/picture/-1/1706151102381097745.gif"></td> 
+</tr>
+<tr>  <td height="7" colspan="2" style="font-size: 12px;"></td> </tr>
+</table>
+	
+<table id="IndexNewsListTitle" width="100%" border="0" align="center" cellpadding="0" cellspacing="0">
+  <tr>
+  	<td>
+    <a style="font-size: 12px;color: #666666;width:303px;" href="/col/col11195/art/2026/art_1158e29df1184858ba9aae5d820abd83.html" class="font12" title="住建部就《住房公积金管理条例（修订征求意见稿）》公开征求意见住建部就《住房公积金管理条例（修订征求意见稿）》公开征求意见" target="_blank">住建部就《住房公积金管理条例（修订征求意见稿）》...</a>
+	</td>
+	<td style="color:#666;width:70px;" readlabel="" tabindex="0">
+	2026-06-17
+	</td>
+  </tr>
+  <tr>
+  <td colspan="2" style="font-size: 12px;" height="7" background="/cms_files/jcms1/web54/site/picture/-1/1706151102381097745.gif"></td> 
+</tr>
+<tr>  <td height="7" colspan="2" style="font-size: 12px;"></td> </tr>
+</table>
+	
+<table id="IndexNewsListTitle" width="100%" border="0" align="center" cellpadding="0" cellspacing="0">
+  <tr>
+  	<td>
+    <a style="font-size: 12px;color: #666666;width:303px;" href="/col/col11195/art/2026/art_83f827e1fd0d49f59a266a5fee1a7192.html" class="font12" title="李强主持召开国务院常务会议 研究推进全国统一大市场建设有关工作 审议通过《现代化应急体系建设“十五五”规划》 讨论《中华人民共和国中国人民银行法（修订草案）》" target="_blank">李强主持召开国务院常务会议 研究推进全国统一大市...</a>
+	</td>
+	<td style="color:#666;width:70px;" readlabel="" tabindex="0">
+	2026-05-22
+	</td>
+  </tr>
+  <tr>
+  <td colspan="2" style="font-size: 12px;" height="7" background="/cms_files/jcms1/web54/site/picture/-1/1706151102381097745.gif"></td> 
+</tr>
+<tr>  <td height="7" colspan="2" style="font-size: 12px;"></td> </tr>
+</table>
+	
+
+<table>
+<tr><td height="12" style="font-size: 12px;width:313px;">  </td> <td height="12" style="text-align: left; font-size: 12px; width:70;"><a title="业内新闻更多" href="/col/col11195/index.html" target="_blank">更多... </a> </td> </tr>
+</table>
+
+																</li>
+															</div>
+														</td>
+													</tr>
+												</tbody>
+											</table>
+										</td>
+									</tr>
+								</tbody>
+							</table>
+
+							<table width="95%" cellspacing="0" cellpadding="0" border="0">
+								<tbody>
+									<tr>
+										<td style="font-size: 12px;" height="10"></td>
+									</tr>
+								</tbody>
+							</table>
+							<table width="100%" cellspacing="1" cellpadding="0" border="0" bgcolor="#CCCCCC" style="width: 723px;" ergodic="view">
+								<tbody>
+									<tr>
+										<td style="font-size: 12px; border: 1px solid #ccc;" align="center" bgcolor="#FFFFFF">
+											<table width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#FFFFFF">
+												<tbody>
+													<tr>
+														<td style="text-align: left; font-size: 12px;" height="42" background="/cms_files/webjinanzhufanggongjijinzhongxin/pubtplobject/defaultSet/45675/images/title_bg.gif">
+															<span class="PanelTitle" style="text-align:left; width:100%;">
+政务公开
+
+															</span>
+														</td>
+													</tr>
+													<tr>
+														<td style="font-size: 12px;" height="2" bgcolor="#0066cc"></td>
+													</tr>
+													<tr>
+														<td style="font-size: 12px;" align="center">
+															<table width="100%" cellspacing="0" cellpadding="0" border="0">
+																<tbody>
+																	<tr>
+																		<td style="font-size: 12px;" height="10"></td>
+																	</tr>
+																</tbody>
+															</table>
+															<div style="width:95%;height:152px;">
+
+																<table width="95%" height="152" cellspacing="0" cellpadding="0" border="0">
+    <tbody>
+        <tr>
+            <td style="font-size: 12px;" height="75" align="center">
+                <a title="政府机构" href="http://gjj.jinan.gov.cn/col/col11188/index.html?jh=263&number=A01">
+                    <img src="/cms_files/jcms1/web54/site/picture/-1/1706151103367568431.gif" border="0">
+                </a>
+            </td>
+            <td style="font-size: 12px;" align="center">
+                <a title="工作进展" href="http://gjj.jinan.gov.cn/col/col11188/index.html?jh=263&number=A05">
+                    <img src="/cms_files/jcms1/web54/site/picture/-1/1706151103371576160.gif" border="0">
+                </a>
+            </td>
+            <td style="font-size: 12px;" align="center">
+                <a title="信息公开目录" href="http://gjj.jinan.gov.cn/col/col11188/index.html?jh=263">
+                    <img src="/cms_files/jcms1/web54/site/picture/-1/1706151103106491510.gif" border="0">
+                </a>
+            </td>
+        </tr>
+        <tr>
+            <td style="font-size: 12px;" height="77" align="center">
+                <a target="_blank" title="依申请公开" href="/api-gateway/jpaas-jisextend-quicklogin-server/front/sdzw/login?redirectUrl=%2Fapi-gateway%2Fjpaas-joua-web-server%2Ffront%2Ffront-mailWrite%3FplatformId%3DrtuoTDQsLXgTvjp5Q3Lmr%26appMark%3DYSQGK%26submitTargetUid%3D0148&domain=http://gjj.jinan.gov.cn">
+                    <img src="/cms_files/jcms1/web54/site/picture/-1/1706151103109129821.gif" border="0">
+                </a>
+            </td>
+            <td style="font-size: 12px;" align="center">
+                <a title="信息公开年报" href="http://gjj.jinan.gov.cn/col/col11188/index.html?jh=264">
+                    <img src="/cms_files/jcms1/web54/site/picture/-1/1706151103111669418.gif" border="0">
+                </a>
+            </td>
+            <td style="font-size: 12px;" align="center">
+                <a title="信息公开指南" href="http://gjj.jinan.gov.cn/col/col11188/index.html?jh=261">
+                    <img src="/cms_files/jcms1/web54/site/picture/-1/1706151103112992200.gif" border="0">
+                </a>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+
+															</div>
+															<table width="100%" cellspacing="0" cellpadding="0" border="0">
+																<tbody>
+																	<tr>
+																		<td style="font-size: 12px;" height="6"></td>
+																	</tr>
+																</tbody>
+															</table>
+														</td>
+													</tr>
+												</tbody>
+											</table>
+										</td>
+									</tr>
+								</tbody>
+							</table>
+							<table width="95%" cellspacing="0" cellpadding="0" border="0">
+								<tbody>
+									<tr>
+										<td style="font-size: 12px;" height="10"></td>
+									</tr>
+								</tbody>
+							</table>
+
+							<table width="100%" cellspacing="1" cellpadding="0" border="0" bgcolor="#CCCCCC" style="width: 723px; border: 1px solid #ccc;" ergodic="view">
+								<tbody>
+									<tr>
+										<td style="text-align: left; font-size: 12px;" align="center" bgcolor="#FFFFFF">
+
+											<table width="100%" cellspacing="0" cellpadding="0" border="0">
+												<tbody>
+													<tr>
+														<td style="text-align: left; font-size: 12px;" height="42" background="/cms_files/webjinanzhufanggongjijinzhongxin/pubtplobject/defaultSet/45675/images/title_bg.gif"><span class="PanelTitle" style="text-align:left; width:100%;">
+政策法规
+
+															</span>
+														</td>
+													</tr>
+													<tr>
+														<td style="font-size: 12px;" height="2" bgcolor="#0066cc"></td>
+													</tr>
+													<tr>
+													<tr style="font-size: 12px;" height="50" bgcolor="#FFFFFF">
+														<td>
+															<table width="50%" cellspacing="0" cellpadding="0" border="0">
+	<tbody>
+		<tr>
+			<td style="font-size: 12px;" readlabel="" tabindex="0" id="ggzz1" class="active" onMouseOver="setTab('ggzz',1,4)" onfocus="setTab('ggzz',1,4)">
+				 <img class="canRead" alt="上级部门文件" src="/cms_files/jcms1/web54/site/picture/-1/1706151104075872110.gif" onMouseOver="this.src='/cms_files/jcms1/web54/site/picture/-1/1706151104077207003.gif'" onMouseOut="this.src='/cms_files/jcms1/web54/site/picture/-1/1706151104075872110.gif'" width="103"> 
+			</td>
+			<td style="font-size: 12px;" readlabel="" tabindex="0" id="ggzz2" onMouseOver="setTab('ggzz',2,4)" onfocus="setTab('ggzz',3,4)"><img class="canRead" alt="中心其他文件" src="/cms_files/jcms1/web54/site/picture/-1/1706151104073873233.gif" onMouseOver="this.src='/cms_files/jcms1/web54/site/picture/-1/1706151104074566323.gif'" onMouseOut="this.src='/cms_files/jcms1/web54/site/picture/-1/1706151104073873233.gif'" width="120"> </td>
+			<td style="font-size: 12px;" readlabel="" tabindex="0" id="ggzz3" onMouseOver="setTab('ggzz',3,4)" onfocus="setTab('ggzz',4,4)"><img class="canRead" alt="政策解读" src="/cms_files/jcms1/web54/site/picture/-1/1706151104071197233.gif" onMouseOver="this.src='/cms_files/jcms1/web54/site/picture/-1/1706151104072527475.gif'" onMouseOut="this.src='/cms_files/jcms1/web54/site/picture/-1/1706151104071197233.gif'" width="120"> </td>
+		</tr>
+	</tbody>
+</table>
+
+														</td>
+													</tr>
+													<td style="width:725px;height:150px;">
+														<table width="100%" cellspacing="0" cellpadding="0" border="0" style="font-size: 12px;" bgcolor="#FFFFFF">
+															<tbody>
+																<tr>
+																	<td style="width: 5px; font-size: 12px;"></td>
+																	<td style="font-size: 12px;" height="150" width="720">
+																		<div class="left5_ul">
+																			<div class="ggzz_1" id="con_ggzz_1" style="display: block;">
+<table id="ZCJieDuCon" width="96%" border="0" align="center" cellpadding="0" cellspacing="0">
+  <tr>
+  	<td>
+    <a style="font-size: 12px;line-height:20px;color: #666666;width:605px;" href="/col/col11197/art/2026/art_d8abeac06188458eb5bb2498d0ff043f.html" class="font12" title="自然资源部、住房城乡建设部联合发文进一步支持城市更新行动" target="_blank">自然资源部、住房城乡建设部联合发文进一步支持城市更新行动</a>
+	</td>
+	<td style="color:#666;width:70px;" readlabel="" tabindex="0">
+	2026-02-27
+	</td>
+  </tr>
+  <tr>
+  <td colspan="2" style="font-size: 12px;" height="7" background="/cms_files/jcms1/web54/site/picture/-1/1706151102381097745.gif"></td> 
+</tr>
+<tr>
+  	<td height="7"></td>
+  </tr>
+</table>
+	
+<table id="ZCJieDuCon" width="96%" border="0" align="center" cellpadding="0" cellspacing="0">
+  <tr>
+  	<td>
+    <a style="font-size: 12px;line-height:20px;color: #666666;width:605px;" href="/col11197/art/2024/art_11197_4754401.html" class="font12" title="商务部关于印发促进外贸稳定增长若干政策措施的通知" target="_blank">商务部关于印发促进外贸稳定增长若干政策措施的通知</a>
+	</td>
+	<td style="color:#666;width:70px;" readlabel="" tabindex="0">
+	2024-11-29
+	</td>
+  </tr>
+  <tr>
+  <td colspan="2" style="font-size: 12px;" height="7" background="/cms_files/jcms1/web54/site/picture/-1/1706151102381097745.gif"></td> 
+</tr>
+<tr>
+  	<td height="7"></td>
+  </tr>
+</table>
+	
+<table id="ZCJieDuCon" width="96%" border="0" align="center" cellpadding="0" cellspacing="0">
+  <tr>
+  	<td>
+    <a style="font-size: 12px;line-height:20px;color: #666666;width:605px;" href="/col11197/art/2024/art_11197_4752078.html" class="font12" title="国务院关于进一步优化政务服务提升行政效能推动“高效办成一件事”的指导意见" target="_blank">国务院关于进一步优化政务服务提升行政效能推动“高效办成一件事”的指导意见</a>
+	</td>
+	<td style="color:#666;width:70px;" readlabel="" tabindex="0">
+	2024-03-06
+	</td>
+  </tr>
+  <tr>
+  <td colspan="2" style="font-size: 12px;" height="7" background="/cms_files/jcms1/web54/site/picture/-1/1706151102381097745.gif"></td> 
+</tr>
+<tr>
+  	<td height="7"></td>
+  </tr>
+</table>
+	
+
+<table>
+<tr><td height="12" style="font-size: 12px;width:615px;">  </td> <td height="12" style="text-align:left; font-size: 12px; width:96px;"><a title="上级部门文件更多" href="/col/col11197/index.html" target="_blank">更多... </a> </td> </tr>
+</table>
+
+																			</div>
+																			<div class="ggzz_2" id="con_ggzz_2" style="display: none;">
+<table id="ZCJieDuCon" width="96%" border="0" align="center" cellpadding="0" cellspacing="0">
+  <tr>
+  	<td>
+    <a style="font-size: 12px;line-height:20px;color: #666666;width:605px;" href="/col/col65559/art/2026/art_a025e5da370e4af08b1c1214b23a704c.html?type=4JnkXemNbirDhO2Om8bBC" class="font12" title="济南住房公积金中心关于调整2026年度住房公积金缴存基数的通知" target="_blank">济南住房公积金中心关于调整2026年度住房公积金缴存基数的通知</a>
+	</td>
+	<td style="color:#666;width:70px;" readlabel="" tabindex="0">
+	2026-07-17
+	</td>
+  </tr>
+  <tr>
+  <td colspan="2" style="font-size: 12px;" height="7" background="/cms_files/jcms1/web54/site/picture/-1/1706151102381097745.gif"></td> 
+</tr>
+<tr>
+  	<td height="7"></td>
+  </tr>
+</table>
+	
+<table id="ZCJieDuCon" width="96%" border="0" align="center" cellpadding="0" cellspacing="0">
+  <tr>
+  	<td>
+    <a style="font-size: 12px;line-height:20px;color: #666666;width:605px;" href="/col/col65559/art/2026/art_f0ede84d9c4a4c358e12e72ac528e567.html" class="font12" title="关于2026年住房公积金年度结息工作有关事宜的公告" target="_blank">关于2026年住房公积金年度结息工作有关事宜的公告</a>
+	</td>
+	<td style="color:#666;width:70px;" readlabel="" tabindex="0">
+	2026-06-30
+	</td>
+  </tr>
+  <tr>
+  <td colspan="2" style="font-size: 12px;" height="7" background="/cms_files/jcms1/web54/site/picture/-1/1706151102381097745.gif"></td> 
+</tr>
+<tr>
+  	<td height="7"></td>
+  </tr>
+</table>
+	
+<table id="ZCJieDuCon" width="96%" border="0" align="center" cellpadding="0" cellspacing="0">
+  <tr>
+  	<td>
+    <a style="font-size: 12px;line-height:20px;color: #666666;width:605px;" href="/col/col65559/art/2026/art_ae7dd0400dc646d599f5fa7e258e7102.html" class="font12" title="济南住房公积金中心关于优化调整住房公积金政策的通知" target="_blank">济南住房公积金中心关于优化调整住房公积金政策的通知</a>
+	</td>
+	<td style="color:#666;width:70px;" readlabel="" tabindex="0">
+	2026-04-20
+	</td>
+  </tr>
+  <tr>
+  <td colspan="2" style="font-size: 12px;" height="7" background="/cms_files/jcms1/web54/site/picture/-1/1706151102381097745.gif"></td> 
+</tr>
+<tr>
+  	<td height="7"></td>
+  </tr>
+</table>
+	
+
+<table>
+<tr><td height="12" style="font-size: 12px;width:615px;">  </td> <td height="12" style="text-align: left; font-size: 12px; width:96px;"><a title="中心其他文件更多" href="/col/col11188/index.html?number=A0604" target="_blank">更多... </a> </td> </tr>
+</table>
+
+																			</div>
+
+																			<div class="ggzz_3" id="con_ggzz_3" style="display: none;">
+<table id="ZCJieDuCon" width="96%" border="0" align="center" cellpadding="0" cellspacing="0">
+  <tr>
+  	<td>
+    <a style="font-size: 12px;line-height:20px;color: #666666;width:605px;" href="/col/col121817/art/2026/art_09ccbcce72074d688331ece8c3ce25a9.html?type=FUaRhQW7Lo9974tywtQmQ" class="font12" title="关于调整2026年度住房公积金缴存基数的政策解读" target="_blank">关于调整2026年度住房公积金缴存基数的政策解读</a>
+	</td>
+	<td style="color:#666;width:70px;" readlabel="" tabindex="0">
+	2026-07-17
+	</td>
+  </tr>
+  <tr>
+  <td colspan="2" style="font-size: 12px;" height="7" background="/cms_files/jcms1/web54/site/picture/-1/1706151102381097745.gif"></td> 
+</tr>
+<tr>
+  	<td height="7"></td>
+  </tr>
+</table>
+	
+<table id="ZCJieDuCon" width="96%" border="0" align="center" cellpadding="0" cellspacing="0">
+  <tr>
+  	<td>
+    <a style="font-size: 12px;line-height:20px;color: #666666;width:605px;" href="/col/col121817/art/2026/art_bb38563d60a247f6ae22cbb796b9cf36.html?type=FUaRhQW7Lo9974tywtQmQ" class="font12" title="政策解读：济南住房公积金中心2025年法治政府建设报告" target="_blank">政策解读：济南住房公积金中心2025年法治政府建设报告</a>
+	</td>
+	<td style="color:#666;width:70px;" readlabel="" tabindex="0">
+	2026-03-27
+	</td>
+  </tr>
+  <tr>
+  <td colspan="2" style="font-size: 12px;" height="7" background="/cms_files/jcms1/web54/site/picture/-1/1706151102381097745.gif"></td> 
+</tr>
+<tr>
+  	<td height="7"></td>
+  </tr>
+</table>
+	
+<table id="ZCJieDuCon" width="96%" border="0" align="center" cellpadding="0" cellspacing="0">
+  <tr>
+  	<td>
+    <a style="font-size: 12px;line-height:20px;color: #666666;width:605px;" href="/col/col65560/art/2026/art_eea50b3e9cbd4be287c235c027279265.html" class="font12" title="政策解读：关于优化调整住房公积金政策（信贷方面）" target="_blank">政策解读：关于优化调整住房公积金政策（信贷方面）</a>
+	</td>
+	<td style="color:#666;width:70px;" readlabel="" tabindex="0">
+	2026-04-22
+	</td>
+  </tr>
+  <tr>
+  <td colspan="2" style="font-size: 12px;" height="7" background="/cms_files/jcms1/web54/site/picture/-1/1706151102381097745.gif"></td> 
+</tr>
+<tr>
+  	<td height="7"></td>
+  </tr>
+</table>
+	
+
+<table>
+<tr><td height="12" style="font-size: 12px;width:615px;">  </td> <td height="12" style="text-align: left; font-size: 12px; width:96px;"><a title="政策解读更多" href="/col/col11188/index.html?number=A0605" target="_blank">更多... </a> </td> </tr>
+</table>
+
+																			</div>
+																		</div>
+																	</td>
+																</tr>
+															</tbody>
+														</table>
+													</td>
+									</tr>
+									<tr>
+										<td style="font-size: 12px;" height="10" bgcolor="#FFFFFF"></td>
+									</tr>
+								</tbody>
+							</table>
+						</td>
+					</tr>
+				</tbody>
+			</table>
+			<script>
+				function setTab(name, cursel, n) {
+					for (i = 1; i <= n; i++) {
+						var menu = document.getElementById(name + i);
+						var con = document.getElementById("con_" + name + "_" + i);
+						menu.className = i == cursel ? "active canRead" : "";
+						con.style.display = i == cursel ? "block" : "none";
+					}
+				}
+			</script>
+
+			<table width="95%" cellspacing="0" cellpadding="0" border="0">
+				<tbody>
+					<tr>
+						<td style="font-size: 12px;" height="10"></td>
+					</tr>
+				</tbody>
+			</table>
+
+			<table width="100%" cellspacing="1" cellpadding="0" border="0" bgcolor="#CCCCCC" style="width: 723px; border: 1px solid #ccc;" ergodic="view">
+				<tbody>
+					<tr>
+						<td style="font-size: 12px;" align="center" bgcolor="#FFFFFF">
+							<table width="100%" cellspacing="0" cellpadding="0" border="0">
+								<tbody>
+									<tr>
+										<td style="font-size: 12px;" height="38"><span class="PanelTitle">
+便民服务
+
+											</span>
+										</td>
+									</tr>
+									<tr>
+										<td style="font-size: 12px;" height="2" bgcolor="#0066cc"></td>
+									</tr>
+
+									<tr>
+										<td style="font-size: 12px;" align="center">
+											<table width="100%" cellspacing="0" cellpadding="0" border="0">
+												<tbody>
+													<tr>
+														<td style="width:725px;height:250px;">
+															<table width="100%">
+  <tr>
+    
+    <td style="font-size: 12px;" align="center" width="145"><a title="公积金经办网点" href="/col/col11486/index.html" target="_blank"><img src="/cms_files/jcms1/web54/site/picture/-1/1706151101386787643.gif" height="100" width="80" /></a></td>
+    <td style="font-size: 12px;" align="center" width="145"><a title="智能问答" href="https://apollo-access-platform.paas.cmbchina.com/channel/1367/index.html?sign=57c9e9b170d1ad85c95947bfe16aac6cea7f9f369e4aTU79MZ9IW1Hw3080H2Hp2Jn9atQ3wekUu2cedNY1GRX6GeoJ75Z8RcvLm9vuSEvxJN8Pos8b39y9cj2N3n43Y13tlS36kvkQVfK3v16fE0zu4ovHBdKHW4h2f8at3R63V8fw4B8sTO5VBd4EZ18v40lf6D3953UL7xM7zu67MJ95g5JXUK2PB06703E0k6M4HZ2n3nlyC04F1PcyFgr" target="_blank"><img src="/cms_files/jcms1/web54/site/picture/0/2112101535546886196.gif" height="100" width="80" /></a></td>
+    <td style="font-size: 12px;" align="center" width="145"></td>
+	<td style="font-size: 12px;" align="center" width="145"></td>
+  </tr>
+  <tr>
+    
+    <td style="font-size: 12px;" align="center" valign="top"><a href="/col/col11486/index.html" target="_blank">公积金经办网点</a></td>
+    <!--<td style="font-size: 12px;" align="center" valign="top"><a href="http://gjj.jinan.gov.cn/dlyy/housing/jnHousingGjj.do" target="_blank">智能问答</a></td>-->
+    <td style="font-size: 12px;" align="center" valign="top"><a href="https://apollo-access-platform.paas.cmbchina.com/channel/1367/index.html?sign=57c9e9b170d1ad85c95947bfe16aac6cea7f9f369e4aTU79MZ9IW1Hw3080H2Hp2Jn9atQ3wekUu2cedNY1GRX6GeoJ75Z8RcvLm9vuSEvxJN8Pos8b39y9cj2N3n43Y13tlS36kvkQVfK3v16fE0zu4ovHBdKHW4h2f8at3R63V8fw4B8sTO5VBd4EZ18v40lf6D3953UL7xM7zu67MJ95g5JXUK2PB06703E0k6M4HZ2n3nlyC04F1PcyFgr" target="_blank">智能问答</a></td>
+    <td style="font-size: 12px;" align="center" valign="top"></td>
+	<td style="font-size: 12px;" height="30" align="center" valign="top"></td>
+  </tr>
+</table>
+
+														</td>
+													</tr>
+												</tbody>
+											</table>
+										</td>
+									</tr>
+								</tbody>
+							</table>
+						</td>
+					</tr>
+				</tbody>
+			</table>
+			<br>
+			</td>
+			<td style="width: 5px; font-size: 12px;"></td>
+			<td style="width: 270px; font-size: 12px;" valign="top">
+				<table style="border: 1px solid #ccc;" width="100%" cellspacing="1" cellpadding="0" border="0" bgcolor="#CCCCCC" ergodic="view">
+					<tbody>
+						<tr>
+							<td style="font-size: 12px;" height="38" bgcolor="#f7f7f7">
+								<table width="50%" cellspacing="0" cellpadding="0" border="0">
+									<tbody>
+										<tr>
+											<td style="font-size: 12px;" align="center" width="20">
+												<img src="/cms_files/webjinanzhufanggongjijinzhongxin/pubtplobject/defaultSet/45675/images/tag01.gif" height="10" width="10" readexclude="" tabindex="-1">
+											</td>
+											<td style="font-size: 12px;">
+												<span class="PanelTitle">
+公示公告
+
+												</span>
+											</td>
+										</tr>
+									</tbody>
+								</table>
+							</td>
+						</tr>
+						<tr>
+							<td style="height: 250px; font-size: 12px; margin-top:10px;" bgcolor="#FFFFFF">
+
+<table width="96%" border="0" align="center" cellpadding="0" cellspacing="0" style="line-height:28px">
+ <tr>
+  <td style="font-size: 12px;" align="left"><img readexclude="" tabindex="-1" src="/cms_files/jcms1/web54/site/picture/-1/1706151101553879092.jpg" width="9" height="23" style="margin-top:-8px"><a href="/col65549/art/2026/art_65549_4759130.html" target="_blank" class="font" title="2025年度济南住房公积金中心政府网站年度工作报表">2025年度济南住房公积金...</a></td>
+  <td style="font-size: 12px;width:66px;"> <div style="width:66px; overflow:hidden;" readlabel="" tabindex="0">26-01-22</div></td>
+</tr>
+</table>
+
+<table width="96%" border="0" align="center" cellpadding="0" cellspacing="0" style="line-height:28px">
+ <tr>
+  <td style="font-size: 12px;" align="left"><img readexclude="" tabindex="-1" src="/cms_files/jcms1/web54/site/picture/-1/1706151101553879092.jpg" width="9" height="23" style="margin-top:-8px"><a href="/col/col65549/art/2026/art_b0139c8c270047d685d70dce210ba21a.html" target="_blank" class="font" title="职工投诉企业（单位）欠缴住房公积金办理指引">职工投诉企业（单位）欠缴住...</a></td>
+  <td style="font-size: 12px;width:66px;"> <div style="width:66px; overflow:hidden;" readlabel="" tabindex="0">26-07-10</div></td>
+</tr>
+</table>
+
+<table width="96%" border="0" align="center" cellpadding="0" cellspacing="0" style="line-height:28px">
+ <tr>
+  <td style="font-size: 12px;" align="left"><img readexclude="" tabindex="-1" src="/cms_files/jcms1/web54/site/picture/-1/1706151101553879092.jpg" width="9" height="23" style="margin-top:-8px"><a href="/col/col65549/art/2026/art_041953ec75b9466693bfbe11c4db56b4.html" target="_blank" class="font" title="关于2026年住房公积金年度结息工作有关事宜的公告">关于2026年住房公积金年...</a></td>
+  <td style="font-size: 12px;width:66px;"> <div style="width:66px; overflow:hidden;" readlabel="" tabindex="0">26-06-30</div></td>
+</tr>
+</table>
+
+<table width="96%" border="0" align="center" cellpadding="0" cellspacing="0" style="line-height:28px">
+ <tr>
+  <td style="font-size: 12px;" align="left"><img readexclude="" tabindex="-1" src="/cms_files/jcms1/web54/site/picture/-1/1706151101553879092.jpg" width="9" height="23" style="margin-top:-8px"><a href="/col/col65549/art/2026/art_3b8a10515fe04b13b145571d27821447.html" target="_blank" class="font" title="关于2026年端午节假期停办公积金业务的公告">关于2026年端午节假期停...</a></td>
+  <td style="font-size: 12px;width:66px;"> <div style="width:66px; overflow:hidden;" readlabel="" tabindex="0">26-06-17</div></td>
+</tr>
+</table>
+
+<table width="96%" border="0" align="center" cellpadding="0" cellspacing="0" style="line-height:28px">
+ <tr>
+  <td style="font-size: 12px;" align="left"><img readexclude="" tabindex="-1" src="/cms_files/jcms1/web54/site/picture/-1/1706151101553879092.jpg" width="9" height="23" style="margin-top:-8px"><a href="/col/col65549/art/2026/art_8f2d61fa653140fbaaa2f49ab643c835.html" target="_blank" class="font" title="济南住房公积金中心2026年端午节假期值班表">济南住房公积金中心2026...</a></td>
+  <td style="font-size: 12px;width:66px;"> <div style="width:66px; overflow:hidden;" readlabel="" tabindex="0">26-06-17</div></td>
+</tr>
+</table>
+
+<table width="96%" border="0" align="center" cellpadding="0" cellspacing="0" style="line-height:28px">
+ <tr>
+  <td style="font-size: 12px;" align="left"><img readexclude="" tabindex="-1" src="/cms_files/jcms1/web54/site/picture/-1/1706151101553879092.jpg" width="9" height="23" style="margin-top:-8px"><a href="/col/col65549/art/2026/art_3c29a091ad1c43839e572267f4c846b9.html" target="_blank" class="font" title="济南住房公积金中心2026年端午节假期公务用车封存情况登记表">济南住房公积金中心2026...</a></td>
+  <td style="font-size: 12px;width:66px;"> <div style="width:66px; overflow:hidden;" readlabel="" tabindex="0">26-06-17</div></td>
+</tr>
+</table>
+
+<table width="96%" border="0" align="center" cellpadding="0" cellspacing="0" style="line-height:28px">
+ <tr>
+  <td style="font-size: 12px;" align="left"><img readexclude="" tabindex="-1" src="/cms_files/jcms1/web54/site/picture/-1/1706151101553879092.jpg" width="9" height="23" style="margin-top:-8px"><a href="/col/col65549/art/2026/art_ea706f295d7e4131aba86010a01a73f1.html" target="_blank" class="font" title="关于2026年五一劳动节假期停办公积金业务的公告">关于2026年五一劳动节假...</a></td>
+  <td style="font-size: 12px;width:66px;"> <div style="width:66px; overflow:hidden;" readlabel="" tabindex="0">26-04-30</div></td>
+</tr>
+</table>
+
+
+<table width="96%" align="center">
+	<tr><td colspan="2" style="font-size: 12px;" height="7" background="/cms_files/jcms1/web54/site/picture/-1/1706151102381097745.gif"></td> </tr>
+  <tr>
+    <td height="12" style="font-size: 12px;width:200px;"></td>
+    <td height="12" style="text-align: left; font-size: 12px;width:60px;"><a title="通知公告更多" href="/col/col65549/index.html" target="_blank">更多... </a> </td>
+  </tr>
+</table>
+
+							</td>
+						</tr>
+					</tbody>
+				</table>
+
+				<table width="100%" cellspacing="0" cellpadding="0" border="0">
+					<tbody>
+						<tr>
+							<td style="font-size: 12px;" height="10" bgcolor="#FFFFFF"></td>
+						</tr>
+					</tbody>
+				</table>
+				<table style="border: 1px solid #ccc;" width="100%" cellspacing="1" cellpadding="0" border="0" bgcolor="#CCCCCC" ergodic="view">
+					<tbody>
+						<tr>
+							<td style="font-size: 12px;" bgcolor="#FFFFFF">
+								<div style="width:270px;height:212px;">
+<a title="国务院互联网督查" href="https://tousu.www.gov.cn/dc/6wen6bao/index.htm" target="_blank"><img src="/cms_files/jcms1/web54/site/picture/0/bf9e08cf3d2a411486a3d7f13553b456.jpg" style="margin-bottom:12px;" /></a>
+<a title="济南市网上政务大厅" href="http://zwfw.jinan.gov.cn/jpaas-jiq-web-jnywtb/front/item/bmft_index?deptCode=370100085&areaCode=370100000000" target="_blank"><img src="/cms_files/jcms1/web54/site/picture/0/332591a633bb4a70943b578a0879e9a6.jpg" /></a>
+</div>
+
+							</td>
+						</tr>
+					</tbody>
+				</table>
+
+				<table width="100%" cellspacing="0" cellpadding="0" border="0">
+					<tbody>
+						<tr>
+							<td style="font-size: 12px;" height="10" bgcolor="#FFFFFF"></td>
+						</tr>
+					</tbody>
+				</table>
+				<table width="100%" cellspacing="1" cellpadding="0" border="0" bgcolor="#CCCCCC">
+					<tbody>
+						<tr>
+							<td style="font-size: 12px;" bgcolor="#FFFFFF">
+								<table style="border: 1px solid #ccc;" width="100%" cellspacing="0" cellpadding="0" border="0" ergodic="view">
+									<tbody>
+										<tr>
+											<td style="font-size: 12px;" height="38" bgcolor="#f7f7f7">
+												<table width="50%" cellspacing="0" cellpadding="0" border="0">
+													<tbody>
+														<tr>
+															<td style="font-size: 12px;" align="center" width="20">
+																<img src="/cms_files/webjinanzhufanggongjijinzhongxin/pubtplobject/defaultSet/45675/images/tag01.gif" height="10" width="10" readexclude="" tabindex="-1">
+															</td>
+															<td style="font-size: 12px;">
+																<span class="PanelTitle">
+互动参与
+
+																</span>
+															</td>
+														</tr>
+													</tbody>
+												</table>
+											</td>
+										</tr>
+										<tr>
+											<td style="font-size: 12px;" height="6" align="center"> </td>
+										</tr>
+										<tr>
+											<td style="height:132px;width:265px;">
+												<script src="/cms_files/jcms1/web54/site/script/0/1809121537544269.js"></script>
+
+											</td>
+										</tr>
+										<tr>
+											<td style="font-size: 12px;" height="8"></td>
+										</tr>
+									</tbody>
+								</table>
+							</td>
+						</tr>
+					</tbody>
+				</table>
+				<table width="100%" cellspacing="0" cellpadding="0" border="0">
+					<tbody>
+						<tr>
+							<td style="font-size: 12px;" height="10"></td>
+						</tr>
+					</tbody>
+				</table>
+				<table width="100%" cellspacing="1" cellpadding="0" border="0" bgcolor="#CCCCCC">
+					<tbody>
+						<tr>
+							<td style="font-size: 12px;" bgcolor="#FFFFFF">
+								<table style="border: 1px solid #ccc;" width="100%" cellspacing="0" cellpadding="0" border="0" ergodic="view">
+									<tbody>
+										<tr>
+											<td style="font-size: 12px;" height="38" bgcolor="#f7f7f7">
+												<table width="50%" cellspacing="0" cellpadding="0" border="0">
+													<tbody>
+														<tr>
+															<td style="font-size: 12px;" align="center" width="20">
+																<img src="/cms_files/webjinanzhufanggongjijinzhongxin/pubtplobject/defaultSet/45675/images/tag01.gif" height="10" width="10" readexclude="" tabindex="-1">
+															</td>
+															<td style="font-size: 12px;">
+																<span class="PanelTitle">
+服务电话
+
+																</span>
+															</td>
+														</tr>
+													</tbody>
+												</table>
+											</td>
+										</tr>
+										<tr>
+											<td style="font-size: 12px;width:265px;height:63px;">
+												<div class="">
+<p>缴存、转移业务：0531-81959382</p>
+<p>　　　　　　　　0531-78891607（莱芜服务部）</p>
+<p>提　取　业　务：0531-68966354</p>
+<p>　　　　　　　　0531-78891608（莱芜服务部）</p>
+<p>贷　款　业　务：0531-81959393</p>
+<p>　　　　　　　　0531-78891609（莱芜服务部）</p>	
+</div>
+
+											</td>
+										</tr>
+									</tbody>
+								</table>
+							</td>
+						</tr>
+					</tbody>
+				</table>
+				<table width="100%" cellspacing="0" cellpadding="0" border="0">
+					<tbody>
+						<tr>
+							<td style="font-size: 12px;" height="10"></td>
+						</tr>
+					</tbody>
+				</table>
+				<table width="100%" cellspacing="1" cellpadding="0" border="0" bgcolor="#CCCCCC">
+					<tbody>
+						<tr>
+							<td style="font-size: 12px;" bgcolor="#FFFFFF">
+								<table style="border: 1px solid #ccc;" width="100%" cellspacing="0" cellpadding="0" border="0" ergodic="view">
+									<tbody>
+										<tr>
+											<td style="font-size: 12px;" height="40" bgcolor="#f7f7f7">
+												<table width="50%" cellspacing="0" cellpadding="0" border="0">
+													<tbody>
+														<tr>
+															<td style="font-size: 12px;" align="center" width="20">
+																<img src="/cms_files/webjinanzhufanggongjijinzhongxin/pubtplobject/defaultSet/45675/images/tag01.gif" height="10" width="10" readexclude="" tabindex="-1">
+															</td>
+															<td style="font-size: 12px;">
+																<span class="PanelTitle">
+下载中心
+
+																</span>
+															</td>
+														</tr>
+													</tbody>
+												</table>
+											</td>
+										</tr>
+										<tr>
+											<td style="font-size: 12px;" height="6"></td>
+										</tr>
+										<tr>
+											<td style="width:265px;height:153px;">
+												<table width="100%">
+  
+  <tr>
+    <td style="font-size: 12px;" align="center">
+      <a href="/col/col11502/index.html" target="_blank" title="贷款资料下载">
+        <img src="/cms_files/jcms1/web54/site/picture/-1/1706151101558514186.gif" width="216" border="0">
+      </a>
+    </td>
+  </tr>
+  
+  <tr>
+    <td style="font-size: 12px;" align="center">
+      <a href="/col/col11501/index.html" target="_blank" title="提取资料下载">
+        <img src="/cms_files/jcms1/web54/site/picture/-1/1706151101561149797.gif" width="216" border="0">
+      </a>
+    </td>
+  </tr>
+  
+  <tr>
+    <td style="font-size: 12px;" align="center">
+      <a href="/col/col11500/index.html" target="_blank" title="缴存资料下载">
+        <img src="/cms_files/jcms1/web54/site/picture/-1/1706151101559826661.gif" width="216" border="0">
+      </a>
+    </td>
+  </tr>
+  
+
+</table>
+
+
+											</td>
+										</tr>
+								</tbody></table>
+							</td>
+						</tr>
+					</tbody>
+				</table>
+				<table height="5" width="100%" cellspacing="0" cellpadding="0" border="0">
+					<tbody>
+						<tr>
+							<td style="font-size: 12px;" height="5"></td>
+						</tr>
+					</tbody>
+				</table>
+				<table width="100%" cellspacing="1" cellpadding="0" border="0" ergodic="view">
+					<tbody>
+						<tr>
+							<td style="width:267px;height:180px;">
+								    <table width="100%" style="border:1px #ccc solid;height:170px;">
+    
+    <tr style="margin:5px 0px">
+        <td style="font-size: 12px;" align="center">
+        <a title="两会专题报道" href="/col/col11506/index.html" target="_blank">
+            <img src="/cms_files/jcms1/web54/site/picture/0/2005261013428284248.jpg" height="70" width="220" border="0">
+        </a>
+        </td>
+    </tr>
+    <tr>
+        <td style="font-size: 12px;" align="center">
+        <a target="_blank" href="/api-gateway/jpaas-jisextend-quicklogin-server/front/sdzw/login?redirectUrl=%2Fapi-gateway%2Fjpaas-jact-web-server%2Ffront%2Fmail-write.do%3FplatformIid%3DHTMi0SM6aXpdnEJDZH931%26appMark%3Djact-MSLX%26submitTargetUid%3D0148&domain=http://gjj.jinan.gov.cn" title="民生连线">
+            <img src="/cms_files/jcms1/web54/site/picture/-1/1706151102388958703.gif" height="70" width="220" border="0">
+        </a>
+        </td>
+    </tr>
+    </table>
+
+							</td>
+						</tr>
+					</tbody>
+				</table>
+				<div style="width: 100%; text-align: center; font-size: 18px; color: #0E8DC7; margin-top: 4px; border:1px #ccc solid;">
+					<span class="blue_font_style">当前访问量：</span>
+					<span id="AccessCount" style=" color: #FF6600; ">
+						<!-- <script language="javascript" src="/cms_files/jcms1/web54/site/module/visitcount/articlehits.jsp?colid=36863&artid=770404">
+ </script> -->
+<script>
+$(function () {
+    var url = 'http://gjj.jinan.gov.cn'
+    $.ajax({
+      type: "get",
+      url: ""+ url +"/api-gateway/jpaas-juba-console-server/interfaces/datainterface/getallwebdata",
+      dataType: "json",
+      data: {
+        "webuids": '54',
+      },
+      success: function (data) {
+        var item = data.data.data
+        if(data.code==200){
+          $('#AccessCount').append(17358109+ item.sum_pv)
+        }
+      }
+     })
+    })
+</script>
+
+					</span>
+					<span>次</span>
+				</div>
+			</td>
+			</tr>
+			</tbody>
+			</table>
+
+			<table height="96" align="center" width="1000" cellspacing="0" cellpadding="0" border="0">
+				<tbody>
+					<tr>
+						<td style="font-size: 12px;" height="1" bgcolor="#FFFFFF"></td>
+					</tr>
+					<tr>
+						<td style="font-size: 12px;" height="95" align="center">
+							<table width="1000" cellspacing="0" cellpadding="0" border="0">
+								<tbody>
+									<tr>
+										<td style="font-size: 12px;" height="5"></td>
+									</tr>
+								</tbody>
+							</table>
+							<script language="javascript" src="/cms_files/jcms1/web54/site/script/0/1706161950274673.js"></script>
+
+						</td>
+					</tr>
+				</tbody>
+			</table>
+			<div id="low_right" style="border: 1px solid rgb(15, 203, 246); left: 10px; top: 200px;">
+				<!--<a title="人民银行个人信用报告线上查询流程" href="http://gjj.jinan.gov.cn/art/2021/9/1/art_65554_4744830.html?xxgkhide＝1" target="_blank">-->    
+	<a title="人民银行个人信用报告线上查询流程" href="https://gjj.jinan.gov.cn/col65554/art/2021/art_65554_4744830.html?xxgkhide%EF%BC%9D1" target="_blank">    
+	<img src="/picture/0/2204211134435637127.png" border="0"> </a>
+        <img alt="六稳六保征集小程序，公积金手机客户端二维码，微信服务二维码" src="/cms_files/jcms1/web54/site/picture/0/2203011344506603681.jpg" border="0">
+        <div style="height: 19px; line-height: 19px; background-color:#0fcbf6; margin-top: -1px; text-align: center; width: 100%; color: #FFFFFF; font-size: 12px; cursor: pointer;" onClick="$('#low_right').hide()">
+            关 闭
+        </div>
+       
+
+			</div>
+
+			<div id="low_Left" style="right: 10px; top: 381px;">
+				<div style="background-color:#FFFFFF;width:100%;">
+					<script src="/cms_files/jcms1/web54/site/script/0/1809121535302997.js"></script>
+
+				</div>
+			</div>
+		</div>
+	<script src="/cms_files/filemanager/1695/script/juba/jubascript.js?v=6.4.2.1"></script>
+ </div></body>
+	<div style="position:fixed; top: 250px; left: 50%; z-index:999; margin-left: 530px;" id="gjjzhkf">
+    <div align="right"><span onclick="document.getElementById('gjjzhkf').style.display='none';" readlabel="" tabindex="0">关闭</span></div>
+    <a href="https://apollo-access-platform.paas.cmbchina.com/channel/1367/index.html?sign=57c9e9b170d1ad85c95947bfe16aac6cea7f9f369e4aTU79MZ9IW1Hw3080H2Hp2Jn9atQ3wekUu2cedNY1GRX6GeoJ75Z8RcvLm9vuSEvxJN8Pos8b39y9cj2N3n43Y13tlS36kvkQVfK3v16fE0zu4ovHBdKHW4h2f8at3R63V8fw4B8sTO5VBd4EZ18v40lf6D3953UL7xM7zu67MJ95g5JXUK2PB06703E0k6M4HZ2n3nlyC04F1PcyFgr" title="公积金智慧客服" target="_blank"><img src="/cms_files/jcms1/web54/site/picture/0/2405161523146195375.png" /></a>
+    <div style="width: 100%; text-align: center; line-height: 50px; font-size: 16px; color: #333333;">公积金智慧客服</div>
+</div>
+
+</html>

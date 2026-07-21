@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+	
+    <script type="text/javascript" src="/js/jquery.min.js"></script>
+<head>
+
+	<meta charset="UTF-8">
+	<title>Title</title>
+</head>
+<script>
+
+	
+	var postId = '2004306';
+	var dir1 = parseInt(postId / 1000000);
+	var dir2 = parseInt(postId / 1000);
+
+$(function(){
+$.ajax({
+					url: '/postmeta/p/'+dir1+"/"+dir2+"/"+postId+".json",
+					type: "get",
+					dataType: "json",
+					success: function(data) {
+					var gkml_url=data.gkml_url
+						document.location.href = gkml_url;
+					}
+
+				});
+
+   });
+ 
+
+
+</script>
+<body>
+</body>
+</html>

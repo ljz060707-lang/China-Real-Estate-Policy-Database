@@ -1,0 +1,8 @@
+{
+  "requested_url": "http://dg.bendibao.com/news/20161010/content139428.shtm",
+  "final_url": "http://dg.bendibao.com/challenge?return=%2Fnews%2F20161010%2Fcontent139428.shtm&reason=rate",
+  "status_code": 200,
+  "content_type": "text/html; charset=utf-8",
+  "retrieved_at": "2026-07-20T08:37:09.630380+00:00",
+  "response_sha256": "c12e26a222a9c4b4d1b9e2aaaca2e2731cd5735c4a79b6dce4f522a443d4c035"
+}

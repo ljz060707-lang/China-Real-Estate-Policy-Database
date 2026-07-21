@@ -1,0 +1,8 @@
+{
+  "requested_url": "https://www.breaa.cn/newsDetails?current=1&id=1872",
+  "final_url": "https://www.breaa.cn/newsDetails?current=1&id=1872",
+  "status_code": 200,
+  "content_type": "text/html; charset=UTF-8",
+  "retrieved_at": "2026-07-20T08:35:59.005460+00:00",
+  "response_sha256": "c65a307db55ac3a28ccfb51562b4ae1feae85f88523c672e23325afc334f357c"
+}
