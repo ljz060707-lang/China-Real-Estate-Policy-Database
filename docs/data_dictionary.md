@@ -1,5 +1,27 @@
 # 数据字典
 
+## V2 新增事实表
+
+### crawl_source_windows
+
+来源—城市—时间窗的扫描事实。核心字段为 `source_id`、`city_id`、`period_start`、`period_end`、`scan_method`、`coverage_status`、候选/抓取/政策/错误/分页数量、`is_complete` 和 `completion_evidence`。该表是确认零政策的唯一事实依据。
+
+### dedup_decisions
+
+去重与版本判断审计。保存 `dedup_level`、`decision`、原因、分数、阈值、规则版本和证据 JSON；不删除 Raw 或网页版本。
+
+### field_confidence
+
+字段级证据与置信度事实。保存字段值、五个评分分量、原文片段/位置/URL、抽取方法、冲突值、复核标记及 scoring/model/prompt 版本。
+
+## V2 研究视图
+
+- `v_city_month_coverage`：105 城市自 2018 年起的月度覆盖状态；
+- `v_city_month_policy_panel_research_ready`：覆盖不足时政策数为 null，并保留 observed 下界；
+- `v_city_year_policy_panel_research_ready`：只有 12 个月均完整时生成年度正式计数；
+- `v_policy_record_confidence`：记录级置信度、最低字段分和冲突数；
+- `v_dedup_audit`：按层级与决策汇总去重记录。
+
 | 表 | 字段/主键 | 类型 | 可空 | 来源与用途 |
 |---|---|---|---|---|
 | records | record_id | string | 否 | 稳定记录主键 |

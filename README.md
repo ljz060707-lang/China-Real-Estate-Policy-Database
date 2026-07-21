@@ -32,6 +32,21 @@
 
 所有原始数据均只读保存并登记 SHA-256。标准化记录保留来源文件、工作表、原始行号、网页链接和抓取批次，确保每条政策均可追溯、可审核、可重新生成。
 
+## V2 覆盖与质量升级
+
+V2 在 V1 主链路上增量增加来源覆盖证据、L0—L7 分层去重和字段级置信度，不建立平行数据库。它明确区分“确认无政策”和“尚未扫描”：只有完成来源范围与分页核验的 `complete_confirmed_zero` 才写入研究面板的 0，其余覆盖不足月份保持 null。
+
+首次升级请依次运行：
+
+```powershell
+uv run policydb migrate-v2 dry-run
+uv run policydb migrate-v2 apply
+uv run policydb migrate-v2 verify
+uv run policydb confidence build
+```
+
+完整命令、覆盖状态和人工补录方法见 [V2 运维与研究使用指南](docs/v2_operator_guide.md)。当前架构依据见 [V2 当前系统审计](docs/v2_current_system_audit.md)。
+
 ---
 
 ## 核心能力

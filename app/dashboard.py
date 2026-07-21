@@ -20,6 +20,7 @@ from app.geography_panel import (  # noqa: E402
     query_region_panel,
     tianditu_map_html,
 )
+from app.quality_center import render_quality_center  # noqa: E402
 from app.review_center import render_review_center  # noqa: E402
 from app.settings_page import render_settings_page  # noqa: E402
 from app.setup_wizard import needs_initial_setup, render_setup_wizard  # noqa: E402
@@ -72,7 +73,7 @@ PAGE_HEADERS = {
     "时间趋势": ("时间趋势", "观察政策发布频率及其随时间的结构变化。"),
     "地区比较": ("地区比较", "比较不同城市的政策数量与研究覆盖情况。"),
     "专题页面": ("专题研究", "面向供给侧、城市更新、白名单等专题提取研究样本。"),
-    "数据质量": ("数据质量", "集中查看缺失、重复、来源和待审核问题。"),
+    "数据质量": ("覆盖与质量", "区分未扫描、部分覆盖、发现政策和确认零政策，并审计来源、去重与字段证据。"),
     "智能抓取": ("智能抓取", "后台执行来源发现、抓取、解析、复核和报告生成。"),
     "个人设置": ("个人设置", "安全管理模型、地图、搜索和抓取偏好。"),
 }
@@ -508,8 +509,7 @@ elif page == "专题页面":
     frame = db._query(f"SELECT * FROM {views.get(topic, 'v_policy_master')} LIMIT 200")
     safe_dataframe(frame, height=430)
 elif page == "数据质量":
-    safe_dataframe(db._query("SELECT * FROM v_data_quality"))
-    st.info("需要逐条处理的问题，请进入左侧的“人工审核中心”。")
+    render_quality_center(db)
 elif page == "人工审核中心":
     render_review_center(ROOT)
 elif page == "智能抓取":
