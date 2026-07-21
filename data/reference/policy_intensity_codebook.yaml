@@ -1,0 +1,53 @@
+version: "0.1.0-experimental"
+status: experimental
+measurement_names:
+  design: textual_policy_design_intensity
+  implementation: textual_implementation_commitment_intensity
+  calibration: instrument_calibration_intensity
+dimensions:
+  D1:
+    name: objective_specificity
+    weight_equal: 1.0
+    rubric: {0: 无明确目标, 1: 原则性目标, 2: 明确对象或结果, 3: 明确对象且有可核验目标}
+  D2:
+    name: scope
+    weight_equal: 1.0
+    rubric: {0: 范围不明, 1: 仅宽泛范围, 2: 明确地区或对象, 3: 地区对象住房范围均明确}
+  D3:
+    name: integration_coordination
+    weight_equal: 1.0
+    rubric: {0: 无协调, 1: 提及协同, 2: 明确联合主体, 3: 明确主体分工和联动机制}
+  D4:
+    name: resource_commitment
+    weight_equal: 1.0
+    rubric: {0: 无资源承诺, 1: 原则性支持, 2: 明确资源类型, 3: 明确数量额度或配置方式}
+  D5:
+    name: implementation_procedure
+    weight_equal: 1.0
+    rubric: {0: 无实施程序, 1: 仅提出实施, 2: 明确步骤或主体, 3: 步骤主体期限完整}
+  D6:
+    name: monitoring_accountability
+    weight_equal: 1.0
+    rubric: {0: 无监测问责, 1: 原则性监督, 2: 明确监测报告, 3: 明确考核问责和频率}
+  D7:
+    name: bindingness
+    weight_equal: 1.0
+    rubric: {0: 倡议或描述, 1: 鼓励推动, 2: 应当需要, 3: 必须不得严格执行}
+  D8:
+    name: calibration_magnitude
+    weight_equal: 1.0
+    rubric: deterministic_scale
+aggregation:
+  qualitative_weight: 0.75
+  calibration_weight: 0.25
+  exclude_not_applicable: true
+  default_weight_version: equal_v1
+formal_thresholds:
+  action_macro_f1: 0.85
+  instrument_macro_f1: 0.85
+  direction_macro_f1: 0.90
+  numeric_accuracy: 0.95
+  pairing_accuracy: 0.95
+  inter_annotator_kappa: 0.75
+  expert_spearman: 0.80
+

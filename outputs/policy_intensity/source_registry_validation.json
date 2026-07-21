@@ -1,0 +1,12 @@
+{
+  "validated_at": "2026-07-22",
+  "model": "policydb.crawl.models.RegisteredSource",
+  "input": "data/curated/source_registry.parquet",
+  "validation_method": "for each row, select RegisteredSource.model_fields then RegisteredSource.model_validate",
+  "row_count": 816,
+  "valid_count": 816,
+  "invalid_count": 0,
+  "migration_required": false,
+  "raw_modified": false,
+  "errors": []
+}

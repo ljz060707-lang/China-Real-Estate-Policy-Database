@@ -1,0 +1,42 @@
+version: "1.0.0"
+formula: "1-exp(-abs(standardized_change))"
+tools:
+  mortgage_downpayment:
+    unit: percent
+    scale: 0.10
+    lower_value_is: loosening
+    patterns: [首付, 首付款比例, 最低首付款]
+  provident_fund_quota:
+    unit: CNY
+    scale: 500000
+    higher_value_is: loosening
+    patterns: [公积金, 贷款额度]
+  social_security_years:
+    unit: year
+    scale: 2
+    lower_value_is: loosening
+    patterns: [社保, 纳税, 年限]
+  sale_restriction_years:
+    unit: year
+    scale: 2
+    lower_value_is: loosening
+    patterns: [限售, 转让]
+  subsidy_amount:
+    unit: CNY
+    scale: 100000
+    higher_value_is: supportive
+    patterns: [补贴, 奖励]
+  housing_units:
+    unit: unit
+    scale: 1000
+    higher_value_is: supportive
+    patterns: [套, 户]
+  floor_area:
+    unit: square_meter
+    scale: 100000
+    higher_value_is: supportive
+    patterns: [平方米, 万平方米]
+notes:
+  - scale是领域配置，不使用样本最大值归一化。
+  - 百分比在代码中转换为0到1的小数。
+  - 规则无法可靠配对旧值和新值时只保存候选并进入审核。
