@@ -12,7 +12,11 @@ LAYERS = {"daily", "weekly", "monthly", "quarterly"}
 
 def load_update_schedule(settings: Settings | None = None) -> dict:
     settings = settings or Settings.discover()
-    path = settings.root / "config" / "update_schedule.yaml"
+    path = settings.root / "data" / "reference" / "update_schedule.yaml"
+    if not path.exists():
+        legacy = settings.root / "config" / "update_schedule.yaml"
+        if legacy.exists():
+            path = legacy
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
 
@@ -43,4 +47,3 @@ def start_update(layer: str, settings: Settings | None = None) -> dict:
     state = manager.create(build_update_request(layer, settings))
     started = manager.start(state.job_id)
     return {"job_id": state.job_id, "pid": started.pid, "layer": layer, "status": started.status}
-

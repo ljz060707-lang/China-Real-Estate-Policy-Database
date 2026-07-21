@@ -33,7 +33,7 @@ from policydb.source_quality import export_source_audit, unresolved_sources, val
 from policydb.sources import bootstrap_sources_from_excel
 from policydb.transform.collections import build_collection_layer
 from policydb.transform.t4_matching import build_t4_match_candidates
-from policydb.update.v2 import start_update
+from policydb.update.v2 import build_update_request, start_update
 from policydb.validate.quality import validate as validate_db
 
 app = typer.Typer(no_args_is_help=True, help="中国房地产与城市政策研究数据库")
@@ -259,6 +259,14 @@ def sources_matrix(
     typer.echo(json.dumps(export_source_audit(output), ensure_ascii=False, indent=2))
 
 
+@sources_app.command("coverage-matrix")
+def sources_coverage_matrix(
+    output: Annotated[Path, typer.Option("--output")] = Path("outputs/source_matrix.csv"),
+):
+    """兼容 V2 规范名称，输出由唯一来源登记推导的城市—来源矩阵。"""
+    typer.echo(json.dumps(export_source_audit(output), ensure_ascii=False, indent=2))
+
+
 @sources_app.command("unresolved")
 def sources_unresolved():
     typer.echo(unresolved_sources().write_csv())
@@ -337,6 +345,43 @@ def update_monthly():
 @update_app.command("quarterly")
 def update_quarterly():
     _start_layered_update("quarterly")
+
+
+@update_app.command("plan")
+def update_plan(mode: str = typer.Option(..., "--mode")):
+    """只生成轻量计划，不访问网络或创建后台任务。"""
+    request = build_update_request(mode)
+    typer.echo(json.dumps(request.model_dump(mode="json"), ensure_ascii=False, indent=2))
+
+
+@update_app.command("run")
+def update_run(mode: str = typer.Option(..., "--mode")):
+    _start_layered_update(mode)
+
+
+@update_app.command("status")
+def update_status(limit: int = typer.Option(10, "--limit", min=1, max=100)):
+    states = [state.model_dump(mode="json") for state in JobManager().list_states(limit)]
+    typer.echo(json.dumps(states, ensure_ascii=False, indent=2))
+
+
+@update_app.command("report")
+def update_report(run_id: str = typer.Option(..., "--run-id")):
+    manager = JobManager()
+    match = next(
+        (
+            state
+            for state in manager.list_states(limit=1000)
+            if state.run_id == run_id or state.job_id == run_id
+        ),
+        None,
+    )
+    if match is None:
+        raise typer.BadParameter(f"找不到 run/job：{run_id}")
+    report = manager.job_dir(match.job_id) / "report.json"
+    if not report.exists():
+        raise typer.BadParameter(f"报告尚未生成：{report}")
+    typer.echo(report.read_text(encoding="utf-8"))
 
 
 def _date(value: str) -> date:

@@ -1,5 +1,2 @@
-$ErrorActionPreference = "Stop"
-foreach ($Layer in @("daily", "weekly", "monthly", "quarterly")) {
-  schtasks.exe /Delete /F /TN "PolicyDB-V2-$Layer" 2>$null
-}
-
+& (Join-Path $PSScriptRoot "remove_update_schedule.ps1")
+exit $LASTEXITCODE
