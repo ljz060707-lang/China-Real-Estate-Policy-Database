@@ -1,9 +1,12 @@
 {
-  "generated_at": "2026-07-21T17:42:10.048610+00:00",
+  "generated_at": "2026-07-22T02:40:58.754040+00:00",
   "document_sample": 500,
   "clause_sample": 3000,
   "double_coded": 0,
   "adjudicated_gold": 0,
+  "formal_requirement_documents": 500,
+  "formal_requirement_clauses": 3000,
+  "formal_requirement_double_coded_share": 0.2,
   "status": "awaiting_human_annotation",
   "research_ready": false
 }
