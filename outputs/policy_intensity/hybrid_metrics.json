@@ -1,9 +1,7 @@
 {
-  "status": "completed_small_hybrid_pilot",
+  "status": "completed",
   "decisions": 3677,
-  "review_required_in_current_applicable_run": 0,
-  "glm_evidenced_actions": 1,
-  "stored_decision_versions": 3678,
+  "review_required": 0,
   "router_version": "1.0.0",
   "metrics": {},
   "research_ready": false

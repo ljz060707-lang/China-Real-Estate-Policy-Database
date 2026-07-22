@@ -8,4 +8,4 @@
 | baselines | blocked_missing_gold | 不可用 |
 | transformer | blocked_missing_gold | 不可用 |
 | glm | completed_small_pilot | 不可用 |
-| hybrid | completed_small_hybrid_pilot | 不可用 |
+| hybrid | completed | 不可用 |
