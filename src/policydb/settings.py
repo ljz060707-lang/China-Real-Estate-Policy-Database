@@ -138,11 +138,21 @@ class Settings(BaseModel):
 
     @property
     def policy_archive_root(self) -> Path:
+        explicit = os.getenv("CRPD_ARCHIVE_ROOT") or os.getenv(
+            "POLICYDB_ARCHIVE_ROOT"
+        )
+        if explicit:
+            return Path(explicit)
         return Path(
             self._preference(
                 "policy_archive_root", "POLICYDB_ARCHIVE_ROOT", r"D:\Data Set\CRPD"
             )
         )
+
+    @property
+    def archive_root(self) -> Path:
+        """V3 canonical name; keep policy_archive_root for existing callers."""
+        return self.policy_archive_root
 
     @property
     def glm_api_key(self) -> str | None:

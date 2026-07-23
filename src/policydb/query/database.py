@@ -173,6 +173,21 @@ def build_database(
             archive_path_column = (
                 "f.archive_relative_path" if file_join else "NULL::VARCHAR archive_relative_path"
             )
+            pdf_available_column = (
+                "COALESCE(f.has_pdf,false)" if file_join else "false"
+            )
+            legacy_cte = (
+                """, legacy AS (
+                    SELECT record_id,
+                           string_agg(DISTINCT collection_name, '、') AS legacy_collection
+                    FROM record_collections GROUP BY record_id
+                )"""
+                if (settings.curated / "record_collections.parquet").exists()
+                else """, legacy AS (
+                    SELECT record_id,NULL::VARCHAR AS legacy_collection
+                    FROM records WHERE false
+                )"""
+            )
             # One row is one action (or an explicit pending action for a record without
             # extracted actions).  The dashboard reads this view exclusively.
             con.execute(
@@ -200,6 +215,9 @@ def build_database(
                       ON strpos(c.member_document_version_ids, pp.document_version_id) > 0
                     GROUP BY pe.record_id
                 )
+                """
+                + legacy_cte
+                + """
                 SELECT a.action_id,a.record_id,r.title,r.record_date,r.publication_date,
                        r.effective_date,r.official_status,r.official_level,r.source_quality,
                        r.primary_source_url,r.source_sheet,r.source_row,
@@ -223,6 +241,10 @@ def build_database(
                 + archive_path_column
                 + ",i2.duplicate_cluster_id,i2.version_status,"
                 + intensity_columns
+                + ",l.legacy_collection,r.legacy_category source_topic,"
+                + pdf_available_column
+                + """ pdf_available,
+                       length(trim(COALESCE(r.full_text,'')))>0 full_text_available"""
                 + """
                 FROM policy_actions a JOIN records r USING(record_id)
                 JOIN policy_classifications c USING(action_id)
@@ -230,6 +252,7 @@ def build_database(
                 LEFT JOIN geography g USING(record_id)
                 LEFT JOIN issuers i USING(record_id)
                 LEFT JOIN identities i2 USING(record_id)
+                LEFT JOIN legacy l USING(record_id)
                 """
                 + intensity_join
                 + " "
@@ -254,11 +277,16 @@ def build_database(
                 + ""","""
                 + archive_path_column
                 + """,i2.duplicate_cluster_id,i2.version_status,
-                       NULL::DOUBLE policy_intensity,NULL::VARCHAR intensity_status
+                       NULL::DOUBLE policy_intensity,NULL::VARCHAR intensity_status,
+                       l.legacy_collection,r.legacy_category source_topic,"""
+                + pdf_available_column
+                + """ pdf_available,
+                       length(trim(COALESCE(r.full_text,'')))>0 full_text_available
                 FROM records r LEFT JOIN policies p USING(record_id)
                 LEFT JOIN geography g USING(record_id)
                 LEFT JOIN issuers i USING(record_id)
-                LEFT JOIN identities i2 USING(record_id) """
+                LEFT JOIN identities i2 USING(record_id)
+                LEFT JOIN legacy l USING(record_id) """
                 + file_join
                 + """
                 WHERE NOT EXISTS (
