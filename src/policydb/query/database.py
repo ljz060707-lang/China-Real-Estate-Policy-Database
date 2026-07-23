@@ -23,10 +23,41 @@ VIEW_ALIASES = [
 ]
 
 
+def _taxonomy_case(column: str, labels: dict[str, str]) -> str:
+    """Build a small, static SQL CASE expression for dashboard display labels."""
+    clauses = []
+    for code, name in labels.items():
+        safe_code = code.replace("'", "''")
+        safe_name = name.replace("'", "''")
+        clauses.append(f"WHEN {column}='{safe_code}' THEN '{safe_name}'")
+    return "CASE " + " ".join(clauses) + f" ELSE {column} END"
+
+
 def build_database(
     settings: Settings | None = None, *, materialize_geography: bool = True
 ) -> Path:
     settings = settings or Settings.discover()
+    # The dashboard view stores both durable taxonomy codes and human-readable
+    # labels.  Codes remain the join key; labels avoid each page shipping a
+    # second, subtly different category dictionary.
+    from policydb.taxonomy_v2 import load_taxonomy
+
+    # Cloud/read-only rebuild tests intentionally copy only Curated parquet.
+    # Their temporary root has no reference directory, so retain the package
+    # default taxonomy as a read-only fallback rather than making the rebuilt
+    # database dependent on an unrelated local configuration copy.
+    taxonomy_path = settings.root / "data" / "reference" / "policy_taxonomy_v2.yaml"
+    taxonomy = load_taxonomy(settings) if taxonomy_path.exists() else load_taxonomy()
+    primary_labels = {
+        code: item["name"] for code, item in taxonomy["primary_categories"].items()
+    }
+    secondary_labels = {
+        secondary_code: secondary_name
+        for item in taxonomy["primary_categories"].values()
+        for secondary_code, secondary_name in item.get("secondary", {}).items()
+    }
+    primary_label_sql = _taxonomy_case("c.primary_category", primary_labels)
+    secondary_label_sql = _taxonomy_case("c.secondary_category", secondary_labels)
     geography_inputs = (
         settings.curated / "record_jurisdictions.parquet",
         settings.curated / "jurisdictions.parquet",
@@ -121,7 +152,8 @@ def build_database(
             file_join = (
                 "LEFT JOIN (SELECT record_id,"
                 "bool_or(archive_status='archived') has_archived_file,"
-                "bool_or(content_type ILIKE '%pdf%' AND archive_status='archived') has_pdf "
+                "bool_or(content_type ILIKE '%pdf%' AND archive_status='archived') has_pdf,"
+                "min(archive_relative_path) FILTER (WHERE archive_status='archived') archive_relative_path "
                 "FROM policy_files GROUP BY record_id) f USING(record_id)"
                 if (settings.curated / "policy_files.parquet").exists()
                 else ""
@@ -138,21 +170,66 @@ def build_database(
                 if file_join
                 else "false has_archived_file,false has_pdf"
             )
+            archive_path_column = (
+                "f.archive_relative_path" if file_join else "NULL::VARCHAR archive_relative_path"
+            )
+            # One row is one action (or an explicit pending action for a record without
+            # extracted actions).  The dashboard reads this view exclusively.
             con.execute(
                 """CREATE OR REPLACE VIEW v_policy_action_center AS
+                WITH geography AS (
+                    SELECT record_id,
+                           min(province_name) AS province,
+                           min(COALESCE(parent_city_name, city_name)) AS city,
+                           min(county_name) AS district,
+                           string_agg(DISTINCT geography_original, '、') AS applicable_jurisdiction
+                    FROM record_geographies_normalized GROUP BY record_id
+                ), issuers AS (
+                    SELECT ro.record_id,
+                           min(o.name_standardized) FILTER (WHERE ro.role IN ('issuer','co_issuer')) AS original_issuer,
+                           string_agg(DISTINCT o.name_standardized, '、') FILTER (WHERE ro.role IN ('issuer','co_issuer')) AS publication_issuer
+                    FROM record_organizations ro JOIN organizations o USING(organization_id)
+                    GROUP BY ro.record_id
+                ), identities AS (
+                    SELECT pe.record_id,min(pe.policy_entity_id) AS policy_entity_id,
+                           min(pe.entity_status) AS version_status,
+                           min(c.cluster_id) AS duplicate_cluster_id
+                    FROM policy_entities pe
+                    LEFT JOIN policy_publications pp USING(record_id)
+                    LEFT JOIN policy_duplicate_clusters c
+                      ON strpos(c.member_document_version_ids, pp.document_version_id) > 0
+                    GROUP BY pe.record_id
+                )
                 SELECT a.action_id,a.record_id,r.title,r.record_date,r.publication_date,
                        r.effective_date,r.official_status,r.official_level,r.source_quality,
                        r.primary_source_url,r.source_sheet,r.source_row,
                        a.clause_text,a.text_completeness,a.formal_eligible,
-                       c.primary_category,c.secondary_category,c.instrument_type,
-                       c.direction,c.confidence,c.evidence_text,c.evidence_start,c.evidence_end,
-                       c.review_status,"""
+                       c.primary_category AS primary_category_code,
+                       """
+                + primary_label_sql
+                + """ AS primary_category_name,
+                       c.secondary_category AS secondary_category_code,
+                       """
+                + secondary_label_sql
+                + """ AS secondary_category_name,
+                       c.instrument_type,c.direction,p.target_group AS target_actor,
+                       a.action_status AS lifecycle_stage,
+                       g.province,g.city,g.district,i.original_issuer,i.publication_issuer,
+                       g.applicable_jurisdiction,c.evidence_text AS evidence_excerpt,
+                       c.confidence,c.evidence_start,c.evidence_end,c.review_status,
+                       """
                 + file_columns
                 + ","
+                + archive_path_column
+                + ",i2.duplicate_cluster_id,i2.version_status,"
                 + intensity_columns
                 + """
                 FROM policy_actions a JOIN records r USING(record_id)
                 JOIN policy_classifications c USING(action_id)
+                LEFT JOIN policies p USING(record_id)
+                LEFT JOIN geography g USING(record_id)
+                LEFT JOIN issuers i USING(record_id)
+                LEFT JOIN identities i2 USING(record_id)
                 """
                 + intensity_join
                 + " "
@@ -165,14 +242,23 @@ def build_database(
                        r.summary clause_text,
                        CASE WHEN length(COALESCE(r.full_text,''))>=200
                             THEN 'partial_official_text' ELSE 'missing_text' END text_completeness,
-                       false formal_eligible,NULL::VARCHAR primary_category,
-                       NULL::VARCHAR secondary_category,NULL::VARCHAR instrument_type,
-                       r.direction,0.0 confidence,NULL::VARCHAR evidence_text,
-                       NULL::BIGINT evidence_start,NULL::BIGINT evidence_end,
+                       false formal_eligible,NULL::VARCHAR primary_category_code,
+                       NULL::VARCHAR primary_category_name,NULL::VARCHAR secondary_category_code,
+                       NULL::VARCHAR secondary_category_name,NULL::VARCHAR instrument_type,
+                       r.direction,p.target_group AS target_actor,NULL::VARCHAR lifecycle_stage,
+                       g.province,g.city,g.district,i.original_issuer,i.publication_issuer,
+                       g.applicable_jurisdiction,NULL::VARCHAR evidence_excerpt,
+                       0.0 confidence,NULL::BIGINT evidence_start,NULL::BIGINT evidence_end,
                        'pending' review_status,"""
                 + file_columns
-                + """,NULL::DOUBLE policy_intensity,NULL::VARCHAR intensity_status
-                FROM records r """
+                + ""","""
+                + archive_path_column
+                + """,i2.duplicate_cluster_id,i2.version_status,
+                       NULL::DOUBLE policy_intensity,NULL::VARCHAR intensity_status
+                FROM records r LEFT JOIN policies p USING(record_id)
+                LEFT JOIN geography g USING(record_id)
+                LEFT JOIN issuers i USING(record_id)
+                LEFT JOIN identities i2 USING(record_id) """
                 + file_join
                 + """
                 WHERE NOT EXISTS (

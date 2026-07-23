@@ -1267,3 +1267,13 @@ uv run policydb schedule remove-windows --confirm
 - `docs/coverage_completeness_methodology.md`
 - `docs/automatic_update_operator_guide.md`
 - `docs/ai_first_system_acceptance.md`
+
+### Dashboard policy center
+
+The ordinary dashboard navigation is deliberately limited to six routes:
+`数据总览`、`政策中心`、`自动更新与完整性`、`数据质量`、`人工审核` and `个人设置`.
+`政策中心` is the single working surface for filtering, statistics, the paginated policy table,
+source archive status, full text and export. It reads the action-level DuckDB view
+`v_policy_action_center`; legacy collections remain data lineage only and are not a second
+front-end classification system. The design review is recorded in
+[`docs/dashboard_fidelity_review.md`](docs/dashboard_fidelity_review.md).

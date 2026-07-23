@@ -361,7 +361,7 @@ def _render_reports(settings: Settings, manager: JobManager) -> None:
     st.caption(f"完整 CSV 报告目录：{output}")
 
 
-def render_crawl_center(root: str | Path | None = None) -> None:
+def render_crawl_section(root: str | Path | None, section: str) -> None:
     settings = Settings.discover(root)
     manager = JobManager(settings)
     if "active_crawl_job" not in st.session_state:
@@ -379,20 +379,23 @@ def render_crawl_center(root: str | Path | None = None) -> None:
     registry = settings.root / "data" / "reference" / "source_registry.yaml"
     sources = _cached_sources(str(settings.root), registry.stat().st_mtime_ns)
     configuration = _cached_configuration(str(settings.root))
-    st.title("智能抓取")
+    if section == "运行状态":
+        _configuration_cards(configuration, sources)
+        _render_new_job(settings, manager, sources, configuration)
+    elif section == "来源管理":
+        _render_sources(settings, manager, sources)
+    elif section == "运行历史":
+        _render_history(manager)
+    elif section == "抓取报告":
+        _render_reports(settings, manager)
+
+
+def render_crawl_center(root: str | Path | None = None) -> None:
     st.caption("选择模式、设置范围并启动后台任务；页面刷新后仍可恢复进度和报告。")
-    _configuration_cards(configuration, sources)
     view = st.segmented_control(
         "抓取中心视图",
-        ["新建任务", "来源管理", "运行历史", "抓取报告"],
-        default="新建任务",
+        ["运行状态", "来源管理", "运行历史", "抓取报告"],
+        default="运行状态",
         label_visibility="collapsed",
     )
-    if view == "新建任务":
-        _render_new_job(settings, manager, sources, configuration)
-    elif view == "来源管理":
-        _render_sources(settings, manager, sources)
-    elif view == "运行历史":
-        _render_history(manager)
-    else:
-        _render_reports(settings, manager)
+    render_crawl_section(root, view or "运行状态")
