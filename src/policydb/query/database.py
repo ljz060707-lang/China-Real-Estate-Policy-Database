@@ -112,6 +112,73 @@ def build_database(
                    string_agg(DISTINCT t.term_name, '、') AS topics
             FROM records r LEFT JOIN record_jurisdictions g USING(record_id)
             LEFT JOIN record_terms t USING(record_id) GROUP BY ALL""")
+        if (settings.curated / "policy_classifications.parquet").exists():
+            intensity_join = (
+                "LEFT JOIN policy_intensity_scores s USING(action_id)"
+                if (settings.curated / "policy_intensity_scores.parquet").exists()
+                else ""
+            )
+            file_join = (
+                "LEFT JOIN (SELECT record_id,"
+                "bool_or(archive_status='archived') has_archived_file,"
+                "bool_or(content_type ILIKE '%pdf%' AND archive_status='archived') has_pdf "
+                "FROM policy_files GROUP BY record_id) f USING(record_id)"
+                if (settings.curated / "policy_files.parquet").exists()
+                else ""
+            )
+            intensity_columns = (
+                "s.quality_adjusted_intensity policy_intensity,"
+                "s.formal_status intensity_status"
+                if intensity_join
+                else "NULL::DOUBLE policy_intensity,NULL::VARCHAR intensity_status"
+            )
+            file_columns = (
+                "COALESCE(f.has_archived_file,false) has_archived_file,"
+                "COALESCE(f.has_pdf,false) has_pdf"
+                if file_join
+                else "false has_archived_file,false has_pdf"
+            )
+            con.execute(
+                """CREATE OR REPLACE VIEW v_policy_action_center AS
+                SELECT a.action_id,a.record_id,r.title,r.record_date,r.publication_date,
+                       r.effective_date,r.official_status,r.official_level,r.source_quality,
+                       r.primary_source_url,r.source_sheet,r.source_row,
+                       a.clause_text,a.text_completeness,a.formal_eligible,
+                       c.primary_category,c.secondary_category,c.instrument_type,
+                       c.direction,c.confidence,c.evidence_text,c.evidence_start,c.evidence_end,
+                       c.review_status,"""
+                + file_columns
+                + ","
+                + intensity_columns
+                + """
+                FROM policy_actions a JOIN records r USING(record_id)
+                JOIN policy_classifications c USING(action_id)
+                """
+                + intensity_join
+                + " "
+                + file_join
+                + """
+                UNION ALL
+                SELECT 'RECORD:'||r.record_id action_id,r.record_id,r.title,r.record_date,
+                       r.publication_date,r.effective_date,r.official_status,r.official_level,
+                       r.source_quality,r.primary_source_url,r.source_sheet,r.source_row,
+                       r.summary clause_text,
+                       CASE WHEN length(COALESCE(r.full_text,''))>=200
+                            THEN 'partial_official_text' ELSE 'missing_text' END text_completeness,
+                       false formal_eligible,NULL::VARCHAR primary_category,
+                       NULL::VARCHAR secondary_category,NULL::VARCHAR instrument_type,
+                       r.direction,0.0 confidence,NULL::VARCHAR evidence_text,
+                       NULL::BIGINT evidence_start,NULL::BIGINT evidence_end,
+                       'pending' review_status,"""
+                + file_columns
+                + """,NULL::DOUBLE policy_intensity,NULL::VARCHAR intensity_status
+                FROM records r """
+                + file_join
+                + """
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM policy_actions a WHERE a.record_id=r.record_id
+                )"""
+            )
         con.execute(
             "CREATE OR REPLACE VIEW v_policy_topic_long AS SELECT r.record_id,r.record_date,r.title,t.* FROM records r JOIN record_terms t USING(record_id)"
         )

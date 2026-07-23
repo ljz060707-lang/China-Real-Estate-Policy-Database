@@ -80,7 +80,7 @@ def _start(manager: JobManager, request: CrawlJobRequest) -> bool:
 
 def _configuration_cards(configuration: dict[str, bool], sources) -> None:
     cards = [
-        ("GLM", "已配置" if configuration["glm"] else "未配置"),
+        ("AI服务", "已配置" if configuration["ai"] else "未配置"),
         ("天地图", "已配置" if configuration["tianditu"] else "未配置"),
         ("搜索服务", "已配置" if configuration["search"] else "未配置"),
         ("官方来源", sum(source.crawl_enabled and source.official_status in {"official", "official_reprint"} for source in sources)),
@@ -153,7 +153,7 @@ def _render_new_job(
     max_candidates = int(limits[0].number_input("最大候选数", min_value=1, max_value=100000, value=200))
     max_fetches = int(limits[1].number_input("最大抓取数", min_value=1, max_value=10000, value=5 if mode == "seed_backtrack" else 100))
     options = st.columns(3)
-    run_glm = options[0].checkbox("抓取后运行GLM", value=configuration["glm"])
+    run_glm = options[0].checkbox("抓取后运行AI", value=configuration["ai"])
     verify = options[1].checkbox("执行第二轮自动复核", value=True)
     rebuild = options[2].checkbox("完成后重建数据库", value=True)
     validate = st.checkbox("完成后执行 validate", value=True)
@@ -161,8 +161,8 @@ def _render_new_job(
         "处理深度",
         [
             "仅抓取并暂存",
-            "抓取＋GLM解析",
-            "抓取＋GLM＋复核",
+            "抓取＋AI解析",
+            "抓取＋AI＋独立复核",
             "完整处理并重建数据库",
         ],
         index=3,

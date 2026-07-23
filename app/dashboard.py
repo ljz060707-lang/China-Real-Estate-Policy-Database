@@ -21,6 +21,7 @@ from app.geography_panel import (  # noqa: E402
     tianditu_map_html,
 )
 from app.intensity_panel import render_intensity_panel  # noqa: E402
+from app.policy_center import render_policy_center  # noqa: E402
 from app.quality_center import render_quality_center  # noqa: E402
 from app.review_center import render_review_center  # noqa: E402
 from app.settings_page import render_settings_page  # noqa: E402
@@ -53,6 +54,7 @@ page = st.sidebar.radio(
     "页面",
     [
         "数据总览",
+        "政策中心",
         "政策体系",
         "105城市",
         "政策检索",
@@ -69,6 +71,7 @@ page = st.sidebar.radio(
 
 PAGE_HEADERS = {
     "数据总览": ("数据总览", "覆盖政策记录、地域范围、来源质量与人工审核状态。"),
+    "政策中心": ("统一政策中心", "以政策动作为最小单元，联动检索分类、证据、强度、原文与附件。"),
     "政策体系": ("七大政策体系", "按部门职责与研究用途浏览七大库及其细分类；一条政策可归入多个体系。"),
     "105城市": ("105个大城市政策覆盖", "基于2020年第七次人口普查大城市范围，观察2018年至今城市政策覆盖与来源质量。"),
     "政策检索": ("政策检索", "按关键词、地区和官方来源快速定位政策记录。"),
@@ -105,6 +108,8 @@ if page == "数据总览":
     ]
     for column, (label, value) in zip(st.columns(5), cards, strict=True):
         column.metric(label, value)
+elif page == "政策中心":
+    render_policy_center(db)
 elif page == "政策体系":
     summary = safe_pandas(db._query("SELECT * FROM v_policy_library_summary"))
     collections = summary[["collection_code", "collection_name"]].drop_duplicates()

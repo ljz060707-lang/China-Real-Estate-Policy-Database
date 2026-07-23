@@ -10,6 +10,7 @@ def test_dashboard_pages_render_without_exceptions(root):
     assert "数据总览" in labels
 
     for page in (
+        "政策中心",
         "政策体系",
         "105城市",
         "政策检索",
