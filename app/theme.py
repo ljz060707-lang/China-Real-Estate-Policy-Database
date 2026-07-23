@@ -18,6 +18,7 @@ def apply_academic_theme() -> None:
         .block-container { max-width:1600px; padding:1.4rem 1.5rem 2.4rem; }
         [data-testid="stHeader"] { background:#FFFFFF; border-bottom:1px solid var(--line); }
         [data-testid="stSidebar"] { background:#FFFFFF; border-right:1px solid var(--line); }
+        [data-testid="stSidebarNav"] { display:none !important; }
         [data-testid="stSidebar"] > div:first-child { padding:1rem .75rem; }
         .academic-brand { padding:.3rem .45rem 1rem; margin-bottom:.7rem; border-bottom:2px solid var(--primary-900); }
         .academic-brand strong { display:block; color:var(--primary-900); font-size:1.05rem; font-weight:700; }

@@ -11,6 +11,9 @@ fastReruns = false
 [browser]
 gatherUsageStats = false
 
+[client]
+showSidebarNavigation = false
+
 [theme]
 base = "light"
 primaryColor = "#82318E"
