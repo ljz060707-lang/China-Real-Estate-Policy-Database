@@ -1,5 +1,5 @@
 version: 2
-generated_at: '2026-07-22T10:42:04.086512+00:00'
+generated_at: '2026-07-23T07:30:27.025464+00:00'
 source_count: 42
 sources:
 - source_id: SRC_404201CEEE840150
@@ -31,7 +31,7 @@ sources:
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:04:01.914266Z'
+  last_health_at: '2026-07-23T06:55:01.500200+00:00'
   last_error: ConnectError
   city_ids:
   - CITY_110000
@@ -82,7 +82,7 @@ sources:
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:04:21.579490Z'
+  last_health_at: '2026-07-23T06:55:13.991507+00:00'
   last_error: ConnectError
   city_ids:
   - CITY_510100
@@ -132,8 +132,8 @@ sources:
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:04:47.950039Z'
-  last_error: ConnectTimeout
+  last_health_at: '2026-07-23T06:55:26.792652+00:00'
+  last_error: ConnectError
   city_ids:
   - CITY_510100
   province_codes:
@@ -180,7 +180,7 @@ sources:
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:05:06.476605Z'
+  last_health_at: '2026-07-23T06:55:40.521158+00:00'
   last_error: ConnectError
   city_ids:
   - CITY_320100
@@ -228,7 +228,7 @@ sources:
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:05:25.473524Z'
+  last_health_at: '2026-07-23T06:55:56.332188+00:00'
   last_error: ConnectError
   city_ids:
   - CITY_210100
@@ -279,8 +279,8 @@ sources:
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:05:52.248557Z'
-  last_error: ConnectTimeout
+  last_health_at: '2026-07-23T06:56:11.745225+00:00'
+  last_error: ConnectError
   city_ids:
   - CITY_330100
   province_codes:
@@ -329,7 +329,7 @@ sources:
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:06:14.047652Z'
+  last_health_at: '2026-07-23T06:56:24.804408+00:00'
   last_error: ConnectError
   city_ids:
   - CITY_310000
@@ -381,7 +381,7 @@ sources:
   rate_limit: 0.5
   source_health_score: 25.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:06:38.081098Z'
+  last_health_at: '2026-07-23T06:56:37.607292+00:00'
   last_error: Http5xx
   city_ids: []
   province_codes: []
@@ -419,7 +419,7 @@ sources:
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:06:59.231704Z'
+  last_health_at: '2026-07-23T06:56:50.611577+00:00'
   last_error: ConnectError
   city_ids:
   - CITY_320100
@@ -466,7 +466,7 @@ sources:
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:07:18.673289Z'
+  last_health_at: '2026-07-23T06:57:04.741009+00:00'
   last_error: ConnectError
   city_ids:
   - CITY_110000
@@ -512,7 +512,7 @@ sources:
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:07:42.243666Z'
+  last_health_at: '2026-07-23T06:57:18.197090+00:00'
   last_error: ConnectError
   city_ids:
   - CITY_330100
@@ -563,7 +563,7 @@ sources:
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:08:00.519765Z'
+  last_health_at: '2026-07-23T06:57:30.739717+00:00'
   last_error: ConnectError
   city_ids:
   - CITY_320100
@@ -606,7 +606,7 @@ sources:
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:08:19.860371Z'
+  last_health_at: '2026-07-23T06:57:44.568874+00:00'
   last_error: ConnectError
   city_ids:
   - CITY_420100
@@ -657,7 +657,7 @@ sources:
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:08:40.546147Z'
+  last_health_at: '2026-07-23T06:57:57.155491+00:00'
   last_error: ConnectError
   city_ids:
   - CITY_510100
@@ -709,7 +709,7 @@ sources:
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:09:03.187165Z'
+  last_health_at: '2026-07-23T06:58:10.727286+00:00'
   last_error: ConnectError
   city_ids:
   - CITY_230100
@@ -761,7 +761,7 @@ sources:
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:09:20.318975Z'
+  last_health_at: '2026-07-23T06:58:24.442066+00:00'
   last_error: ConnectError
   city_ids:
   - CITY_320100
@@ -806,7 +806,7 @@ sources:
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:09:37.989752Z'
+  last_health_at: '2026-07-23T06:58:38.997944+00:00'
   last_error: ConnectError
   city_ids:
   - CITY_450100
@@ -850,7 +850,7 @@ sources:
   rate_limit: 0.5
   source_health_score: 0.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:11:16.366083Z'
+  last_health_at: '2026-07-23T07:00:42.081632+00:00'
   last_error: ReadTimeout
   city_ids:
   - CITY_450100
@@ -897,7 +897,7 @@ sources:
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:11:34.854578Z'
+  last_health_at: '2026-07-23T07:00:55.337886+00:00'
   last_error: ConnectError
   city_ids:
   - CITY_310000
@@ -945,7 +945,7 @@ sources:
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:12:01.448248Z'
+  last_health_at: '2026-07-23T07:01:08.090264+00:00'
   last_error: ConnectError
   city_ids:
   - CITY_210100
@@ -987,7 +987,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
+  source_health_score: 35.0
   recommended_enabled: false
+  last_health_at: '2026-07-23T07:01:51.166751+00:00'
+  last_error: ConnectTimeout
   city_ids:
   - CITY_310000
   province_codes:
@@ -1030,7 +1033,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
+  source_health_score: 35.0
   recommended_enabled: false
+  last_health_at: '2026-07-23T07:02:03.853700+00:00'
+  last_error: ConnectError
   city_ids:
   - CITY_130100
   province_codes:
@@ -1069,7 +1075,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  recommended_enabled: false
+  source_health_score: 100.0
+  recommended_enabled: true
+  last_health_at: '2026-07-23T07:02:08.485138+00:00'
   city_ids:
   - CITY_130100
   province_codes:
@@ -1110,7 +1118,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
+  source_health_score: 35.0
   recommended_enabled: false
+  last_health_at: '2026-07-23T07:02:21.764100+00:00'
+  last_error: ConnectError
   city_ids:
   - CITY_210100
   province_codes:
@@ -1154,7 +1165,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
+  source_health_score: 35.0
   recommended_enabled: false
+  last_health_at: '2026-07-23T07:02:34.514358+00:00'
+  last_error: ConnectError
   city_ids:
   - CITY_420100
   province_codes:
@@ -1194,7 +1208,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
+  source_health_score: 35.0
   recommended_enabled: false
+  last_health_at: '2026-07-23T07:02:47.575347+00:00'
+  last_error: ConnectError
   city_ids:
   - CITY_330100
   province_codes:
@@ -1237,7 +1254,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
+  source_health_score: 35.0
   recommended_enabled: false
+  last_health_at: '2026-07-23T07:03:00.867227+00:00'
+  last_error: ConnectError
   city_ids:
   - CITY_450100
   province_codes:
@@ -1278,7 +1298,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
+  source_health_score: 35.0
   recommended_enabled: false
+  last_health_at: '2026-07-23T07:03:14.389877+00:00'
+  last_error: ConnectError
   city_ids:
   - CITY_130100
   province_codes:
@@ -1334,7 +1357,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
+  source_health_score: 35.0
   recommended_enabled: false
+  last_health_at: '2026-07-23T07:05:17.418704+00:00'
+  last_error: ConnectError
   city_ids:
   - CITY_110000
   province_codes:
@@ -1372,7 +1398,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
+  source_health_score: 35.0
   recommended_enabled: false
+  last_health_at: '2026-07-23T07:07:20.447877+00:00'
+  last_error: ConnectError
   city_ids:
   - CITY_110000
   province_codes:
@@ -1410,7 +1439,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
+  source_health_score: 35.0
   recommended_enabled: false
+  last_health_at: '2026-07-23T07:09:23.487751+00:00'
+  last_error: ConnectError
   city_ids:
   - CITY_310000
   province_codes:
@@ -1451,7 +1483,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
+  source_health_score: 35.0
   recommended_enabled: false
+  last_health_at: '2026-07-23T07:11:26.535215+00:00'
+  last_error: ConnectError
   city_ids:
   - CITY_420100
   province_codes:
@@ -1489,7 +1524,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
+  source_health_score: 35.0
   recommended_enabled: false
+  last_health_at: '2026-07-23T07:13:29.554417+00:00'
+  last_error: ConnectError
   city_ids:
   - CITY_420100
   province_codes:
@@ -1527,7 +1565,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
+  source_health_score: 35.0
   recommended_enabled: false
+  last_health_at: '2026-07-23T07:15:32.597146+00:00'
+  last_error: ConnectError
   city_ids:
   - CITY_510100
   province_codes:
@@ -1565,7 +1606,10 @@ sources:
   crawl_enabled: true
   priority: 1
   rate_limit: 0.2
+  source_health_score: 35.0
   recommended_enabled: false
+  last_health_at: '2026-07-23T07:17:05.614963+00:00'
+  last_error: ConnectError
   city_ids:
   - CITY_330100
   province_codes:
@@ -1604,7 +1648,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
+  source_health_score: 35.0
   recommended_enabled: false
+  last_health_at: '2026-07-23T07:19:08.656707+00:00'
+  last_error: ConnectError
   city_ids:
   - CITY_210100
   province_codes:
@@ -1642,7 +1689,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
+  source_health_score: 35.0
   recommended_enabled: false
+  last_health_at: '2026-07-23T07:21:11.675134+00:00'
+  last_error: ConnectError
   city_ids:
   - CITY_230100
   province_codes:
@@ -1680,7 +1730,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
+  source_health_score: 35.0
   recommended_enabled: false
+  last_health_at: '2026-07-23T07:23:14.759796+00:00'
+  last_error: ReadTimeout
   city_ids:
   - CITY_230100
   province_codes:
@@ -1718,7 +1771,10 @@ sources:
   crawl_enabled: true
   priority: 1
   rate_limit: 0.2
+  source_health_score: 35.0
   recommended_enabled: false
+  last_health_at: '2026-07-23T07:24:47.784003+00:00'
+  last_error: ConnectError
   city_ids:
   - CITY_230100
   province_codes:
@@ -1756,7 +1812,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
+  source_health_score: 35.0
   recommended_enabled: false
+  last_health_at: '2026-07-23T07:26:50.821059+00:00'
+  last_error: ConnectError
   city_ids:
   - CITY_450100
   province_codes:
@@ -1794,7 +1853,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
+  source_health_score: 35.0
   recommended_enabled: false
+  last_health_at: '2026-07-23T07:28:53.854065+00:00'
+  last_error: ConnectError
   city_ids:
   - CITY_450100
   province_codes:
@@ -1832,7 +1894,10 @@ sources:
   crawl_enabled: true
   priority: 1
   rate_limit: 0.2
+  source_health_score: 35.0
   recommended_enabled: false
+  last_health_at: '2026-07-23T07:30:26.875974+00:00'
+  last_error: ConnectError
   city_ids:
   - CITY_130100
   province_codes:
