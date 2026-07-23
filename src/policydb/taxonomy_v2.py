@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 from datetime import UTC, datetime
+
 import polars as pl
 import yaml
 
