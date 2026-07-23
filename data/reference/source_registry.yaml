@@ -1,5 +1,5 @@
 version: 2
-generated_at: '2026-07-22T10:12:01.650684+00:00'
+generated_at: '2026-07-22T10:42:04.086512+00:00'
 source_count: 42
 sources:
 - source_id: SRC_404201CEEE840150
@@ -26,12 +26,12 @@ sources:
   - https://www.beijing.gov.cn/zhengce/
   - https://www.beijing.gov.cn/zhengce/zhengcefagui/
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:04:01.914266+00:00'
+  last_health_at: '2026-07-22T10:04:01.914266Z'
   last_error: ConnectError
   city_ids:
   - CITY_110000
@@ -52,7 +52,7 @@ sources:
   agency_name: 北京市人民政府
   notes: 官网可见政府文件及2000年以来政府公报入口。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
@@ -77,12 +77,12 @@ sources:
   - https://cdzfgjj.chengdu.gov.cn/cdgjj/c1156367/common_list.shtml
   - https://cdzfgjj.chengdu.gov.cn/cdgjj/c1156368/common_list.shtml
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:04:21.579490+00:00'
+  last_health_at: '2026-07-22T10:04:21.579490Z'
   last_error: ConnectError
   city_ids:
   - CITY_510100
@@ -102,7 +102,7 @@ sources:
   agency_name: 成都住房公积金管理中心
   notes: 中心官方域名及多类政策分类已确认；列表模板须来源体检。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
@@ -127,12 +127,12 @@ sources:
   - https://cdzj.chengdu.gov.cn/cdzj/c131968/common_list.shtml
   - https://cdzj.chengdu.gov.cn/cdzj/c150804/common_list.shtml
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:04:47.950039+00:00'
+  last_health_at: '2026-07-22T10:04:47.950039Z'
   last_error: ConnectTimeout
   city_ids:
   - CITY_510100
@@ -152,7 +152,7 @@ sources:
   agency_name: 成都市住房和城乡建设局
   notes: 官方域名及历史政策分类已确认；列表路径仍须来源体检。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
@@ -175,12 +175,12 @@ sources:
   - https://fcj.nanjing.gov.cn/ztzl/fwgl/zcfg/
   - https://fcj.nanjing.gov.cn/ztzl/wygl/zcfg/
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:05:06.476605+00:00'
+  last_health_at: '2026-07-22T10:05:06.476605Z'
   last_error: ConnectError
   city_ids:
   - CITY_320100
@@ -200,7 +200,7 @@ sources:
   agency_name: 南京市住房保障和房产局
   notes: 政府文件及住房保障、房屋管理、物业政策栏目已核验。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
@@ -223,12 +223,12 @@ sources:
   - https://fcj.shenyang.gov.cn/zwgkzdgz/fdzdgknr/bmwj/
   - https://fcj.shenyang.gov.cn/ggxx/
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:05:25.473524+00:00'
+  last_health_at: '2026-07-22T10:05:25.473524Z'
   last_error: ConnectError
   city_ids:
   - CITY_210100
@@ -248,7 +248,7 @@ sources:
   agency_name: 沈阳市房产局
   notes: 部门文件和公共信息入口已确认。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
@@ -274,12 +274,12 @@ sources:
   - https://fgj.hangzhou.gov.cn/col/col1229265248/index.html
   - https://fgj.hangzhou.gov.cn/col/col1229265366/index.html
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:05:52.248557+00:00'
+  last_health_at: '2026-07-22T10:05:52.248557Z'
   last_error: ConnectTimeout
   city_ids:
   - CITY_330100
@@ -299,7 +299,7 @@ sources:
   agency_name: 杭州市住房保障和房产管理局
   notes: 官方域名和历史政策分类已确认；分页完整性仍由真实扫描证明。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
@@ -324,12 +324,12 @@ sources:
   - https://fgj.sh.gov.cn/gfxwj/index.html
   - https://fgj.sh.gov.cn/fdcsc/index.html
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:06:14.047652+00:00'
+  last_health_at: '2026-07-22T10:06:14.047652Z'
   last_error: ConnectError
   city_ids:
   - CITY_310000
@@ -349,7 +349,7 @@ sources:
   agency_name: 上海市房屋管理局
   notes: 主动公开、规范性文件及房地产市场栏目已核验。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
@@ -376,12 +376,12 @@ sources:
   - http://fgj.wuhan.gov.cn/xxgk/zcfgyjd_1/zcjd/202307/t20230718_2232939.shtml
   list_page_urls: []
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.5
   source_health_score: 25.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:06:38.081098+00:00'
+  last_health_at: '2026-07-22T10:06:38.081098Z'
   last_error: Http5xx
   city_ids: []
   province_codes: []
@@ -401,7 +401,7 @@ sources:
     房地产政策目录!G2911；T1 房地产政策目录!G2927；T1 房地产政策目录!G795；旧房管局域名，已由武汉市住房和城市更新局 zgj.wuhan.gov.cn
     替代。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
   verification_status: deprecated
 - source_id: SRC_F2CA191CAA3DC577
   source_name: 南京市规划和自然资源局
@@ -414,12 +414,12 @@ sources:
   list_page_urls:
   - https://ghj.nanjing.gov.cn/njsgtzyj/214/224/index_18071.html
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:06:59.231704+00:00'
+  last_health_at: '2026-07-22T10:06:59.231704Z'
   last_error: ConnectError
   city_ids:
   - CITY_320100
@@ -439,7 +439,7 @@ sources:
   agency_name: 南京市规划和自然资源局
   notes: 部门文件栏目已核验。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
@@ -461,12 +461,12 @@ sources:
   - https://gjj.beijing.gov.cn/web/zwgk61/2024zcwj/436433464/436433466/index.html
   - https://gjj.beijing.gov.cn/web/zwgk61/2024zcwj/436433464/436433467/index.html
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:07:18.673289+00:00'
+  last_health_at: '2026-07-22T10:07:18.673289Z'
   last_error: ConnectError
   city_ids:
   - CITY_110000
@@ -486,7 +486,7 @@ sources:
   agency_name: 北京住房公积金管理中心
   notes: 已核验管委会、综合、归集和贷款政策列表。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
@@ -507,12 +507,12 @@ sources:
   - https://gjj.hangzhou.gov.cn/col/col1229287759/index.html
   - https://gjj.hangzhou.gov.cn/col/col1229287760/index.html
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:07:42.243666+00:00'
+  last_health_at: '2026-07-22T10:07:42.243666Z'
   last_error: ConnectError
   city_ids:
   - CITY_330100
@@ -532,7 +532,7 @@ sources:
   agency_name: 杭州住房公积金管理中心
   notes: 公积金政策分类路径由既有官方正文反推，需来源体检确认列表模板。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
@@ -558,12 +558,12 @@ sources:
   - https://gjj.nanjing.gov.cn/zcfg/tql/
   - https://gjj.nanjing.gov.cn/zcfg/dkl/
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:08:00.519765+00:00'
+  last_health_at: '2026-07-22T10:08:00.519765Z'
   last_error: ConnectError
   city_ids:
   - CITY_320100
@@ -583,7 +583,7 @@ sources:
   agency_name: 南京住房公积金管理中心
   notes: 综合、缴存、提取和贷款政策栏目已核验。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
@@ -601,12 +601,12 @@ sources:
   list_page_urls:
   - https://gjj.wuhan.gov.cn/zwgk/
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:08:19.860371+00:00'
+  last_health_at: '2026-07-22T10:08:19.860371Z'
   last_error: ConnectError
   city_ids:
   - CITY_420100
@@ -626,7 +626,7 @@ sources:
   agency_name: 武汉住房公积金管理中心
   notes: 政府信息公开与公积金政策来源已核验。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
@@ -652,12 +652,12 @@ sources:
   list_page_urls:
   - https://gk.chengdu.gov.cn/
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:08:40.546147+00:00'
+  last_health_at: '2026-07-22T10:08:40.546147Z'
   last_error: ConnectError
   city_ids:
   - CITY_510100
@@ -677,7 +677,7 @@ sources:
   agency_name: 成都市政府信息公开平台
   notes: 原有政策正文来自成都市政府信息公开平台；需本地健康检查确认当前检索接口。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
@@ -704,12 +704,12 @@ sources:
   list_page_urls:
   - https://www.harbin.gov.cn/haerbin/c108867/common_list.shtml
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:09:03.187165+00:00'
+  last_health_at: '2026-07-22T10:09:03.187165Z'
   last_error: ConnectError
   city_ids:
   - CITY_230100
@@ -729,7 +729,7 @@ sources:
   agency_name: 哈尔滨市人民政府
   notes: 市政府官方身份和现行栏目体系确认；具体分类需来源体检。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
@@ -756,12 +756,12 @@ sources:
   - https://www.nanjing.gov.cn/zdgk/214/406/index_17989.html
   - https://www.nanjing.gov.cn/zdgk/214/394/396/index_17989.html
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:09:20.318975+00:00'
+  last_health_at: '2026-07-22T10:09:20.318975Z'
   last_error: ConnectError
   city_ids:
   - CITY_320100
@@ -782,7 +782,7 @@ sources:
   agency_name: 南京市人民政府
   notes: 市政府、市政府办、行政规范性文件和政府公报已核验。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
@@ -801,12 +801,12 @@ sources:
   list_page_urls:
   - https://www.nanning.gov.cn/zwgk/fdzdgknr/zfgb/
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:09:37.989752+00:00'
+  last_health_at: '2026-07-22T10:09:37.989752Z'
   last_error: ConnectError
   city_ids:
   - CITY_450100
@@ -827,7 +827,7 @@ sources:
   agency_name: 南宁市人民政府
   notes: 市政府公报入口来自现有官方政策血缘。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
@@ -845,12 +845,12 @@ sources:
   - https://www.nngjj.org.cn/xxgk/zdxzjchgfxwj/t5365074.html
   list_page_urls: []
   parser_adapter: list_page
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 2
   rate_limit: 0.5
   source_health_score: 0.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:11:16.366083+00:00'
+  last_health_at: '2026-07-22T10:11:16.366083Z'
   last_error: ReadTimeout
   city_ids:
   - CITY_450100
@@ -870,7 +870,7 @@ sources:
   notes: Excel来源位置：T1 房地产政策目录!G1616；T1 房地产政策目录!G1906；T1 房地产政策目录!G2436；历史公积金门户，保留血缘，由
     gjj.nanning.gov.cn 作为现行主来源。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
   verification_status: deprecated
 - source_id: SRC_C3133F09A93D89A3
   source_name: 上海市人民政府
@@ -892,12 +892,12 @@ sources:
   list_page_urls:
   - https://www.shanghai.gov.cn/nw12344/index.html
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:11:34.854578+00:00'
+  last_health_at: '2026-07-22T10:11:34.854578Z'
   last_error: ConnectError
   city_ids:
   - CITY_310000
@@ -918,7 +918,7 @@ sources:
   agency_name: 上海市人民政府
   notes: 市政府文件和政府公报入口已核验。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
@@ -940,12 +940,12 @@ sources:
   - https://www.shenyang.gov.cn/zwgk/zcwj/
   - https://www.shenyang.gov.cn/zwgk/zcwj/zfwj/bmwj/
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-22T10:12:01.448248+00:00'
+  last_health_at: '2026-07-22T10:12:01.448248Z'
   last_error: ConnectError
   city_ids:
   - CITY_210100
@@ -965,7 +965,7 @@ sources:
   agency_name: 沈阳市人民政府
   notes: 市政府政策文件入口及部门文件分类已确认。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
@@ -984,7 +984,7 @@ sources:
   list_page_urls:
   - https://www.shgjj.com/html/newxxgk/zcwj/gfxwj/
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   recommended_enabled: false
@@ -1006,7 +1006,7 @@ sources:
   agency_name: 上海市公积金管理中心
   notes: 市政府住房公积金专题与中心政策栏目交叉确认。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
@@ -1027,7 +1027,7 @@ sources:
   list_page_urls:
   - https://www.sjz.gov.cn/
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   recommended_enabled: false
@@ -1049,7 +1049,7 @@ sources:
   agency_name: 石家庄市人民政府
   notes: 首页包含市政府政策文件和政策解读入口。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
@@ -1066,7 +1066,7 @@ sources:
   list_page_urls:
   - https://www.sjzgjj.cn/
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   recommended_enabled: false
@@ -1088,7 +1088,7 @@ sources:
   agency_name: 石家庄住房公积金管理中心
   notes: 市政府持续发布该中心政策，但独立域名的官方身份和可遍历政策列表需本地体检，禁止启用。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
   valid_from: '2018-01-01'
   verification_status: needs_review
   verified_by: official-site-research-2026-07-21
@@ -1107,7 +1107,7 @@ sources:
   - https://sygjj.shenyang.gov.cn/zwgknew/fdzdgknr/zxwj_1/
   - https://sygjj.shenyang.gov.cn/zwgknew/fdzdgknr/flfg_1/
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   recommended_enabled: false
@@ -1129,7 +1129,7 @@ sources:
   agency_name: 沈阳住房公积金管理中心
   notes: 中心文件与法律法规入口已确认。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
@@ -1151,7 +1151,7 @@ sources:
   list_page_urls:
   - https://www.wuhan.gov.cn/zwgk/
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   recommended_enabled: false
@@ -1174,7 +1174,7 @@ sources:
   agency_name: 武汉市人民政府
   notes: 市政府公开入口和政府公报已核验。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
@@ -1191,7 +1191,7 @@ sources:
   list_page_urls:
   - https://zfgb.hangzhou.gov.cn/bulletin.shtml
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   recommended_enabled: false
@@ -1214,7 +1214,7 @@ sources:
   agency_name: 杭州市人民政府及政府公报
   notes: 政府公报可作为市级和部门正式政策的权威交叉来源。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
@@ -1234,7 +1234,7 @@ sources:
   list_page_urls:
   - https://zjj.nanning.gov.cn/xxgk/fdzdgknr/zcwjcx/
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   recommended_enabled: false
@@ -1256,7 +1256,7 @@ sources:
   agency_name: 南宁市住房和城乡建设局
   notes: 政策文件查询栏目已由官方正文路径确认。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
@@ -1275,7 +1275,7 @@ sources:
   list_page_urls:
   - https://zjj.sjz.gov.cn/columns/c925470a-3ecc-48c6-8d8c-88e85fc19f00/index.html
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   recommended_enabled: false
@@ -1297,7 +1297,7 @@ sources:
   agency_name: 石家庄市住房和城乡建设局
   notes: 官方域名和政策/通知分类由既有官方正文确认；需来源体检。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
@@ -1331,7 +1331,7 @@ sources:
   list_page_urls:
   - https://zjw.beijing.gov.cn/bjjs/xxgk/fgwj3/
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   recommended_enabled: false
@@ -1353,7 +1353,7 @@ sources:
   agency_name: 北京市住房和城乡建设委员会
   notes: 官网政府信息公开区设政策文件栏目。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
@@ -1369,7 +1369,7 @@ sources:
   list_page_urls:
   - https://ghzrzyw.beijing.gov.cn/zhengwuxinxi/zcwj/
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   recommended_enabled: false
@@ -1396,7 +1396,7 @@ sources:
   notes: 政策文件列表可按年份回溯。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   verification_evidence_urls:
   - https://ghzrzyw.beijing.gov.cn/zhengwuxinxi/zcwj/
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
 - source_id: SRC_FD177B2096AF170D
   source_name: 上海市规划和自然资源局
   domain: ghzyj.sh.gov.cn
@@ -1407,7 +1407,7 @@ sources:
   list_page_urls:
   - https://ghzyj.sh.gov.cn/zcwj/
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   recommended_enabled: false
@@ -1434,7 +1434,7 @@ sources:
   notes: 政策文件列表已核验。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   verification_evidence_urls:
   - https://ghzyj.sh.gov.cn/zcwj/
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
 - source_id: SRC_BBB36EE51CA46417
   source_name: 武汉市住房和城市更新局
   domain: zgj.wuhan.gov.cn
@@ -1448,7 +1448,7 @@ sources:
   - https://zgj.wuhan.gov.cn/xxgk/zcfgyjd_1/qtzdgkwj/
   - https://zgj.wuhan.gov.cn/zwdt/tzgg/
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   recommended_enabled: false
@@ -1475,7 +1475,7 @@ sources:
   notes: 2024年挂牌后的现行主管部门网站；旧房管局域名另行标记废止。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   verification_evidence_urls:
   - https://zgj.wuhan.gov.cn/xxgk/
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
 - source_id: SRC_1BEF79868295C3CE
   source_name: 武汉市自然资源和城乡建设局
   domain: zrzyhgh.wuhan.gov.cn
@@ -1486,7 +1486,7 @@ sources:
   list_page_urls:
   - https://zrzyhgh.wuhan.gov.cn/zwgk_18/zcfgyjd/
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   recommended_enabled: false
@@ -1513,7 +1513,7 @@ sources:
   notes: 政策法规及解读栏目已核验。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   verification_evidence_urls:
   - https://zrzyhgh.wuhan.gov.cn/zwgk_18/zcfgyjd/
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
 - source_id: SRC_1D47B217AB9E9E9D
   source_name: 成都市规划和自然资源局
   domain: mpnr.chengdu.gov.cn
@@ -1524,7 +1524,7 @@ sources:
   list_page_urls:
   - https://mpnr.chengdu.gov.cn/
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   recommended_enabled: false
@@ -1551,7 +1551,7 @@ sources:
   notes: 主管部门身份可确认，但稳定的官方政策列表入口未由搜索结果直接核验，禁止启用。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   verification_evidence_urls:
   - https://www.cacp.org.cn/zhcfg/15525.jhtml
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
 - source_id: SRC_3B68D0CD0579ECCC
   source_name: 杭州市规划和自然资源局（政府公报正式来源）
   domain: zfgb.hangzhou.gov.cn
@@ -1562,7 +1562,7 @@ sources:
   list_page_urls:
   - https://zfgb.hangzhou.gov.cn/bulletin.shtml
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 1
   rate_limit: 0.2
   recommended_enabled: false
@@ -1589,7 +1589,7 @@ sources:
   notes: 直接部门列表未稳定检出，暂以政府公报中的部门正式文件作为可审计官方来源。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   verification_evidence_urls:
   - https://zfgb.hangzhou.gov.cn/11/102220263/t126220263024/530213.shtml
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
 - source_id: SRC_6599C1C4C1FEB87F
   source_name: 沈阳市自然资源局
   domain: zrzyj.shenyang.gov.cn
@@ -1601,7 +1601,7 @@ sources:
   - https://zrzyj.shenyang.gov.cn/zwgkzdgz/zc/xzgfxwj/
   - https://zrzyj.shenyang.gov.cn/zwgkzdgz/fdzdgknr/bmwj/
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   recommended_enabled: false
@@ -1628,7 +1628,7 @@ sources:
   notes: 行政规范性文件和部门文件入口已确认。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   verification_evidence_urls:
   - https://zrzyj.shenyang.gov.cn/zwgkzdgz/fdzdgknr/bmwj/
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
 - source_id: SRC_EDBA62AAE99DF73D
   source_name: 哈尔滨市住房和城乡建设局（政务服务政策入口）
   domain: zwfw.harbin.gov.cn
@@ -1639,7 +1639,7 @@ sources:
   list_page_urls:
   - https://zwfw.harbin.gov.cn/hz_root/hqzc/hqzcIndex
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   recommended_enabled: false
@@ -1666,7 +1666,7 @@ sources:
   notes: 官方政务服务政策页可检索住建局政策；并非住建局独立门户，需按发布部门过滤。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   verification_evidence_urls:
   - https://zwfw.harbin.gov.cn/hz_root/hqzc/hqzcIndex
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
 - source_id: SRC_C9B95E09E9C05531
   source_name: 哈尔滨住房公积金管理中心
   domain: hrbgjj.org.cn
@@ -1677,7 +1677,7 @@ sources:
   list_page_urls:
   - http://www.hrbgjj.org.cn/
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   recommended_enabled: false
@@ -1704,7 +1704,7 @@ sources:
   notes: 黑龙江省政府曾明确该门户地址；当前站点、栏目和HTTPS状态尚需本地体检，禁止启用。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   verification_evidence_urls:
   - https://www.hlj.gov.cn/hlj/c107858/202009/c00_30591122.shtml
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
 - source_id: SRC_F3FAA115C4A34B82
   source_name: 哈尔滨市自然资源和规划局（市政府集中公开）
   domain: harbin.gov.cn
@@ -1715,7 +1715,7 @@ sources:
   list_page_urls:
   - https://www.harbin.gov.cn/haerbin/c108867/common_list.shtml
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 1
   rate_limit: 0.2
   recommended_enabled: false
@@ -1742,7 +1742,7 @@ sources:
   notes: 主管部门存在，但尚未核实可穷尽遍历的独立政策列表；禁止据此确认零政策。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   verification_evidence_urls:
   - https://www.harbin.gov.cn/
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
 - source_id: SRC_764DB35C50928F5D
   source_name: 南宁住房公积金管理中心
   domain: gjj.nanning.gov.cn
@@ -1753,7 +1753,7 @@ sources:
   list_page_urls:
   - https://gjj.nanning.gov.cn/xxgk/zdxzjchgfxwj/
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   recommended_enabled: false
@@ -1780,7 +1780,7 @@ sources:
   notes: 现行政府域名作为主来源；旧nngjj.org.cn保留历史血缘并标记替代。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   verification_evidence_urls:
   - https://gjj.nanning.gov.cn/
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
 - source_id: SRC_AD31E0BE1DC6C6AF
   source_name: 南宁市自然资源局
   domain: zrzyj.nanning.gov.cn
@@ -1791,7 +1791,7 @@ sources:
   list_page_urls:
   - https://zrzyj.nanning.gov.cn/zwgk_57/tzgg/bjtz/
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 0
   rate_limit: 0.2
   recommended_enabled: false
@@ -1818,7 +1818,7 @@ sources:
   notes: 官网及通知入口已确认；政策专栏仍须来源体检补充。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   verification_evidence_urls:
   - https://zrzyj.nanning.gov.cn/
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
 - source_id: SRC_423E3C77E3F70227
   source_name: 石家庄市自然资源和规划局（市政府集中公开）
   domain: sjz.gov.cn
@@ -1829,7 +1829,7 @@ sources:
   list_page_urls:
   - https://www.sjz.gov.cn/zfxxgk/
   parser_adapter: generic_government
-  crawl_enabled: false
+  crawl_enabled: true
   priority: 1
   rate_limit: 0.2
   recommended_enabled: false
@@ -1856,4 +1856,4 @@ sources:
   notes: 主管部门及市政府集中公开可确认，但未找到可穷尽的独立政策列表，禁止据此确认零政策。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   verification_evidence_urls:
   - https://www.sjz.gov.cn/zfxxgk/columns/0ab431ec-688d-4a91-8e3b-76d8549dd050/202601/27/764b60ed-f7ca-4691-a1c1-53dcd2c14cd0.html
-  updated_at: '2026-07-21T18:00:00+08:00'
+  updated_at: '2026-07-22T10:42:03.945586+00:00'
