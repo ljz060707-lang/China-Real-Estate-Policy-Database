@@ -14,6 +14,7 @@ from policydb.ai import get_ai_provider
 from policydb.api import PolicyDB
 from policydb.archive import archive_document_versions
 from policydb.confidence import materialize_field_confidence
+from policydb.coverage import build_city_source_month_coverage
 from policydb.coverage_audit import run_coverage_audit
 from policydb.crawl.health import disable_unhealthy, enable_recommended, evaluate_sources
 from policydb.crawl.pipeline import CrawlPipeline
@@ -41,6 +42,11 @@ from policydb.query.database import build_database
 from policydb.recovery import recover_review_sources
 from policydb.review import apply_corrections, generate_review_tasks
 from policydb.review_automation import automate_review_tasks
+from policydb.schedule import (
+    install_windows_schedule,
+    remove_windows_schedule,
+    schedule_status,
+)
 from policydb.scope import materialize_city_scope
 from policydb.settings import Settings
 from policydb.source_quality import export_source_audit, unresolved_sources, validate_registry
@@ -69,6 +75,8 @@ intensity_app = typer.Typer(
 taxonomy_app = typer.Typer(no_args_is_help=True, help="五类政策动作分类与中金 topic 映射")
 ai_app = typer.Typer(no_args_is_help=True, help="SiliconFlow AI 分类、复核与去重")
 archive_app = typer.Typer(no_args_is_help=True, help="D盘政策原文与附件内容寻址档案")
+schedule_app = typer.Typer(no_args_is_help=True, help="Windows每日、周度和月度自动更新")
+coverage_app = typer.Typer(no_args_is_help=True, help="105城市来源—月份完整性")
 app.add_typer(review_app, name="review")
 app.add_typer(sources_app, name="sources")
 app.add_typer(crawl_app, name="crawl")
@@ -83,6 +91,8 @@ app.add_typer(intensity_app, name="intensity")
 app.add_typer(taxonomy_app, name="taxonomy")
 app.add_typer(ai_app, name="ai")
 app.add_typer(archive_app, name="archive")
+app.add_typer(schedule_app, name="schedule")
+app.add_typer(coverage_app, name="coverage")
 
 
 @ai_app.command("test")
@@ -163,6 +173,58 @@ def archive_audit():
         "failed": frame.filter(pl.col("archive_status") != "archived").height,
     }
     typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@coverage_app.command("build")
+def coverage_build():
+    typer.echo(
+        json.dumps(build_city_source_month_coverage(), ensure_ascii=False, indent=2)
+    )
+
+
+@schedule_app.command("status")
+def schedule_status_cmd():
+    typer.echo(json.dumps(schedule_status(), ensure_ascii=False, indent=2))
+
+
+@schedule_app.command("install-windows")
+def schedule_install_windows(
+    confirm: bool = typer.Option(False, "--confirm", help="确认写入 Windows 任务计划"),
+):
+    result = install_windows_schedule(confirm=confirm)
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    if result["confirmation_required"]:
+        typer.echo("预览完成。确认后重新运行并增加 --confirm。")
+
+
+@schedule_app.command("remove-windows")
+def schedule_remove_windows(
+    confirm: bool = typer.Option(False, "--confirm", help="确认删除 Windows 任务计划"),
+):
+    typer.echo(
+        json.dumps(
+            remove_windows_schedule(confirm=confirm), ensure_ascii=False, indent=2
+        )
+    )
+
+
+def _schedule_run(layer: str) -> None:
+    typer.echo(json.dumps(start_update(layer), ensure_ascii=False, indent=2))
+
+
+@schedule_app.command("run-daily")
+def schedule_run_daily():
+    _schedule_run("daily")
+
+
+@schedule_app.command("run-weekly")
+def schedule_run_weekly():
+    _schedule_run("weekly")
+
+
+@schedule_app.command("run-monthly")
+def schedule_run_monthly():
+    _schedule_run("monthly")
 
 
 @taxonomy_app.command("build")

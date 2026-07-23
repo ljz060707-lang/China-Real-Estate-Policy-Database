@@ -12,6 +12,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
+from app.automation_center import render_automation_center  # noqa: E402
 from app.crawl_center import render_crawl_center  # noqa: E402
 from app.geography_panel import (  # noqa: E402
     GeographyPanelUnavailable,
@@ -65,6 +66,7 @@ page = st.sidebar.radio(
         "数据质量",
         "人工审核中心",
         "智能抓取",
+        "自动更新与完整性",
         "个人设置",
     ],
 )
@@ -81,6 +83,7 @@ PAGE_HEADERS = {
     "政策强度": ("政策文本强度", "以政策动作为最小单元，比较模型证据、定性维度和数值校准。"),
     "数据质量": ("覆盖与质量", "区分未扫描、部分覆盖、发现政策和确认零政策，并审计来源、去重与字段证据。"),
     "智能抓取": ("智能抓取", "后台执行来源发现、抓取、解析、复核和报告生成。"),
+    "自动更新与完整性": ("自动更新与完整性", "管理本地计划任务，核查105城来源—月份完整扫描证据。"),
     "个人设置": ("个人设置", "安全管理模型、地图、搜索和抓取偏好。"),
 }
 if page in PAGE_HEADERS:
@@ -524,5 +527,7 @@ elif page == "人工审核中心":
     render_review_center(ROOT)
 elif page == "智能抓取":
     render_crawl_center(ROOT)
+elif page == "自动更新与完整性":
+    render_automation_center(ROOT)
 else:
     render_settings_page(ROOT)

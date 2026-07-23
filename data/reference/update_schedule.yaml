@@ -4,7 +4,7 @@ timezone: Asia/Shanghai
 layers:
   daily:
     mode: official_update
-    overlap_days: 3
+    overlap_days: 7
     max_candidates: 500
     max_fetches: 200
     run_glm: true
@@ -14,7 +14,7 @@ layers:
     run_validation: true
   weekly:
     mode: smart
-    overlap_days: 10
+    overlap_days: 30
     max_candidates: 1500
     max_fetches: 500
     run_glm: true
@@ -23,7 +23,7 @@ layers:
     rebuild_database: true
     run_validation: true
   monthly:
-    mode: recover_missing
+    mode: historical_105
     overlap_days: 40
     max_candidates: 3000
     max_fetches: 1000
