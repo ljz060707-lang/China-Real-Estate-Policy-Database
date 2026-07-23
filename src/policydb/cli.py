@@ -12,10 +12,12 @@ import typer
 
 from policydb.ai import get_ai_provider
 from policydb.api import PolicyDB
+from policydb.archive import archive_document_versions
 from policydb.confidence import materialize_field_confidence
 from policydb.coverage_audit import run_coverage_audit
 from policydb.crawl.health import disable_unhealthy, enable_recommended, evaluate_sources
 from policydb.crawl.pipeline import CrawlPipeline
+from policydb.dedup_audit import materialize_policy_identity
 from policydb.enrich.glm import GLMEnricher
 from policydb.export.excel_compatible import export_excel_compatible
 from policydb.export.release import create_release
@@ -66,6 +68,7 @@ intensity_app = typer.Typer(
 )
 taxonomy_app = typer.Typer(no_args_is_help=True, help="五类政策动作分类与中金 topic 映射")
 ai_app = typer.Typer(no_args_is_help=True, help="SiliconFlow AI 分类、复核与去重")
+archive_app = typer.Typer(no_args_is_help=True, help="D盘政策原文与附件内容寻址档案")
 app.add_typer(review_app, name="review")
 app.add_typer(sources_app, name="sources")
 app.add_typer(crawl_app, name="crawl")
@@ -79,6 +82,7 @@ app.add_typer(audit_app, name="audit")
 app.add_typer(intensity_app, name="intensity")
 app.add_typer(taxonomy_app, name="taxonomy")
 app.add_typer(ai_app, name="ai")
+app.add_typer(archive_app, name="archive")
 
 
 @ai_app.command("test")
@@ -112,16 +116,14 @@ def ai_verify(
 
 @ai_app.command("deduplicate")
 def ai_deduplicate():
-    typer.echo(
-        json.dumps(
-            {
-                "status": "requires_candidate_pairs",
-                "message": "先运行抓取或存量候选召回；AI 不会在无候选证据时合并记录。",
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
+    result = materialize_policy_identity()
+    result["semantic_ai_status"] = (
+        "configured_unverified"
+        if Settings.discover().siliconflow_api_key
+        else "awaiting_api_key"
     )
+    result["records_deleted"] = 0
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
 
 
 @ai_app.command("audit")
@@ -134,6 +136,31 @@ def ai_audit():
         "verify_model": settings.siliconflow_verify_model or None,
         "embedding_model": settings.siliconflow_embedding_model,
         "rerank_model": settings.siliconflow_rerank_model,
+    }
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@archive_app.command("sync")
+def archive_sync():
+    result = archive_document_versions()
+    build_database()
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@archive_app.command("audit")
+def archive_audit():
+    settings = Settings.discover()
+    path = settings.curated / "archive_integrity_checks.parquet"
+    if not path.exists():
+        typer.echo('{"status":"not_run"}')
+        raise typer.Exit(1)
+    import polars as pl
+
+    frame = pl.read_parquet(path)
+    result = {
+        "checked": frame.height,
+        "archived": frame.filter(pl.col("archive_status") == "archived").height,
+        "failed": frame.filter(pl.col("archive_status") != "archived").height,
     }
     typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
 
