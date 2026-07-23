@@ -42,6 +42,7 @@ from policydb.scope import materialize_city_scope
 from policydb.settings import Settings
 from policydb.source_quality import export_source_audit, unresolved_sources, validate_registry
 from policydb.sources import bootstrap_sources_from_excel
+from policydb.taxonomy_v2 import build_cicc_mapping, materialize_action_classifications
 from policydb.transform.collections import build_collection_layer
 from policydb.transform.t4_matching import build_t4_match_candidates
 from policydb.update.v2 import build_update_request, start_update
@@ -62,6 +63,7 @@ intensity_app = typer.Typer(
     no_args_is_help=True,
     help="房地产政策动作识别、多模型路由和文本强度指数",
 )
+taxonomy_app = typer.Typer(no_args_is_help=True, help="五类政策动作分类与中金 topic 映射")
 app.add_typer(review_app, name="review")
 app.add_typer(sources_app, name="sources")
 app.add_typer(crawl_app, name="crawl")
@@ -73,6 +75,17 @@ app.add_typer(update_app, name="update")
 app.add_typer(confidence_app, name="confidence")
 app.add_typer(audit_app, name="audit")
 app.add_typer(intensity_app, name="intensity")
+app.add_typer(taxonomy_app, name="taxonomy")
+
+
+@taxonomy_app.command("build")
+def taxonomy_build():
+    result = {
+        "actions": materialize_action_classifications(),
+        "cicc_topics": build_cicc_mapping(),
+    }
+    build_database()
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
 
 
 @app.command()
