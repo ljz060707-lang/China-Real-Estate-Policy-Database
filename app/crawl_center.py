@@ -42,7 +42,7 @@ def _cached_sources(root: str, registry_stamp: int):
 def _cached_configuration(root: str) -> dict[str, bool]:
     settings = Settings.discover(root)
     return {
-        "glm": bool(settings.glm_api_key),
+        "ai": bool(settings.siliconflow_api_key),
         "tianditu": bool(settings.tianditu_token),
         "search": bool(
             settings.search_api_key and settings.search_provider != "None"
@@ -169,8 +169,8 @@ def _render_new_job(
     )
     processing_mode = {
         "仅抓取并暂存": "staged_only",
-        "抓取＋GLM解析": "glm",
-        "抓取＋GLM＋复核": "glm_verify",
+        "抓取＋AI解析": "glm",
+        "抓取＋AI＋独立复核": "glm_verify",
         "完整处理并重建数据库": "full",
     }[processing_label]
     if processing_mode == "staged_only":
@@ -258,7 +258,7 @@ def _render_job_state(manager: JobManager, job_id: str, *, key_prefix: str) -> N
             st.caption("后台进程运行正常；状态区每 2 秒局部刷新。")
     st.progress(min(state.progress_current / max(state.progress_total, 1), 1.0))
     counters = state.counters
-    labels = [("已发现", "discovered"), ("已抓取", "fetched"), ("失败", "failed"), ("新增版本", "document_versions"), ("GLM完成", "glm_completed"), ("待人工", "manual_review")]
+    labels = [("已发现", "discovered"), ("已抓取", "fetched"), ("失败", "failed"), ("新增版本", "document_versions"), ("AI完成", "glm_completed"), ("待人工", "manual_review")]
     for column, (label, key) in zip(st.columns(6), labels, strict=True):
         column.metric(label, counters.get(key, counters.get("candidate_count", 0) if key == "discovered" else 0))
     columns = st.columns(4)

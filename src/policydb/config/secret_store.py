@@ -7,6 +7,7 @@ from typing import Protocol
 
 SERVICE_NAME = "policydb"
 ENV_NAMES = {
+    "siliconflow_api_key": "SILICONFLOW_API_KEY",
     "glm_api_key": "GLM_API_KEY",
     "tianditu_token": "TIANDITU_TOKEN",
     "search_api_key": "SEARCH_API_KEY",
@@ -119,7 +120,10 @@ def default_secret_store() -> CompositeSecretStore:
 
 _SECRET_PATTERNS = (
     re.compile(r"(?i)(Bearer\s+)[^\s\"']+"),
-    re.compile(r"(?i)((?:GLM_API_KEY|TIANDITU_TOKEN|SEARCH_API_KEY)\s*[=:]\s*)[^\s,;]+"),
+    re.compile(
+        r"(?i)((?:SILICONFLOW_API_KEY|GLM_API_KEY|TIANDITU_TOKEN|SEARCH_API_KEY)"
+        r"\s*[=:]\s*)[^\s,;]+"
+    ),
     re.compile(r"\bsk-[A-Za-z0-9._-]+"),
 )
 

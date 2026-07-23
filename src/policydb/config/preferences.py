@@ -5,6 +5,13 @@ import os
 from pathlib import Path
 
 ALLOWED_FIELDS = {
+    "ai_provider",
+    "siliconflow_base_url",
+    "siliconflow_chat_model",
+    "siliconflow_verify_model",
+    "siliconflow_embedding_model",
+    "siliconflow_rerank_model",
+    "policy_archive_root",
     "glm_model",
     "glm_base_url",
     "search_provider",

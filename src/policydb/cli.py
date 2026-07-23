@@ -10,6 +10,7 @@ from typing import Annotated
 
 import typer
 
+from policydb.ai import get_ai_provider
 from policydb.api import PolicyDB
 from policydb.confidence import materialize_field_confidence
 from policydb.coverage_audit import run_coverage_audit
@@ -64,6 +65,7 @@ intensity_app = typer.Typer(
     help="房地产政策动作识别、多模型路由和文本强度指数",
 )
 taxonomy_app = typer.Typer(no_args_is_help=True, help="五类政策动作分类与中金 topic 映射")
+ai_app = typer.Typer(no_args_is_help=True, help="SiliconFlow AI 分类、复核与去重")
 app.add_typer(review_app, name="review")
 app.add_typer(sources_app, name="sources")
 app.add_typer(crawl_app, name="crawl")
@@ -76,6 +78,64 @@ app.add_typer(confidence_app, name="confidence")
 app.add_typer(audit_app, name="audit")
 app.add_typer(intensity_app, name="intensity")
 app.add_typer(taxonomy_app, name="taxonomy")
+app.add_typer(ai_app, name="ai")
+
+
+@ai_app.command("test")
+def ai_test():
+    result = get_ai_provider().test()
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    if not result["connected"]:
+        raise typer.Exit(1)
+
+
+@ai_app.command("models")
+def ai_models():
+    typer.echo("\n".join(get_ai_provider().models()))
+
+
+@ai_app.command("classify")
+def ai_classify(
+    run_id: str | None = typer.Option(None, "--run-id"),
+):
+    result = GLMEnricher().enrich_pending(run_id=run_id)
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@ai_app.command("verify")
+def ai_verify(
+    run_id: str | None = typer.Option(None, "--run-id"),
+):
+    result = GLMEnricher().verify_pending(run_id=run_id)
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@ai_app.command("deduplicate")
+def ai_deduplicate():
+    typer.echo(
+        json.dumps(
+            {
+                "status": "requires_candidate_pairs",
+                "message": "先运行抓取或存量候选召回；AI 不会在无候选证据时合并记录。",
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+
+
+@ai_app.command("audit")
+def ai_audit():
+    settings = Settings.discover()
+    result = {
+        "provider": settings.ai_provider,
+        "api_key_configured": bool(settings.siliconflow_api_key),
+        "chat_model": settings.siliconflow_chat_model or None,
+        "verify_model": settings.siliconflow_verify_model or None,
+        "embedding_model": settings.siliconflow_embedding_model,
+        "rerank_model": settings.siliconflow_rerank_model,
+    }
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
 
 
 @taxonomy_app.command("build")
