@@ -40,9 +40,17 @@ class CrawlJobRequest(BaseModel):
     cities: list[str] = Field(default_factory=list)
     provinces: list[str] = Field(default_factory=list)
     topics: list[str] = Field(default_factory=list)
+    source_ids: list[str] = Field(default_factory=list)
+    source_roles: list[str] = Field(default_factory=list)
     source_types: list[str] = Field(default_factory=list)
     missing_types: list[str] = Field(default_factory=list)
     max_candidates: int = Field(default=200, ge=1, le=100000)
+    max_candidates_total: int | None = Field(default=None, ge=1, le=100000)
+    max_candidates_per_source: int = Field(default=50, ge=1, le=10000)
+    max_pages_per_source: int = Field(default=20, ge=1, le=1000)
+    batch_size: int = Field(default=50, ge=1, le=1000)
+    global_safety_limit: int = Field(default=10000, ge=1, le=1000000)
+    resume: bool = True
     max_fetches: int = Field(default=100, ge=1, le=10000)
     enabled_only: bool = True
     include_recommended: bool = False
@@ -57,6 +65,10 @@ class CrawlJobRequest(BaseModel):
 
     def estimate(self, enabled_source_count: int) -> dict[str, int]:
         """Return a UI-only estimate without constructing the crawl pipeline."""
+        candidate_limit = min(
+            self.max_candidates_total or self.max_candidates,
+            self.global_safety_limit,
+        )
         cities = len(self.cities) or (105 if self.mode == "historical_105" else 1)
         topics = len(self.topics) or 1
         query_count = (
@@ -68,9 +80,9 @@ class CrawlJobRequest(BaseModel):
             "city_count": cities,
             "topic_count": topics,
             "source_count": enabled_source_count,
-            "query_count": min(query_count, self.max_candidates),
-            "max_pages": self.max_fetches,
-            "possible_api_calls": min(query_count, self.max_candidates),
+            "query_count": min(query_count, candidate_limit),
+            "max_pages": self.max_pages_per_source,
+            "possible_api_calls": min(query_count, candidate_limit),
         }
 
 

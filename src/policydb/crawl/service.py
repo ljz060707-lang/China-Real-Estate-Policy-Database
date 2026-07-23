@@ -96,8 +96,19 @@ class CrawlService:
             end_date=end,
             official_first=request.official_first,
             include_disabled_seed=seed_mode,
-            max_items=request.max_fetches,
             official_only_sources=official_mode,
+            cities=request.cities,
+            provinces=request.provinces,
+            topics=request.topics,
+            source_ids=request.source_ids,
+            source_roles=request.source_roles,
+            max_candidates_total=request.max_candidates_total
+            or request.max_candidates,
+            max_candidates_per_source=request.max_candidates_per_source,
+            max_pages_per_source=request.max_pages_per_source,
+            batch_size=request.batch_size,
+            global_safety_limit=request.global_safety_limit,
+            resume=request.resume,
         )
         if plan["status"] == "blocked_no_enabled_sources" and request.mode == "smart":
             materialize_seed_record_links(self.work_settings)
@@ -106,7 +117,18 @@ class CrawlService:
                 start_date=start,
                 end_date=end,
                 include_disabled_seed=True,
-                max_items=request.max_fetches,
+                cities=request.cities,
+                provinces=request.provinces,
+                topics=request.topics,
+                source_ids=request.source_ids,
+                source_roles=request.source_roles,
+                max_candidates_total=request.max_candidates_total
+                or request.max_candidates,
+                max_candidates_per_source=request.max_candidates_per_source,
+                max_pages_per_source=request.max_pages_per_source,
+                batch_size=request.batch_size,
+                global_safety_limit=request.global_safety_limit,
+                resume=request.resume,
             )
         if plan["status"] == "blocked_no_enabled_sources":
             return {
@@ -117,7 +139,10 @@ class CrawlService:
             }
         self._notify(progress, "fetching", 2, 8, f"已发现 {plan['item_count']} 个候选，开始抓取", {"discovered": plan["item_count"]})
         fetched = self.pipeline.run(
-            plan["run_id"], cancel_check=cancel_check, progress=progress
+            plan["run_id"],
+            max_fetches=request.max_fetches,
+            cancel_check=cancel_check,
+            progress=progress,
         )
         if fetched.get("cancelled"):
             raise InterruptedError("任务已按用户请求安全停止")

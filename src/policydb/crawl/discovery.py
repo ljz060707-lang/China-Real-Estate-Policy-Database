@@ -48,6 +48,7 @@ class ListPageDiscovery:
 
     def __init__(self, fetcher) -> None:
         self.fetcher = fetcher
+        self.last_scan: dict[str, object] = {}
 
     def discover(
         self, request: DiscoveryRequest, source: RegisteredSource
@@ -56,6 +57,8 @@ class ListPageDiscovery:
         visited: set[str] = set()
         candidates: dict[str, DiscoveryCandidate] = {}
         pages = 0
+        consecutive_old_pages = 0
+        stop_reason = "pagination_exhausted"
         while queue and pages < request.max_pages and len(candidates) < request.max_candidates:
             page_url = queue.pop(0)
             canonical_page = canonicalize_url(page_url)
@@ -65,6 +68,7 @@ class ListPageDiscovery:
             pages += 1
             result = self.fetcher.fetch(page_url)
             soup = BeautifulSoup(result.body, "html.parser")
+            page_dates: list[date] = []
             for anchor in soup.find_all("a", href=True):
                 label = anchor.get_text(" ", strip=True)
                 absolute = _candidate_link(result.final_url, anchor.get("href", ""), label)
@@ -74,6 +78,8 @@ class ListPageDiscovery:
                     [label, anchor.parent.get_text(" ", strip=True) if anchor.parent else ""]
                 )
                 hint = _date_hint(context)
+                if hint:
+                    page_dates.append(hint)
                 is_next = bool(
                     anchor.get("rel") == ["next"]
                     or re.search(r"下一页|下页|next|后页", label, re.I)
@@ -107,7 +113,36 @@ class ListPageDiscovery:
                     ),
                 )
                 if len(candidates) >= request.max_candidates:
+                    stop_reason = "candidate_limit"
                     break
+            if (
+                request.start_date
+                and page_dates
+                and max(page_dates) < request.start_date
+            ):
+                consecutive_old_pages += 1
+            else:
+                consecutive_old_pages = 0
+            if consecutive_old_pages >= 2:
+                queue.clear()
+                stop_reason = "stable_before_start_date"
+                break
+        if pages >= request.max_pages and queue:
+            stop_reason = "page_limit"
+        elif len(candidates) >= request.max_candidates:
+            stop_reason = "candidate_limit"
+        self.last_scan = {
+            "pages_scanned": pages,
+            "pagination_exhausted": (
+                not queue
+                and stop_reason
+                in {"pagination_exhausted", "stable_before_start_date"}
+            ),
+            "stop_reason": stop_reason,
+            "candidate_count": len(candidates),
+            "max_pages": request.max_pages,
+            "max_candidates": request.max_candidates,
+        }
         return list(candidates.values())
 
 

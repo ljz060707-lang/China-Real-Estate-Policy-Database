@@ -152,6 +152,31 @@ def _render_new_job(
     limits = st.columns(2)
     max_candidates = int(limits[0].number_input("最大候选数", min_value=1, max_value=100000, value=200))
     max_fetches = int(limits[1].number_input("最大抓取数", min_value=1, max_value=10000, value=5 if mode == "seed_backtrack" else 100))
+    with st.expander("高级范围与安全上限"):
+        advanced = st.columns(3)
+        max_candidates_per_source = int(
+            advanced[0].number_input(
+                "每来源候选上限", min_value=1, max_value=10000, value=50
+            )
+        )
+        max_pages_per_source = int(
+            advanced[1].number_input(
+                "每来源分页上限", min_value=1, max_value=1000, value=20
+            )
+        )
+        batch_size = int(
+            advanced[2].number_input(
+                "计划轮转批量", min_value=1, max_value=1000, value=50
+            )
+        )
+        global_safety_limit = int(
+            st.number_input(
+                "全局候选安全上限",
+                min_value=1,
+                max_value=1000000,
+                value=max(max_candidates, 10000),
+            )
+        )
     options = st.columns(3)
     run_glm = options[0].checkbox("抓取后运行AI", value=configuration["ai"])
     verify = options[1].checkbox("执行第二轮自动复核", value=True)
@@ -200,6 +225,11 @@ def _render_new_job(
         cities=cities,
         topics=topics,
         max_candidates=max_candidates,
+        max_candidates_total=max_candidates,
+        max_candidates_per_source=max_candidates_per_source,
+        max_pages_per_source=max_pages_per_source,
+        batch_size=batch_size,
+        global_safety_limit=global_safety_limit,
         max_fetches=max_fetches,
         include_recommended=include_recommended,
         confirmed_recommended_source_ids=confirmed_ids,

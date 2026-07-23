@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections import deque
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -31,6 +32,15 @@ from policydb.settings import Settings
 from policydb.transform.normalization import stable_id
 
 
+def _province_matches(name: object, code: object, requested: set[str]) -> bool:
+    full_name = str(name or "")
+    aliases = {full_name, str(code or "")}
+    for suffix in ("省", "市", "自治区", "壮族自治区", "回族自治区", "维吾尔自治区"):
+        if full_name.endswith(suffix):
+            aliases.add(full_name.removesuffix(suffix))
+    return bool(aliases & requested)
+
+
 class CrawlPipeline:
     def __init__(
         self,
@@ -54,6 +64,17 @@ class CrawlPipeline:
         include_disabled_seed: bool = False,
         max_items: int | None = None,
         official_only_sources: bool = False,
+        cities: list[str] | None = None,
+        provinces: list[str] | None = None,
+        topics: list[str] | None = None,
+        source_ids: list[str] | None = None,
+        source_roles: list[str] | None = None,
+        max_candidates_total: int | None = None,
+        max_candidates_per_source: int = 50,
+        max_pages_per_source: int = 20,
+        batch_size: int = 50,
+        global_safety_limit: int = 10000,
+        resume: bool = True,
     ) -> dict:
         now = datetime.now(UTC)
         run_id = stable_id(run_type, now.isoformat(), prefix="CRAWLRUN")
@@ -69,11 +90,72 @@ class CrawlPipeline:
                 for source in sources
                 if source.official_status in {"official", "official_reprint"}
             ]
+        if source_ids:
+            selected_source_ids = set(source_ids)
+            sources = [
+                source for source in sources if source.source_id in selected_source_ids
+            ]
+        if source_roles:
+            selected_source_roles = set(source_roles)
+            sources = [
+                source
+                for source in sources
+                if source.source_role in selected_source_roles
+            ]
+        requested_cities = {
+            str(city).strip() for city in (cities or []) if str(city).strip()
+        }
+        requested_provinces = {
+            str(province).strip()
+            for province in (provinces or [])
+            if str(province).strip()
+        }
+        city_frame = pl.DataFrame()
+        if requested_cities or requested_provinces:
+            city_frame = load_cities_105(self.settings)
+            if requested_cities:
+                city_frame = city_frame.filter(
+                    pl.struct(
+                        "city_id", "city_name", "city_name_short", "aliases"
+                    ).map_elements(
+                        lambda row: bool(
+                            requested_cities
+                            & {
+                                str(row["city_id"]),
+                                str(row["city_name"]),
+                                str(row["city_name_short"]),
+                                *str(row["aliases"] or "").split("|"),
+                            }
+                        ),
+                        return_dtype=pl.Boolean,
+                    )
+                )
+            if requested_provinces:
+                city_frame = city_frame.filter(
+                    pl.struct("province_name", "province_code").map_elements(
+                        lambda row: _province_matches(
+                            row["province_name"],
+                            row["province_code"],
+                            requested_provinces,
+                        ),
+                        return_dtype=pl.Boolean,
+                    )
+                )
+            selected_city_ids = set(city_frame["city_id"].to_list())
+            selected_province_codes = {
+                str(value) for value in city_frame["province_code"].to_list()
+            }
+            sources = [
+                source
+                for source in sources
+                if source.scope_type == "national"
+                or bool(selected_city_ids & set(source.city_ids))
+                or bool(selected_province_codes & set(source.province_codes))
+            ]
         if official_first:
             sources.sort(key=lambda item: item.priority)
         search_sources = [source for source in sources if source.search_url_template]
         keyword_groups: dict[str, list[str]] = {}
-        cities = pl.DataFrame()
         if search_sources:
             keyword_config = yaml.safe_load(
                 (
@@ -83,33 +165,72 @@ class CrawlPipeline:
                     / "crawl_keywords.yaml"
                 ).read_text(encoding="utf-8")
             )
-            keyword_groups = {
+            all_keyword_groups = {
                 name: value["terms"]
                 for name, value in keyword_config.get("groups", {}).items()
             }
-            cities = load_cities_105(self.settings)
+            requested_topics = {
+                str(topic).strip() for topic in (topics or []) if str(topic).strip()
+            }
+            if requested_topics:
+                keyword_groups = {
+                    name: terms
+                    for name, terms in all_keyword_groups.items()
+                    if name in requested_topics
+                    or any(
+                        requested in str(term) or str(term) in requested
+                        for requested in requested_topics
+                        for term in terms
+                    )
+                }
+                mapped_topics = {
+                    requested
+                    for requested in requested_topics
+                    if any(
+                        requested == name
+                        or any(
+                            requested in str(term) or str(term) in requested
+                            for term in terms
+                        )
+                        for name, terms in keyword_groups.items()
+                    )
+                }
+                keyword_groups.update(
+                    {
+                        f"topic:{topic}": [topic]
+                        for topic in sorted(requested_topics - mapped_topics)
+                    }
+                )
+            else:
+                keyword_groups = all_keyword_groups
+            if not requested_cities and not requested_provinces:
+                city_frame = load_cities_105(self.settings)
         years = range(start_date.year, end_date.year + 1)
-        items = []
+        source_buckets: list[deque[dict]] = []
         discovery_errors: list[dict] = []
+        discovery_scans: list[dict] = []
         for source in sources:
+            source_items: list[dict] = []
             seed_source = source.model_copy(
                 update={"list_page_urls": []}
             )
-            items.extend(discover_seed_items(seed_source, run_id))
+            source_items.extend(discover_seed_items(seed_source, run_id))
             if source.list_page_urls and run_type != "seed_backtrack":
                 try:
-                    candidates = ListPageDiscovery(self.fetcher).discover(
+                    discovery = ListPageDiscovery(self.fetcher)
+                    candidates = discovery.discover(
                         DiscoveryRequest(
                             run_id=run_id,
                             mode=run_type,
                             start_date=start_date,
                             end_date=end_date,
-                            max_candidates=max_items or 200,
+                            max_candidates=max_candidates_per_source,
+                            max_pages=max_pages_per_source,
                         ),
                         source,
                     )
                     now_text = now.isoformat()
-                    items.extend(
+                    source_items.extend(
                         {
                             "item_id": stable_id(source.source_id, item.canonical_url, prefix="CRAWLITEM"),
                             "run_id": run_id,
@@ -128,20 +249,71 @@ class CrawlPipeline:
                         }
                         for item in candidates
                     )
+                    discovery_scans.append(
+                        {
+                            "scan_id": stable_id(
+                                run_id, source.source_id, prefix="DISCOVERYSCAN"
+                            ),
+                            "run_id": run_id,
+                            "source_id": source.source_id,
+                            "pages_scanned": discovery.last_scan["pages_scanned"],
+                            "pagination_exhausted": discovery.last_scan[
+                                "pagination_exhausted"
+                            ],
+                            "stop_reason": discovery.last_scan["stop_reason"],
+                            "candidate_count": discovery.last_scan["candidate_count"],
+                            "max_pages": discovery.last_scan["max_pages"],
+                            "max_candidates": discovery.last_scan[
+                                "max_candidates"
+                            ],
+                            "created_at": now.isoformat(),
+                        }
+                    )
                 except Exception as exc:
                     discovery_errors.append(
                         {"source_id": source.source_id, "error_type": type(exc).__name__}
                     )
-            items.extend(
+            source_items.extend(
                 discover_search_items(
-                    source, run_id, cities, years, keyword_groups
+                    source, run_id, city_frame, years, keyword_groups
                 )
             )
-            if max_items and len(items) >= max_items:
-                items = items[:max_items]
-                break
+            unique_source_items = {
+                item["canonical_url"]: item for item in source_items
+            }
+            source_buckets.append(
+                deque(list(unique_source_items.values())[:max_candidates_per_source])
+            )
+        total_limit = min(
+            max_candidates_total or max_items or global_safety_limit,
+            global_safety_limit,
+        )
+        items: list[dict] = []
+        active = deque(bucket for bucket in source_buckets if bucket)
+        while active and len(items) < total_limit:
+            for _ in range(min(max(1, batch_size), len(active))):
+                if len(items) >= total_limit:
+                    break
+                bucket = active.popleft()
+                items.append(bucket.popleft())
+                if bucket:
+                    active.append(bucket)
         prepared: dict[str, dict] = {}
+        completed_windows: set[tuple[str, str | None]] = set()
+        windows_path = self._path("crawl_source_windows")
+        if resume and windows_path.exists():
+            windows = pl.read_parquet(windows_path).filter(
+                (pl.col("period_start").cast(pl.String) == start_date.isoformat())
+                & (pl.col("period_end").cast(pl.String) == end_date.isoformat())
+                & pl.col("coverage_status").cast(pl.String).str.starts_with("complete_")
+            )
+            completed_windows = {
+                (str(row["source_id"]), row.get("city_id"))
+                for row in windows.iter_rows(named=True)
+            }
         for item in items:
+            if (str(item["source_id"]), item.get("city_id")) in completed_windows:
+                continue
             task_key = stable_id(
                 item["source_id"], item["canonical_url"], start_date.isoformat(),
                 end_date.isoformat(), run_type, prefix="TASK",
@@ -173,6 +345,12 @@ class CrawlPipeline:
                     item["last_modified"] = previous.get("last_modified")
         if items:
             append_unique(self._path("crawl_items"), items, "item_id")
+        if discovery_scans:
+            append_unique(
+                self._path("crawl_discovery_scans"),
+                discovery_scans,
+                "scan_id",
+            )
         runs = [
             {
                 "run_id": run_id,
@@ -214,12 +392,21 @@ class CrawlPipeline:
             temp.unlink(missing_ok=True)
             raise PermissionErrorLocal(f"local write denied: {path}") from exc
 
-    def run(self, run_id: str, *, cancel_check=None, progress=None) -> dict:
+    def run(
+        self,
+        run_id: str,
+        *,
+        max_fetches: int | None = None,
+        cancel_check=None,
+        progress=None,
+    ) -> dict:
         items_path = self._path("crawl_items")
         if not items_path.exists():
             return {"run_id": run_id, "fetched": 0, "failed": 0}
         items = pl.read_parquet(items_path)
         pending = items.filter((pl.col("run_id") == run_id) & (pl.col("status") == "pending"))
+        if max_fetches is not None:
+            pending = pending.head(max_fetches)
         source_index = {source.source_id: source for source in load_registry(self.settings)}
         versions_path = self._path("policy_document_versions")
         existing_versions = (
@@ -540,11 +727,36 @@ class CrawlPipeline:
         run_rows = pl.read_parquet(self._path("crawl_runs")).filter(pl.col("run_id") == run_id)
         if run_rows.height:
             run_row = run_rows.row(0, named=True)
+            scans_path = self._path("crawl_discovery_scans")
+            scans = (
+                pl.read_parquet(scans_path).filter(pl.col("run_id") == run_id)
+                if scans_path.exists()
+                else pl.DataFrame()
+            )
             for source_id in pending["source_id"].unique().to_list():
                 source_items = items.filter(
                     (pl.col("run_id") == run_id) & (pl.col("source_id") == source_id)
                 )
                 source_errors = sum(row["source_id"] == source_id for row in errors)
+                source_scans = (
+                    scans.filter(pl.col("source_id") == source_id)
+                    if scans.height
+                    else pl.DataFrame()
+                )
+                pages_scanned = (
+                    int(source_scans["pages_scanned"].sum())
+                    if source_scans.height
+                    else 0
+                )
+                pagination_exhausted = bool(
+                    source_scans.height
+                    and source_scans["pagination_exhausted"].all()
+                )
+                stop_reasons = (
+                    source_scans["stop_reason"].unique().to_list()
+                    if source_scans.height
+                    else []
+                )
                 record_source_window(
                     run_id=run_id,
                     source_id=source_id,
@@ -555,9 +767,15 @@ class CrawlPipeline:
                     fetched_count=source_items.filter(pl.col("status").is_in(["fetched", "unchanged"])).height,
                     policy_count=0,
                     error_count=source_errors,
-                    page_count=0,
+                    page_count=pages_scanned,
                     completion_evidence={
-                        "reason": "detail fetch evidence only; exhaustive list-page coverage not proven"
+                        "pagination_exhausted": pagination_exhausted,
+                        "stop_reasons": stop_reasons,
+                        "exhaustive": False,
+                        "reason": (
+                            "pagination evidence retained; policy relevance "
+                            "verification is still required"
+                        ),
                     },
                     settings=self.settings,
                 )
