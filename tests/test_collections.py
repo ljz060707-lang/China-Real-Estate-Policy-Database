@@ -4,6 +4,7 @@ import hashlib
 
 import duckdb
 import polars as pl
+import pytest
 import yaml
 
 from policydb.settings import Settings
@@ -59,7 +60,9 @@ def test_all_records_have_collection_assignments(root):
 
 def test_collection_build_is_idempotent_and_does_not_modify_raw(root):
     settings = Settings.discover(root)
-    seed = next((root / "data" / "raw" / "seed").glob("*.xlsx"))
+    seed = next((root / "data" / "raw" / "seed").glob("*.xlsx"), None)
+    if seed is None:
+        pytest.skip("Raw seed is intentionally not published; local immutable-raw check only")
     before_hash = _sha256(seed)
     first = build_collection_layer(settings)
     second = build_collection_layer(settings)

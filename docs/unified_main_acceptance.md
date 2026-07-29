@@ -25,7 +25,7 @@
 - 日志：`D:\Data Set\CRPD\logs`
 - 输出：`D:\Data Set\CRPD\outputs`
 
-迁移实际执行“复制、SHA-256 校验、配置切换、验证”，未删除仓库和旧 D 盘副本。实时抓取现在按 SHA-256 写入 `archive/pdf|html|text|attachments/<前2位>/`；D 盘不可用时不回退 C 盘。
+迁移实际执行“复制、SHA-256 校验、配置切换、验证”，未删除仓库和旧 D 盘副本。合并历史带入的 Raw、来源备份、生成输出和本机 DuckDB 已从 Git 索引移除，本地文件仍保留；CI 会从当前 checkout 重建可移植 DuckDB 视图。实时抓取现在按 SHA-256 写入 `archive/pdf|html|text|attachments/<前2位>/`；D 盘不可用时不回退 C 盘。
 
 当前归档文件计数是 PDF 11、HTML 130、TXT 0、附件 14。对既有 281 个文档版本执行归档核验时，37 个通过，144 个哈希不一致，100 个源文件缺失；因此历史归档尚不完整，不能称全部可复现。新抓取会生成 HTML/PDF 和清洗 TXT，但本次受网络限制没有新增真实文档。
 

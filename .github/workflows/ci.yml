@@ -16,6 +16,8 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv sync --all-extras
+      - name: Rebuild portable DuckDB views
+        run: uv run policydb build-database
       - run: uv run ruff check .
       - run: uv run pytest
       - run: uv run policydb validate
