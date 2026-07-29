@@ -283,7 +283,7 @@ class JobManager:
             part for part in (source_root, existing_pythonpath) if part
         )
         command = [
-            str(Path(sys.executable).resolve()),
+            sys.executable,
             "-m",
             "policydb.jobs.worker",
             "--job-id",
