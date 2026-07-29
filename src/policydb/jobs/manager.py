@@ -267,6 +267,13 @@ class JobManager:
                 "POLICYDB_MAX_CONCURRENCY": str(min(self.settings.max_concurrency, 16)),
             }
         )
+        # The worker may run with a task-local cwd that is not the source checkout.
+        # Keep editable installs and source checkouts portable across Windows and CI.
+        source_root = str(Path(__file__).resolve().parents[2])
+        existing_pythonpath = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = os.pathsep.join(
+            part for part in (source_root, existing_pythonpath) if part
+        )
         command = [
             str(Path(sys.executable).resolve()),
             "-m",

@@ -1,24 +1,33 @@
 import json
+from pathlib import Path
 
 import polars as pl
+import pytest
 
 from policydb.ingest.excel import file_hash, inventory_excel, parse_date, slug_sheet
+
+HAS_PRIVATE_RAW_SEED = any(
+    (Path(__file__).parents[1] / "data" / "raw" / "seed").glob("*.xlsx")
+)
 
 
 def seed(root):
     return root / "data" / "raw" / "seed" / "【中金不动产与空间服务】政策数据库 20260705.xlsx"
 
 
+@pytest.mark.skipif(not HAS_PRIVATE_RAW_SEED, reason="private Raw seed is not in public Git")
 def test_seed_exists(root):
     assert seed(root).exists()
 
 
+@pytest.mark.skipif(not HAS_PRIVATE_RAW_SEED, reason="private Raw seed is not in public Git")
 def test_seed_hash(root):
     assert (
         file_hash(seed(root)) == "829951c7e88eebdffd729b96c1aac7ccf4c37037a11e6f8df8da9e36605039bf"
     )
 
 
+@pytest.mark.skipif(not HAS_PRIVATE_RAW_SEED, reason="private Raw seed is not in public Git")
 def test_inventory_28(root):
     assert inventory_excel(seed(root))["sheet_count"] == 28
 
