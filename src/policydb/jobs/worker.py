@@ -88,6 +88,7 @@ def run_job(job_id: str, settings: Settings | None = None) -> dict:
         started_at=started,
         worker_started_at=started,
         heartbeat_at=started,
+        pid=os.getpid(),
         message="正在检查配置和运行环境",
     )
     monitor_stop = threading.Event()

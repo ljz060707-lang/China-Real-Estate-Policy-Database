@@ -126,7 +126,15 @@ class JobManager:
         path = self.job_dir(job_id) / "state.json"
         for attempt in range(5):
             try:
-                return JobState.model_validate_json(path.read_text(encoding="utf-8"))
+                state = JobState.model_validate_json(path.read_text(encoding="utf-8"))
+                pid_path = self.job_dir(job_id) / "worker.json"
+                if state.pid is None and pid_path.exists():
+                    try:
+                        pid = int(json.loads(pid_path.read_text(encoding="utf-8"))["pid"])
+                        state = state.model_copy(update={"pid": pid})
+                    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+                        pass
+                return state
             except (PermissionError, FileNotFoundError):
                 if attempt == 4:
                     raise
@@ -316,11 +324,11 @@ class JobManager:
         finally:
             stdout.close()
             stderr.close()
-        current = self.load_state(job_id)
-        state = current.model_copy(
+        atomic_json(self.job_dir(job_id) / "worker.json", {"pid": process.pid})
+        state = self.load_state(job_id).model_copy(
             update={"pid": process.pid, "message": "后台工作进程已启动"}
         )
-        self.save_state(state)
+        # A fast worker may already have advanced state.json; never overwrite it here.
         self.record_timing(
             job_id, "job_manager_start_seconds", time.perf_counter() - started
         )
