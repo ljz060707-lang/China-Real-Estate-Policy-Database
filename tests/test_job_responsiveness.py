@@ -30,7 +30,11 @@ def _wait(manager: JobManager, job_id: str, timeout: float = 15) -> object:
         if state.status in {"completed", "completed_with_warnings", "failed", "cancelled"}:
             return state
         time.sleep(0.05)
-    raise AssertionError(f"job did not finish: {manager.load_state(job_id)}")
+    stderr_path = manager.job_dir(job_id) / "stderr.log"
+    stderr = stderr_path.read_text(encoding="utf-8", errors="replace") if stderr_path.exists() else ""
+    raise AssertionError(
+        f"job did not finish: {manager.load_state(job_id)}\nworker stderr:\n{stderr[-4000:]}"
+    )
 
 
 def test_lightweight_estimate_does_not_construct_service():
