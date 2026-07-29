@@ -1,0 +1,574 @@
+<!DOCTYPE html
+	PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+
+	<meta http-equiv="X-UA-Compatible" content="IE=EmulateIE7">
+	<meta name="SiteName" content="南京市住房保障和房产局">
+	<meta name="SiteDomain"content="https://fcj.nanjing.gov.cn/">
+	<meta name="SiteIDCode" content='3201000073'>
+	<meta name="ColumnName" content="批后公示">
+	<meta name="ColumnDescription" content="批后公示">
+	<meta name="ColumnKeywords" content="批后公示">
+	<meta name="ColumnType" content="批后公示">
+	<title>南京市住房保障和房产局</title>
+	<link rel="stylesheet" type="text/css" href="../../images/zjw_phgs_search_style1.css">
+	<script src="../../images/zjw_pagesize.js" type="text/javascript"></script>
+	<script src="/szfmaterial/JS/jquery.min.js"></script>
+	<script src="../../images/jsdate.js"></script>
+</head>
+
+<body>
+	<div id="ContainerPanel" style="display: none;">
+		<div id="calendarPanel"
+			style="position: absolute; z-index: 9999; background-color: rgb(255, 255, 255); border: 1px solid rgb(204, 204, 204); width: 175px; font-size: 12px; left: 980px; top: 446px; display: none;">
+			<div name="calendarForm" style="margin: 0px;">
+				<table width="100%" border="0" cellpadding="0" cellspacing="1">
+					<tbody>
+						<tr>
+							<th align="left" width="1%"><input style="border: 1px solid #CCCCCC;background-color:#EFEFEF;width:16px;height:20px;" name="prevMonth" type="button" id="prevMonth" value="&lt;" /></th>
+							<th align="center" width="98%" nowrap="nowrap"><select name="calendarYear" id="calendarYear"
+									style="font-size:12px;">
+									<option value="1970">1970</option>
+									<option value="1971">1971</option>
+									<option value="1972">1972</option>
+									<option value="1973">1973</option>
+									<option value="1974">1974</option>
+									<option value="1975">1975</option>
+									<option value="1976">1976</option>
+									<option value="1977">1977</option>
+									<option value="1978">1978</option>
+									<option value="1979">1979</option>
+									<option value="1980">1980</option>
+									<option value="1981">1981</option>
+									<option value="1982">1982</option>
+									<option value="1983">1983</option>
+									<option value="1984">1984</option>
+									<option value="1985">1985</option>
+									<option value="1986">1986</option>
+									<option value="1987">1987</option>
+									<option value="1988">1988</option>
+									<option value="1989">1989</option>
+									<option value="1990">1990</option>
+									<option value="1991">1991</option>
+									<option value="1992">1992</option>
+									<option value="1993">1993</option>
+									<option value="1994">1994</option>
+									<option value="1995">1995</option>
+									<option value="1996">1996</option>
+									<option value="1997">1997</option>
+									<option value="1998">1998</option>
+									<option value="1999">1999</option>
+									<option value="2000">2000</option>
+									<option value="2001">2001</option>
+									<option value="2002">2002</option>
+									<option value="2003">2003</option>
+									<option value="2004">2004</option>
+									<option value="2005">2005</option>
+									<option value="2006">2006</option>
+									<option value="2007">2007</option>
+									<option value="2008">2008</option>
+									<option value="2009">2009</option>
+									<option value="2010">2010</option>
+									<option value="2011">2011</option>
+									<option value="2012">2012</option>
+									<option value="2013">2013</option>
+									<option value="2014">2014</option>
+									<option value="2015">2015</option>
+									<option value="2016">2016</option>
+									<option value="2017">2017</option>
+									<option value="2018">2018</option>
+									<option value="2019">2019</option>
+									<option value="2020">2020</option>
+									<option value="2021">2021</option>
+									<option value="2021">2022</option>
+								</select><select name="calendarMonth" id="calendarMonth" style="font-size:12px;">
+									<option value="0">一月</option>
+									<option value="1">二月</option>
+									<option value="2">三月</option>
+									<option value="3">四月</option>
+									<option value="4">五月</option>
+									<option value="5">六月</option>
+									<option value="6">七月</option>
+									<option value="7">八月</option>
+									<option value="8">九月</option>
+									<option value="9">十月</option>
+									<option value="10">十一月</option>
+									<option value="11">十二月</option>
+								</select></th>
+							<th align="right" width="1%"><input style="border: 1px solid #CCCCCC;background-color:#EFEFEF;width:16px;height:20px;" name="nextMonth" type="button" id="nextMonth" value="&gt;" /></th>
+						</tr>
+					</tbody>
+				</table>
+				<table id="calendarTable" width="100%" style="border:0px solid #CCCCCC;background-color:#FFFFFF" border="0" cellpadding="3" cellspacing="1">
+					<tbody>
+						<tr>
+							<th style="font-weight:normal;background-color:#666666;color:#FFFFFF;">日</th>
+							<th style="font-weight:normal;background-color:#666666;color:#FFFFFF;">一</th>
+							<th style="font-weight:normal;background-color:#666666;color:#FFFFFF;">二</th>
+							<th style="font-weight:normal;background-color:#666666;color:#FFFFFF;">三</th>
+							<th style="font-weight:normal;background-color:#666666;color:#FFFFFF;">四</th>
+							<th style="font-weight:normal;background-color:#666666;color:#FFFFFF;">五</th>
+							<th style="font-weight:normal;background-color:#666666;color:#FFFFFF;">六</th>
+						</tr>
+						<tr align="center">
+							<td style="cursor: default; color: rgb(255, 0, 0); background-color: rgb(239, 239, 239);">
+								&nbsp;</td>
+							<td style="cursor: default; background-color: rgb(239, 239, 239);">&nbsp;</td>
+							<td style="cursor: default; background-color: rgb(239, 239, 239);">&nbsp;</td>
+							<td style="cursor: default; background-color: rgb(239, 239, 239);">1</td>
+							<td style="cursor: default; background-color: rgb(239, 239, 239);">2</td>
+							<td style="cursor: default; background-color: rgb(239, 239, 239);">3</td>
+							<td style="cursor: default; color: rgb(0, 0, 255); background-color: rgb(239, 239, 239);">4
+							</td>
+						</tr>
+						<tr align="center">
+							<td style="cursor: default; color: rgb(255, 0, 0); background-color: rgb(239, 239, 239);">5
+							</td>
+							<td style="cursor: default; background-color: rgb(239, 239, 239);">6</td>
+							<td style="cursor: default; background-color: rgb(239, 239, 239);">7</td>
+							<td style="cursor: default; background-color: rgb(239, 239, 239);">8</td>
+							<td style="cursor: default; background-color: rgb(239, 239, 239);">9</td>
+							<td style="cursor: default; background-color: rgb(239, 239, 239);">10</td>
+							<td style="cursor: default; color: rgb(0, 0, 255); background-color: rgb(239, 239, 239);">11
+							</td>
+						</tr>
+						<tr align="center">
+							<td style="cursor: default; color: rgb(255, 0, 0); background-color: rgb(239, 239, 239);">12
+							</td>
+							<td style="cursor: default; background-color: rgb(239, 239, 239);">13</td>
+							<td style="cursor: default; background-color: rgb(239, 239, 239);">14</td>
+							<td style="cursor: default; background-color: rgb(0, 255, 0);">15</td>
+							<td style="cursor: default; background-color: rgb(239, 239, 239);">16</td>
+							<td style="cursor: default; background-color: rgb(239, 239, 239);">17</td>
+							<td style="cursor: default; color: rgb(0, 0, 255); background-color: rgb(239, 239, 239);">18
+							</td>
+						</tr>
+						<tr align="center">
+							<td style="cursor: default; color: rgb(255, 0, 0); background-color: rgb(239, 239, 239);">19
+							</td>
+							<td style="cursor: default; background-color: rgb(239, 239, 239);">20</td>
+							<td style="cursor: default; background-color: rgb(239, 239, 239);">21</td>
+							<td style="cursor: default; background-color: rgb(239, 239, 239);">22</td>
+							<td style="cursor: default; background-color: rgb(239, 239, 239);">23</td>
+							<td style="cursor: default; background-color: rgb(239, 239, 239);">24</td>
+							<td style="cursor: default; color: rgb(0, 0, 255); background-color: rgb(239, 239, 239);">25
+							</td>
+						</tr>
+						<tr align="center">
+							<td style="cursor: default; color: rgb(255, 0, 0); background-color: rgb(239, 239, 239);">26
+							</td>
+							<td style="cursor: default; background-color: rgb(239, 239, 239);">27</td>
+							<td style="cursor: default; background-color: rgb(239, 239, 239);">28</td>
+							<td style="cursor: default; background-color: rgb(239, 239, 239);">29</td>
+							<td style="cursor: default; background-color: rgb(239, 239, 239);">30</td>
+							<td style="cursor: default; background-color: rgb(239, 239, 239);">31</td>
+							<td style="cursor: default; color: rgb(0, 0, 255); background-color: rgb(239, 239, 239);">
+								&nbsp;</td>
+						</tr>
+						<tr align="center">
+							<td style="cursor: default; color: rgb(255, 0, 0); background-color: rgb(239, 239, 239);">
+								&nbsp;</td>
+							<td style="cursor: default; background-color: rgb(239, 239, 239);">&nbsp;</td>
+							<td style="cursor: default; background-color: rgb(239, 239, 239);">&nbsp;</td>
+							<td style="cursor: default; background-color: rgb(239, 239, 239);">&nbsp;</td>
+							<td style="cursor: default; background-color: rgb(239, 239, 239);">&nbsp;</td>
+							<td style="cursor: default; background-color: rgb(239, 239, 239);">&nbsp;</td>
+							<td style="cursor: default; color: rgb(0, 0, 255); background-color: rgb(239, 239, 239);">
+								&nbsp;</td>
+						</tr>
+						<tr style="background-color:#EFEFEF;">
+							<th colspan="2"><input name="calendarClear" type="button" id="calendarClear" value="清空" style="border: 1px solid #CCCCCC;background-color:#EFEFEF;width:100%;height:20px;font-size:12px;" />
+							</th>
+							<th colspan="3"><input name="calendarToday" type="button" id="calendarToday" value="今天" style="border: 1px solid #CCCCCC;background-color:#EFEFEF;width:100%;height:20px;font-size:12px;" />
+							</th>
+							<th colspan="2"><input name="calendarClose" type="button" id="calendarClose" value="关闭" style="border: 1px solid #CCCCCC;background-color:#EFEFEF;width:100%;height:20px;font-size:12px;" />
+							</th>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</div>
+	<style>
+		td {
+			border-top: 0;
+			border-right: 1px #d6d6d6 solid;
+			border-bottom: 1px #d6d6d6 solid;
+			border-left: 0;
+		}
+
+		table {
+			border-top: 1px #d6d6d6 solid;
+			border-right: 0;
+			border-bottom: 0;
+			border-left: 1px #d6d6d6 solid;
+		}
+	</style>
+
+	<!--header-->
+	<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"/>
+    <!-- START Public head -->
+    <link type="text/css" rel="stylesheet" href="/images/trs_web_style.css" />
+    <!-- END Public head -->
+	<!-- START Plugin CSS -->
+    <link rel="stylesheet" href="/images/public_style_20180129.css">
+    <!-- END Plugin CSS -->
+    <script src="/szfmaterial/JS/jquery.min.js"></script>
+    <script type="text/javascript" src="/images/time-20170828.js"></script>
+	<script src="/szfmaterial/JS/jquery_trs_web.js"></script>
+<script src="/images/jquery_trs_web_bindKey13.js">
+<script type="text/javascript">
+        $(document).ready(function(){
+			$('#content').bindKey13('#search_button');
+		
+	  });
+</script>
+</head>
+<script>
+function searchCK(){
+	var reg= /\<|\>|%|\&|\+|\-|\||\;|\$|\@|\'|\"|\(|\)|\,/g;
+
+	 if(reg.test(document.getElementById("content").value)){
+		alert('您输入的信息包含非法字符!');
+		return false;
+}
+
+    if ($.trim(document.getElementById("content").value) ==""||document.getElementById("content").value =="请输入关键字")
+      {
+        alert("请输入检索内容!");
+        return false;
+      }else{
+		    var url = "https://fcj.nanjing.gov.cn/site/njsfcj/search.html";
+		  //alert(url);
+		 window.open( url+"?searchWord="+encodeURI(document.getElementById("content").value)+"&siteId=114&pageSize=10");
+	  }
+}
+</script>
+<body>
+<!--header-->
+<div class="top">
+<div class="top-con">
+	<div class="top-time">
+     <p>欢迎访问南京市住房保障和房产局网站</p>  
+    </div>
+    <div class="lagu">
+          <a href="http://www.nanjing.gov.cn/index.html" target="_blank">南京市人民政府网站</a> | <a id="toolbarSwitch" href="javascript:void(0);">无障碍阅读</a>
+    </div>
+</div>
+</div>
+<div class="header">
+	<div class="head-con">
+    	<img src="/images/njwjj_heared_logo_20171213.jpg" alt="南京市住房保障和房产局" width="1000" height="170" />
+        </div>
+	<div class="nav">
+    	<div class="nav-tit">
+        	<ul>
+            	<li class="nav-hover" rel="navtit"><a href="/" target="_top">网站首页</a></li>
+                <li rel="navtit"><a href="https://fcj.nanjing.gov.cn/jgxx/" target="_top">机构信息</a></li>
+                <li rel="navtit"><a href="https://fcj.nanjing.gov.cn/zwgk/" target="_top">政府信息公开</a></li>
+                <li rel="navtit"><a href="https://fcj.nanjing.gov.cn/hdjl/" target="_top">互动交流</a></li>
+                <li rel="navtit"><a href="" target="_top">政务服务</a></li>
+            </ul>
+            <div class="seah">
+    			<input name="content" id="content" value="请输入关键字" onfocus="this.value = this.value == this.defaultValue ? '' : this.value" onblur="this.value = this.value == '' ? this.defaultValue : this.value" type="text" class="seah-con" />
+        		<input src="/images/seah-bottom-20170904.jpg" id="search_button" onclick="searchCK()" type="image" class="search_button" />
+    		</div>
+        </div>
+        <div class="nav-con">
+        	<div class="nav-con-nr" rel="nav_pad">
+            	<p><span id="currentDate"></span>
+<script language="JavaScript" type="text/JavaScript">
+ jQuery(function(){ 
+var date = getCurrentDateTime(); 
+var calendar = showCal(); 
+jQuery("#currentDate").html("今天是: " + date); 
+//jQuery("#currentDate").html("今天是: " + date + "&nbsp;&nbsp;农历" + calendar); 
+});
+</script></p>
+            </div>
+            <div class="nav-con-nr undis" rel="nav_pad">
+            	<ul class="nav-zwgk">
+                	
+                </ul>
+            </div>
+            <div class="nav-con-nr undis" rel="nav_pad">
+            	<ul class="nav-zwgk">
+                	
+                    <li><a href="https://fcj.nanjing.gov.cn/zwgk/gkxx/" target="_top" title="概况信息">概况信息</a></li>
+                    
+                    <li><a href="https://fcj.nanjing.gov.cn/zwgk/rsrm/" target="_top" title="人事任免">人事任免</a></li>
+                    
+                    <li><a href="https://fcj.nanjing.gov.cn/zwgk/zfwj/" target="_top" title="政府文件及解读">政府文件及解读</a></li>
+                    
+                    <li><a href="https://fcj.nanjing.gov.cn/zwgk/czxx/" target="_top" title="财政信息">财政信息</a></li>
+                    
+                    <li><a href="https://fcj.nanjing.gov.cn/zwgk/gsgg/" target="_top" title="公示公告">公示公告</a></li>
+                    
+                    <li><a href="https://fcj.nanjing.gov.cn/zwgk/ysqgkxx/" target="_top" title="申请公开政府信息">申请公开政府信息</a></li>
+                    
+                </ul>
+            </div>
+            <div class="nav-con-nr undis" rel="nav_pad">
+            	<ul class="nav-hdjl">
+                	
+                    <li><a href="https://fcj.nanjing.gov.cn/hdjl/lxbltj/" target="_top" title="来信办理统计">来信办理统计</a></li>
+                    
+                    <li><a href="https://fcj.nanjing.gov.cn/hdjl/wyxx/" target="_top" title="我要写信">我要写信</a></li>
+                    
+                    <li><a href="https://fcj.nanjing.gov.cn/hdjl/yjzj/" target="_top" title="意见征集">意见征集</a></li>
+                    
+                    <li><a href="https://fcj.nanjing.gov.cn/hdjl/lxbl/" target="_top" title="来信办理">来信办理</a></li>
+                    
+                </ul>
+            </div>
+            <div class="nav-con-nr undis" rel="nav_pad">
+            	<ul class="nav-bsfw">
+                	
+                    <li><a href="https://fcj.nanjing.gov.cn/zxfw/bjgs/" target="_top" title="办件公示">办件公示</a></li>
+                    
+                    <li><a href="https://fcj.nanjing.gov.cn/zxfw/phgs/" target="_top" title="批后公示">批后公示</a></li>
+                    
+                    <li><a href="https://fcj.nanjing.gov.cn/zxfw/zxfw/" target="_top" title="在线服务">在线服务</a></li>
+                    
+                    <li><a href="https://fcj.nanjing.gov.cn/zxfw/xzzx/" target="_top" title="下载中心">下载中心</a></li>
+                    
+                </ul>
+            </div>
+        </div>
+<script type="text/javascript">
+        jQuery(document).ready(function(){
+		 	jQuery("[rel=navtit]").tab('[rel=nav_pad]','nav-hover','');
+	  });
+</script>
+     
+    </div>
+</div>
+<!--header-->
+</body>
+</html>
+	<!--header-->
+
+	<div id="body_con" style="margin:0 auto;">
+		<div class="con_nav">
+			<div class="confl_nav" style=" border:none;">
+				<div class="confln_left">
+					<img src="../../images/zsl_pathicon_20141119.jpg" />您当前位置：&nbsp;首页&nbsp;|&nbsp;&nbsp;批后公告查询
+				</div>
+			</div>
+		</div>
+		<div class="con_middle">
+			<div class="con_block">
+				
+				<div class="clear"></div>
+				<div class="list" style="height:468px;*+height:488px;">
+					<table width="100%" border="0" cellspacing="0" cellpadding="0" id="table_content">
+						<tr height="28px" align="center" bgcolor="#EFEFEF" style=" color:#000; font-weight: bold;">
+							<td width="338">申请单位/人</td>
+							<td width="212">公告类型</td>
+							<td width="212">资质编号</td>
+							<td width="149">审批日期</td>
+						</tr>
+					</table>
+					<div class="clear"></div>
+				</div>
+				<div class="clear"></div>
+				<div class="page" id="pagedis" style="margin-top: 85px;width:600px;">
+					<table align="center" style="color:#000;font-size:12px;width:600px; line-height:32px; border:0px;border-color:#000;">
+						<tr>
+							<td align="right" height=32 style="border:0px;border-color:#000;"><input type="hidden" value="0" id="countNum" /><input type="hidden" value="1" id="currPage" />共 <b><span
+										id="page">1</span></b> 页 <b><span id="tiao">1</span></b> 条记录&nbsp;当前第 <b><span
+										id="ye">1</span></b> 页 <a href="javascript:goToPage('first');">首页</a>丨<a
+									href="javascript:goToPage(-1);">上一页</a>丨<a href="javascript:goToPage(1);">下一页</a>
+								丨<a href="javascript:goToPage('last');">尾页</a>&nbsp;
+							</td>
+							<td style="border:0px;border-color:#000;">跳转到<input type="text" value="" style="line-height: 20px;width:24px;cursor:pointer;" id="gotoNum" />页&nbsp;</td>
+							<td align="left" style="border:0px;border-color:#000;"><input type="button" class="change" style="line-height: 20px;" value="" onclick="goPage();" /></td>
+						</tr>
+					</table>
+				</div>
+			</div>
+		</div>
+	</div>
+<script>
+              var currPage = "1";
+		var pageSize = "20";
+		loadData(currPage, pageSize);
+		function loadData(currPage, pageSize) {
+			
+			var param = { PageSize: pageSize, PageIndex: currPage, applytype: "商品房预售行政许可"};
+			$.ajax({
+				type: "post",
+				url: "/epoint-web-qxj/rest/zwwtoqxjrest/getpihougonggaolist",
+				dataType: "json",
+				contentType: "application/json",
+				async: false,
+				data: JSON.stringify(param),
+				success: function (res) {
+					var datas = res.data;
+					var count = res.count;//记录总数
+					var msg = res.reststatus;//报错标记
+					var id = "";
+					var title = "";
+					var type = "";
+					var biaohao = "";
+					var datetime = "";
+					var content = "";
+					var url = "";
+					for (i=0;i<datas.length;i++) {
+						id = datas[i].IID;
+						title = datas[i].NAME;
+						type = datas[i].TYPE;
+						biaohao = datas[i].BIANHAO;
+						datetime = datas[i].DATETIME;
+						if (type == "商品房预售行政许可") { url = "/zxfw/phgs/index_15781.html?pk=" + id }
+						//if (type == "房屋结构变动行政许可") { url = "./jgbd_xilan.jsp?pk=" + id }
+						//if (type == "物业三级资质行政许可") { url = "./sjzz_xilan.jsp?pk=" + id }
+						//if (type == "城市房屋拆迁行政许可") { url = "./fwcq_xilan.jsp?pk=" + id }
+						content += "<tr height='26px' align='center'>";
+						content += "<td><a href='" + url + "'  target='_blank'>" + title + "</a></td>";
+						content += "<td>" + type + "</td>";
+						content += "<td>" + biaohao + "</td>";
+						content += "<td>" + datetime + "</td>";
+						content += "</tr>";
+						$("#pagedis").show();
+					}
+					if (count == 0) {
+						content += "<tr height='26px' align='center'>";
+						content += "<td colspan=4>对不起！没有满足您条件的内容。换个条件试试呢?</td>";
+						content += "</tr>";
+						$("#pagedis").hide();
+					}
+					$("#table_content tr:gt(0)").remove();
+					$("#table_content").append(content);
+					//计算多少页
+					$("#page").html(Math.ceil(count / pageSize));
+					$("#tiao").html(count);
+					$("#countNum").attr("value", count);
+				},
+				error: function (XMLHttpRequest, textStatus, errorThrown) {
+					alert(errorThrown);
+				}
+			});
+		}
+
+                function goToPage(obj) {
+			var count = parseInt($("#countNum").val());
+			var maxPage = Math.ceil(count / pageSize);//最大值
+			if (obj == "first") {
+				currPage = 1;
+			} else if (obj == "last") {
+				currPage = maxPage;
+			} else {
+				currPage = parseInt(currPage) + parseInt(obj);
+			}
+			if (currPage >= maxPage) {
+				currPage = maxPage;
+			}
+			if (currPage == 0 || currPage == 1) {
+				currPage = 1;
+			}
+			$("#ye").html(currPage);
+			loadData(currPage, pageSize);
+		}
+
+		function goPage() {
+			currPage = parseInt($("#gotoNum").val());
+			var count = $("#countNum").attr("value");
+			if (isNaN(currPage)) {
+				currPage = 1;
+			}
+			var maxPage = Math.ceil(count / pageSize);//最大值
+			if (currPage > maxPage) {
+				currPage = maxPage;
+			}
+			$("#currPage").attr("value", currPage);
+			$("#ye").html(currPage);
+			loadData(currPage, pageSize);
+		}
+		function search() {
+			sId = $("#zzbhcon").attr("value");
+			sType = $("#bllx").attr("value");
+			sTime = $("#sTime").attr("value");
+			eTime = $("#eTime").attr("value");
+			currPage = 1;
+			$("#currPage").attr("value", currPage);
+			$("#ye").html(currPage);
+			loadData(currPage, pageSize);
+		}
+        </script>
+	<!--footer-->
+	<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"/>
+    <!-- START Public head -->
+    <link type="text/css" rel="stylesheet" href="/images/trs_web_style.css" />
+    <!-- END Public head -->
+	<!-- START Plugin CSS -->
+    <link rel="stylesheet" href="/images/public_style_20171222.css">
+    <!-- END Plugin CSS -->
+    <style>
+    .foot-nj{left: 24px;}
+	.wzjc{left: 145px;}
+    </style>
+</head>
+<body>
+<!--footer-->
+<div class="footer">
+	<div class="footer-nav">
+        	<a href="https://fcj.nanjing.gov.cn/wzdt/" target="_blank" class="footer-line">网站地图</a>
+            <a href="https://fcj.nanjing.gov.cn/lxwm/" target="_blank">联系我们</a>
+    </div>
+    <div class="footer-con">
+    	
+        <p>主办单位：南京市住房保障和房产局 支持单位：南京市城市数字治理中心</p>
+        <p><a href="https://beian.miit.gov.cn/" target="_blank">苏ICP备05004952号-7</a>&nbsp;&nbsp;网站标识码：3201000073&nbsp;&nbsp;<a target="_blank" href="http://www.beian.gov.cn/portal/registerSystemInfo?recordcode=32010602010427" style="display:inline-block; width:200px;text-decoration:none;line-height:20px;"><img src="/images/typic_gabah_bn.png" style="float:left;" />苏公网安备 32010602010427号</a></p>
+<p>您是本站第 <span id='monitor_126'>显示网站总访问量</span>
+<script>var siteId = 126;var countType = 'all'; </script>
+<script language='JavaScript' charset='utf-8' src='/ubas/js/siteCounts.js'></script>位访客</p>
+        <div class="foot-nj">
+        <a href="http://www.nanjing.gov.cn" target="_blank"><img src="/images/zgnj_logo_20170905.png" alt="南京市人民政府" width="95" height="38" /></a>
+        </div>
+
+<div class="foot-dzjg" style="width:105px;right:130px">
+<img style="position: absolute;
+    left: 120px;
+    top: 12px;
+    width: 110px" src="https://www.nanjing.gov.cn/material/IMAGE/wza-20230529.png" />
+        	<script type="text/javascript">document.write(unescape("%3Cspan id='_ideConac' %3E%3C/span%3E%3Cscript src='https://dcs.conac.cn/js/11/173/0000/60923265/CA111730000609232650007.js' type='text/javascript'%3E%3C/script%3E"));</script> 
+        </div> 
+        <div class="wzjc" style="">
+<script id="_jiucuo_" sitecode='3201000073' src='https://zfwzgl.www.gov.cn/exposure/jiucuo.js'></script>
+        	<!--<script id="_jiucuo_" sitecode='3201000073' src='/images/jiucuo.js'></script>-->
+        </div>
+    </div>
+</div>
+<!--footer-->
+<script>
+	var elsemsg = "\n 您将离开“南京市住房保障和房产局”门户网站。您是否仍要继续？";
+var wangzhi="https://fcj.nanjing.gov.cn/";
+</script>
+<script type="text/javascript" src="/szfmaterial/JS/jquery_trs_web_OutSiteLink0910.js"></script>
+<!-- UBAS Start -->
+
+	<script src="/slh/esdToolsInit.js" charset="UTF-8"></script>
+
+<!-- UBAS End --></body>
+</html>
+	<!--footer-->
+	
+
+        
+</body>
+
+</html>

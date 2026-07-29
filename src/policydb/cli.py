@@ -10,25 +10,51 @@ from typing import Annotated
 
 import typer
 
+from policydb.ai import get_ai_provider
 from policydb.api import PolicyDB
+from policydb.archive import archive_document_versions
+from policydb.confidence import materialize_field_confidence
+from policydb.coverage import build_city_source_month_coverage
+from policydb.coverage_audit import run_coverage_audit
 from policydb.crawl.health import disable_unhealthy, enable_recommended, evaluate_sources
 from policydb.crawl.pipeline import CrawlPipeline
+from policydb.dedup_audit import materialize_policy_identity
 from policydb.enrich.glm import GLMEnricher
 from policydb.export.excel_compatible import export_excel_compatible
 from policydb.export.release import create_release
 from policydb.geography import materialize_geography
 from policydb.ingest.excel import import_excel, inventory_excel
+from policydb.intensity.annotations import prepare_annotations
+from policydb.intensity.baselines import train_baselines
+from policydb.intensity.benchmark import build_benchmark
+from policydb.intensity.glm import glm_extract_pending, glm_verify_pending
+from policydb.intensity.operations import (
+    create_model_review_tasks,
+    route_predictions,
+    validate_intensity,
+)
+from policydb.intensity.service import PolicyIntensityService
+from policydb.intensity.transformer import train_transformer
 from policydb.jobs import CrawlJobRequest, JobManager
 from policydb.jobs.worker import run_job
+from policydb.migration_v2 import apply_migration, migration_plan, verify_migration
 from policydb.query.database import build_database
 from policydb.recovery import recover_review_sources
 from policydb.review import apply_corrections, generate_review_tasks
 from policydb.review_automation import automate_review_tasks
+from policydb.schedule import (
+    install_windows_schedule,
+    remove_windows_schedule,
+    schedule_status,
+)
 from policydb.scope import materialize_city_scope
 from policydb.settings import Settings
+from policydb.source_quality import export_source_audit, unresolved_sources, validate_registry
 from policydb.sources import bootstrap_sources_from_excel
+from policydb.taxonomy_v2 import build_cicc_mapping, materialize_action_classifications
 from policydb.transform.collections import build_collection_layer
 from policydb.transform.t4_matching import build_t4_match_candidates
+from policydb.update.v2 import build_update_request, start_update
 from policydb.validate.quality import validate as validate_db
 
 app = typer.Typer(no_args_is_help=True, help="中国房地产与城市政策研究数据库")
@@ -38,12 +64,177 @@ crawl_app = typer.Typer(no_args_is_help=True, help="断点续跑的政策网页�
 enrich_app = typer.Typer(no_args_is_help=True, help="可选的结构化模型辅助提取")
 jobs_app = typer.Typer(no_args_is_help=True, help="后台抓取任务")
 report_app = typer.Typer(no_args_is_help=True, help="运行报告")
+migrate_v2_app = typer.Typer(no_args_is_help=True, help="V2 schema migration")
+update_app = typer.Typer(no_args_is_help=True, help="Layered V2 updates")
+confidence_app = typer.Typer(no_args_is_help=True, help="Field evidence confidence")
+audit_app = typer.Typer(no_args_is_help=True, help="V2 coverage and quality audits")
+intensity_app = typer.Typer(
+    no_args_is_help=True,
+    help="房地产政策动作识别、多模型路由和文本强度指数",
+)
+taxonomy_app = typer.Typer(no_args_is_help=True, help="五类政策动作分类与中金 topic 映射")
+ai_app = typer.Typer(no_args_is_help=True, help="SiliconFlow AI 分类、复核与去重")
+archive_app = typer.Typer(no_args_is_help=True, help="D盘政策原文与附件内容寻址档案")
+schedule_app = typer.Typer(no_args_is_help=True, help="Windows每日、周度和月度自动更新")
+coverage_app = typer.Typer(no_args_is_help=True, help="105城市来源—月份完整性")
 app.add_typer(review_app, name="review")
 app.add_typer(sources_app, name="sources")
 app.add_typer(crawl_app, name="crawl")
 app.add_typer(enrich_app, name="enrich")
 app.add_typer(jobs_app, name="jobs")
 app.add_typer(report_app, name="report")
+app.add_typer(migrate_v2_app, name="migrate-v2")
+app.add_typer(update_app, name="update")
+app.add_typer(confidence_app, name="confidence")
+app.add_typer(audit_app, name="audit")
+app.add_typer(intensity_app, name="intensity")
+app.add_typer(taxonomy_app, name="taxonomy")
+app.add_typer(ai_app, name="ai")
+app.add_typer(archive_app, name="archive")
+app.add_typer(schedule_app, name="schedule")
+app.add_typer(coverage_app, name="coverage")
+
+
+@ai_app.command("test")
+def ai_test():
+    result = get_ai_provider().test()
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    if not result["connected"]:
+        raise typer.Exit(1)
+
+
+@ai_app.command("models")
+def ai_models():
+    typer.echo("\n".join(get_ai_provider().models()))
+
+
+@ai_app.command("classify")
+def ai_classify(
+    run_id: str | None = typer.Option(None, "--run-id"),
+):
+    result = GLMEnricher().enrich_pending(run_id=run_id)
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@ai_app.command("verify")
+def ai_verify(
+    run_id: str | None = typer.Option(None, "--run-id"),
+):
+    result = GLMEnricher().verify_pending(run_id=run_id)
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@ai_app.command("deduplicate")
+def ai_deduplicate():
+    result = materialize_policy_identity()
+    result["semantic_ai_status"] = (
+        "configured_unverified"
+        if Settings.discover().siliconflow_api_key
+        else "awaiting_api_key"
+    )
+    result["records_deleted"] = 0
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@ai_app.command("audit")
+def ai_audit():
+    settings = Settings.discover()
+    result = {
+        "provider": settings.ai_provider,
+        "api_key_configured": bool(settings.siliconflow_api_key),
+        "chat_model": settings.siliconflow_chat_model or None,
+        "verify_model": settings.siliconflow_verify_model or None,
+        "embedding_model": settings.siliconflow_embedding_model,
+        "rerank_model": settings.siliconflow_rerank_model,
+    }
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@archive_app.command("sync")
+def archive_sync():
+    result = archive_document_versions()
+    build_database()
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@archive_app.command("audit")
+def archive_audit():
+    settings = Settings.discover()
+    path = settings.curated / "archive_integrity_checks.parquet"
+    if not path.exists():
+        typer.echo('{"status":"not_run"}')
+        raise typer.Exit(1)
+    import polars as pl
+
+    frame = pl.read_parquet(path)
+    result = {
+        "checked": frame.height,
+        "archived": frame.filter(pl.col("archive_status") == "archived").height,
+        "failed": frame.filter(pl.col("archive_status") != "archived").height,
+    }
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@coverage_app.command("build")
+def coverage_build():
+    typer.echo(
+        json.dumps(build_city_source_month_coverage(), ensure_ascii=False, indent=2)
+    )
+
+
+@schedule_app.command("status")
+def schedule_status_cmd():
+    typer.echo(json.dumps(schedule_status(), ensure_ascii=False, indent=2))
+
+
+@schedule_app.command("install-windows")
+def schedule_install_windows(
+    confirm: bool = typer.Option(False, "--confirm", help="确认写入 Windows 任务计划"),
+):
+    result = install_windows_schedule(confirm=confirm)
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    if result["confirmation_required"]:
+        typer.echo("预览完成。确认后重新运行并增加 --confirm。")
+
+
+@schedule_app.command("remove-windows")
+def schedule_remove_windows(
+    confirm: bool = typer.Option(False, "--confirm", help="确认删除 Windows 任务计划"),
+):
+    typer.echo(
+        json.dumps(
+            remove_windows_schedule(confirm=confirm), ensure_ascii=False, indent=2
+        )
+    )
+
+
+def _schedule_run(layer: str) -> None:
+    typer.echo(json.dumps(start_update(layer), ensure_ascii=False, indent=2))
+
+
+@schedule_app.command("run-daily")
+def schedule_run_daily():
+    _schedule_run("daily")
+
+
+@schedule_app.command("run-weekly")
+def schedule_run_weekly():
+    _schedule_run("weekly")
+
+
+@schedule_app.command("run-monthly")
+def schedule_run_monthly():
+    _schedule_run("monthly")
+
+
+@taxonomy_app.command("build")
+def taxonomy_build():
+    result = {
+        "actions": materialize_action_classifications(),
+        "cicc_topics": build_cicc_mapping(),
+    }
+    build_database()
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
 
 
 @app.command()
@@ -82,8 +273,8 @@ def build_database_cmd():
 
 
 @app.command()
-def validate():
-    report = validate_db()
+def validate(group: str = typer.Option("all", "--group")):
+    report = validate_db(group=group)
     typer.echo(json.dumps(report, ensure_ascii=False, indent=2))
     if not report["passed"]:
         raise typer.Exit(1)
@@ -231,6 +422,146 @@ def sources_disable_unhealthy():
     typer.echo(json.dumps(disable_unhealthy(), ensure_ascii=False, indent=2))
 
 
+@sources_app.command("validate-registry")
+def sources_validate_registry():
+    result = validate_registry()
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    if not result["passed"]:
+        raise typer.Exit(1)
+
+
+@sources_app.command("matrix")
+def sources_matrix(
+    output: Annotated[Path, typer.Option("--output")] = Path("outputs/source_matrix.csv"),
+):
+    typer.echo(json.dumps(export_source_audit(output), ensure_ascii=False, indent=2))
+
+
+@sources_app.command("coverage-matrix")
+def sources_coverage_matrix(
+    output: Annotated[Path, typer.Option("--output")] = Path("outputs/source_matrix.csv"),
+):
+    """兼容 V2 规范名称，输出由唯一来源登记推导的城市—来源矩阵。"""
+    typer.echo(json.dumps(export_source_audit(output), ensure_ascii=False, indent=2))
+
+
+@sources_app.command("unresolved")
+def sources_unresolved():
+    typer.echo(unresolved_sources().write_csv())
+
+
+@sources_app.command("export-audit")
+def sources_export_audit(
+    output: Annotated[Path, typer.Option("--output")] = Path("outputs/source_audit.parquet"),
+):
+    typer.echo(json.dumps(export_source_audit(output), ensure_ascii=False, indent=2))
+
+
+@migrate_v2_app.command("dry-run")
+def migrate_v2_dry_run():
+    typer.echo(json.dumps(migration_plan(), ensure_ascii=False, indent=2))
+
+
+@migrate_v2_app.command("apply")
+def migrate_v2_apply():
+    result = apply_migration()
+    if result["verified"]:
+        build_database()
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    if not result["verified"]:
+        raise typer.Exit(1)
+
+
+@migrate_v2_app.command("verify")
+def migrate_v2_verify():
+    result = verify_migration()
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    if not result["verified"]:
+        raise typer.Exit(1)
+
+
+@confidence_app.command("build")
+def confidence_build():
+    result = materialize_field_confidence()
+    build_database()
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@audit_app.command("coverage")
+def audit_coverage(
+    sample_size: Annotated[int, typer.Option("--sample-size", min=1, max=500)] = 30,
+):
+    typer.echo(
+        json.dumps(
+            run_coverage_audit(sample_size=sample_size),
+            ensure_ascii=False,
+            indent=2,
+            default=str,
+        )
+    )
+
+
+def _start_layered_update(layer: str) -> None:
+    typer.echo(json.dumps(start_update(layer), ensure_ascii=False, indent=2))
+
+
+@update_app.command("daily")
+def update_daily():
+    _start_layered_update("daily")
+
+
+@update_app.command("weekly")
+def update_weekly():
+    _start_layered_update("weekly")
+
+
+@update_app.command("monthly")
+def update_monthly():
+    _start_layered_update("monthly")
+
+
+@update_app.command("quarterly")
+def update_quarterly():
+    _start_layered_update("quarterly")
+
+
+@update_app.command("plan")
+def update_plan(mode: str = typer.Option(..., "--mode")):
+    """只生成轻量计划，不访问网络或创建后台任务。"""
+    request = build_update_request(mode)
+    typer.echo(json.dumps(request.model_dump(mode="json"), ensure_ascii=False, indent=2))
+
+
+@update_app.command("run")
+def update_run(mode: str = typer.Option(..., "--mode")):
+    _start_layered_update(mode)
+
+
+@update_app.command("status")
+def update_status(limit: int = typer.Option(10, "--limit", min=1, max=100)):
+    states = [state.model_dump(mode="json") for state in JobManager().list_states(limit)]
+    typer.echo(json.dumps(states, ensure_ascii=False, indent=2))
+
+
+@update_app.command("report")
+def update_report(run_id: str = typer.Option(..., "--run-id")):
+    manager = JobManager()
+    match = next(
+        (
+            state
+            for state in manager.list_states(limit=1000)
+            if state.run_id == run_id or state.job_id == run_id
+        ),
+        None,
+    )
+    if match is None:
+        raise typer.BadParameter(f"找不到 run/job：{run_id}")
+    report = manager.job_dir(match.job_id) / "report.json"
+    if not report.exists():
+        raise typer.BadParameter(f"报告尚未生成：{report}")
+    typer.echo(report.read_text(encoding="utf-8"))
+
+
 def _date(value: str) -> date:
     if value == "today":
         return date.today()
@@ -249,16 +580,8 @@ def crawl_backfill(
     """按已审核并启用的来源规划和执行历史回溯。"""
     if scope != "large-cities-105":
         raise typer.BadParameter("Only large-cities-105 is configured")
-    pipeline = CrawlPipeline()
-    plan = pipeline.plan(
-        run_type="backfill",
-        start_date=_date(from_),
-        end_date=_date(to),
-        official_first=official_first,
-    )
-    result = pipeline.run(plan["run_id"])
-    build_database()
-    typer.echo(json.dumps({**plan, **result}, ensure_ascii=False, indent=2))
+    _ = official_first
+    _job_mode("historical_105", from_, to, 10000, False)
 
 
 @crawl_app.command("update")
@@ -266,15 +589,7 @@ def crawl_update(scope: str = typer.Option("large-cities-105", "--scope")):
     """只抓取注册表中已启用来源的增量入口。"""
     if scope != "large-cities-105":
         raise typer.BadParameter("Only large-cities-105 is configured")
-    pipeline = CrawlPipeline()
-    plan = pipeline.plan(
-        run_type="incremental",
-        start_date=date.today() - timedelta(days=7),
-        end_date=date.today(),
-    )
-    result = pipeline.run(plan["run_id"])
-    build_database()
-    typer.echo(json.dumps({**plan, **result}, ensure_ascii=False, indent=2))
+    _job_mode("official_update", "overlap3", "today", 100, False)
 
 
 @crawl_app.command("audit")
@@ -443,3 +758,122 @@ def review_recover_sources(limit: int = typer.Option(20, "--limit", min=1, max=5
     """优先回抓已有URL，再搜索已启用的官方来源注册表。"""
     result = recover_review_sources(limit=limit)
     typer.echo(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+
+
+def _write_intensity_metric(name: str, payload: dict) -> Path:
+    output = Settings.discover().root / "outputs" / "policy_intensity"
+    output.mkdir(parents=True, exist_ok=True)
+    path = output / name
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return path
+
+
+@intensity_app.command("literature-audit")
+def intensity_literature_audit():
+    root = Settings.discover().root
+    names = [
+        "policy_intensity_literature_review.md",
+        "policy_intensity_algorithm_mapping.md",
+        "policy_intensity_method_decisions.md",
+    ]
+    result = {name: (root / "docs" / name).exists() for name in names}
+    typer.echo(json.dumps({"passed": all(result.values()), "documents": result}, ensure_ascii=False, indent=2))
+
+
+@intensity_app.command("prepare-annotations")
+def intensity_prepare_annotations(
+    documents: int = typer.Option(500, "--documents", min=1),
+    clauses: int = typer.Option(3000, "--clauses", min=1),
+):
+    result = prepare_annotations(document_count=documents, clause_count=clauses)
+    _write_intensity_metric("annotation_metrics.json", result)
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@intensity_app.command("train-baselines")
+def intensity_train_baselines():
+    result = train_baselines()
+    _write_intensity_metric("baseline_metrics.json", result)
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@intensity_app.command("train-transformer")
+def intensity_train_transformer(
+    model: str = typer.Option("hfl/chinese-macbert-base", "--model"),
+):
+    result = train_transformer(model_name=model)
+    _write_intensity_metric("transformer_metrics.json", result)
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@intensity_app.command("glm-extract")
+def intensity_glm_extract(limit: int = typer.Option(50, "--limit", min=1, max=1000)):
+    result = glm_extract_pending(limit=limit)
+    _write_intensity_metric("glm_metrics.json", {"stage": "extract", **result, "research_ready": False})
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@intensity_app.command("glm-verify")
+def intensity_glm_verify(limit: int = typer.Option(50, "--limit", min=1, max=1000)):
+    result = glm_verify_pending(limit=limit)
+    _write_intensity_metric("glm_verification_metrics.json", result)
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@intensity_app.command("benchmark")
+def intensity_benchmark():
+    result = build_benchmark()
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@intensity_app.command("route")
+def intensity_route():
+    result = route_predictions()
+    _write_intensity_metric("hybrid_metrics.json", {**result, "metrics": {}, "research_ready": False})
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@intensity_app.command("score")
+def intensity_score(
+    limit: int | None = typer.Option(None, "--limit", min=1),
+    formal_only: bool = typer.Option(False, "--formal-only"),
+):
+    service = PolicyIntensityService()
+    extraction = service.extract(limit=limit, formal_only=formal_only)
+    scoring = service.score()
+    service.rebuild_database()
+    typer.echo(json.dumps({"extraction": extraction, "scoring": scoring}, ensure_ascii=False, indent=2))
+
+
+@intensity_app.command("aggregate")
+def intensity_aggregate():
+    service = PolicyIntensityService()
+    result = service.aggregate()
+    service.rebuild_database()
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@intensity_app.command("validate")
+def intensity_validate():
+    result = validate_intensity()
+    _write_intensity_metric("validation_metrics.json", result)
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    if not result["passed_structural"]:
+        raise typer.Exit(1)
+
+
+@intensity_app.command("review")
+def intensity_review():
+    result = create_model_review_tasks()
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@intensity_app.command("report")
+def intensity_report():
+    result = {
+        "validation": validate_intensity(),
+        "benchmark": build_benchmark(),
+        "research_ready": False,
+    }
+    _write_intensity_metric("acceptance_report.json", result)
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))

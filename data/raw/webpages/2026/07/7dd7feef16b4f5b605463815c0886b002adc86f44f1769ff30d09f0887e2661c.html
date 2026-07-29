@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"/>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+	<meta name="SiteName" content="南京市住房保障和房产局">
+	<meta name="SiteDomain"content="https://fcj.nanjing.gov.cn/">
+	<meta name="SiteIDCode" content='3201000073'>
+	<meta name="ColumnName" content="近现代建筑展示">
+	<meta name="ColumnDescription" content="近现代建筑展示">
+	<meta name="ColumnKeywords" content="近现代建筑展示">
+	<meta name="ColumnType" content="近现代建筑展示">
+	<title>近现代建筑展示_南京市住房保障和房产局</title>
+	
+	
+	
+    <!-- START Public head -->
+    <link type="text/css" rel="stylesheet" href="../../../images/trs_web_style.css" />
+    <!-- END Public head -->
+	<!-- START Plugin CSS -->
+    <link rel="stylesheet" href="../../../images/index_style_20171222.css">
+    <!-- END Plugin CSS -->
+    <script src="/szfmaterial/JS/jquery.min.js"></script>
+</head>
+<script>
+//给栏目增加样式
+	$(document).ready(function(e) {
+        id	=	"29153";
+		$("#"+id).addClass("list-hover");
+		
+	 });
+</script> 
+<script language="javascript">
+      function Turn(count,_sPageName, _sPageExt)
+      {
+        var aa=_sPageName,bb=_sPageExt,page=parseInt(document.getElementById("page").value);
+        if(isNaN(page))page=1;
+        if(page<1)page=1;
+        if(page>count)page=count;
+        if(page==1)
+          window.location.href=aa+'.'+bb;
+        else
+          window.location.href=aa+'_'+(page-1)+'.'+bb;
+      }
+      function createPageHTML(_nPageCount, _nCurrIndex, _sPageName, _sPageExt){
+        if(_nPageCount == null || _nPageCount<=1){
+          return;
+        }
+        document.write("共有 "+_nPageCount+" 页，本页是第 "+(_nCurrIndex+1)+" 页    ");
+        var nCurrIndex = _nCurrIndex || 0;
+        if(nCurrIndex == 0)
+        {
+          document.write("首页&nbsp;");
+          document.write("上一页&nbsp;");
+          document.write("<a href=\""+_sPageName+"_" + (nCurrIndex+1) + "."+_sPageExt+"\">下一页</a>&nbsp;");
+          document.write("<a href=\""+_sPageName+"_" + (_nPageCount-1) + "."+_sPageExt+"\">末页</a>&nbsp;");
+        }
+        else
+        {
+          if(nCurrIndex == _nPageCount-1)
+          {
+          document.write("<a href=\""+_sPageName+ "."+_sPageExt+"\">首页</a>&nbsp;");
+          
+          if(nCurrIndex==1)document.write("<a href=\""+_sPageName+ "."+_sPageExt+"\">上一页</a>&nbsp;");else{document.write("<a href=\""+_sPageName+"_" + (nCurrIndex-1) + "."+_sPageExt+"\">上一页</a>&nbsp;");}
+          document.write("下一页&nbsp;");
+          document.write("末页&nbsp;");
+          }
+          else
+          {
+          document.write("<a href=\""+_sPageName + "."+_sPageExt+"\">首页</a>&nbsp;");
+          if(nCurrIndex==1)document.write("<a href=\""+_sPageName+ "."+_sPageExt+"\">上一页</a>&nbsp;");else{document.write("<a href=\""+_sPageName+"_" + (nCurrIndex-1) + "."+_sPageExt+"\">上一页</a>&nbsp;");}   
+          document.write("<a href=\""+_sPageName+"_" + (nCurrIndex+1) + "."+_sPageExt+"\">下一页</a>&nbsp;");
+          document.write("<a href=\""+_sPageName+"_" + (_nPageCount-1) + "."+_sPageExt+"\">末页</a>&nbsp;");
+          }
+        }
+        document.write("跳转到<input name='page' type='text' id='page' size='3' /> 页<input type='button' name='Submit' value='go' onclick=\"Turn('"+_nPageCount+"','"+_sPageName+"','"+_sPageExt+"')\"\ />");
+      }
+</script>
+<body>
+<!--header-->
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"/>
+    <!-- START Public head -->
+    <link type="text/css" rel="stylesheet" href="/images/trs_web_style.css" />
+    <!-- END Public head -->
+	<!-- START Plugin CSS -->
+    <link rel="stylesheet" href="/images/public_style_20180129.css">
+    <!-- END Plugin CSS -->
+    <script src="/szfmaterial/JS/jquery.min.js"></script>
+    <script type="text/javascript" src="/images/time-20170828.js"></script>
+	<script src="/szfmaterial/JS/jquery_trs_web.js"></script>
+<script src="/images/jquery_trs_web_bindKey13.js">
+<script type="text/javascript">
+        $(document).ready(function(){
+			$('#content').bindKey13('#search_button');
+		
+	  });
+</script>
+</head>
+<script>
+function searchCK(){
+	var reg= /\<|\>|%|\&|\+|\-|\||\;|\$|\@|\'|\"|\(|\)|\,/g;
+
+	 if(reg.test(document.getElementById("content").value)){
+		alert('您输入的信息包含非法字符!');
+		return false;
+}
+
+    if ($.trim(document.getElementById("content").value) ==""||document.getElementById("content").value =="请输入关键字")
+      {
+        alert("请输入检索内容!");
+        return false;
+      }else{
+		    var url = "https://fcj.nanjing.gov.cn/site/njsfcj/search.html";
+		  //alert(url);
+		 window.open( url+"?searchWord="+encodeURI(document.getElementById("content").value)+"&siteId=114&pageSize=10");
+	  }
+}
+</script>
+<body>
+<!--header-->
+<div class="top">
+<div class="top-con">
+	<div class="top-time">
+     <p>欢迎访问南京市住房保障和房产局网站</p>  
+    </div>
+    <div class="lagu">
+          <a href="http://www.nanjing.gov.cn/index.html" target="_blank">南京市人民政府网站</a> | <a id="toolbarSwitch" href="javascript:void(0);">无障碍阅读</a>
+    </div>
+</div>
+</div>
+<div class="header">
+	<div class="head-con">
+    	<img src="/images/njwjj_heared_logo_20171213.jpg" alt="南京市住房保障和房产局" width="1000" height="170" />
+        </div>
+	<div class="nav">
+    	<div class="nav-tit">
+        	<ul>
+            	<li class="nav-hover" rel="navtit"><a href="/" target="_top">网站首页</a></li>
+                <li rel="navtit"><a href="https://fcj.nanjing.gov.cn/jgxx/" target="_top">机构信息</a></li>
+                <li rel="navtit"><a href="https://fcj.nanjing.gov.cn/zwgk/" target="_top">政府信息公开</a></li>
+                <li rel="navtit"><a href="https://fcj.nanjing.gov.cn/hdjl/" target="_top">互动交流</a></li>
+                <li rel="navtit"><a href="" target="_top">政务服务</a></li>
+            </ul>
+            <div class="seah">
+    			<input name="content" id="content" value="请输入关键字" onfocus="this.value = this.value == this.defaultValue ? '' : this.value" onblur="this.value = this.value == '' ? this.defaultValue : this.value" type="text" class="seah-con" />
+        		<input src="/images/seah-bottom-20170904.jpg" id="search_button" onclick="searchCK()" type="image" class="search_button" />
+    		</div>
+        </div>
+        <div class="nav-con">
+        	<div class="nav-con-nr" rel="nav_pad">
+            	<p><span id="currentDate"></span>
+<script language="JavaScript" type="text/JavaScript">
+ jQuery(function(){ 
+var date = getCurrentDateTime(); 
+var calendar = showCal(); 
+jQuery("#currentDate").html("今天是: " + date); 
+//jQuery("#currentDate").html("今天是: " + date + "&nbsp;&nbsp;农历" + calendar); 
+});
+</script></p>
+            </div>
+            <div class="nav-con-nr undis" rel="nav_pad">
+            	<ul class="nav-zwgk">
+                	
+                </ul>
+            </div>
+            <div class="nav-con-nr undis" rel="nav_pad">
+            	<ul class="nav-zwgk">
+                	
+                    <li><a href="https://fcj.nanjing.gov.cn/zwgk/gkxx/" target="_top" title="概况信息">概况信息</a></li>
+                    
+                    <li><a href="https://fcj.nanjing.gov.cn/zwgk/rsrm/" target="_top" title="人事任免">人事任免</a></li>
+                    
+                    <li><a href="https://fcj.nanjing.gov.cn/zwgk/zfwj/" target="_top" title="政府文件及解读">政府文件及解读</a></li>
+                    
+                    <li><a href="https://fcj.nanjing.gov.cn/zwgk/czxx/" target="_top" title="财政信息">财政信息</a></li>
+                    
+                    <li><a href="https://fcj.nanjing.gov.cn/zwgk/gsgg/" target="_top" title="公示公告">公示公告</a></li>
+                    
+                    <li><a href="https://fcj.nanjing.gov.cn/zwgk/ysqgkxx/" target="_top" title="申请公开政府信息">申请公开政府信息</a></li>
+                    
+                </ul>
+            </div>
+            <div class="nav-con-nr undis" rel="nav_pad">
+            	<ul class="nav-hdjl">
+                	
+                    <li><a href="https://fcj.nanjing.gov.cn/hdjl/lxbltj/" target="_top" title="来信办理统计">来信办理统计</a></li>
+                    
+                    <li><a href="https://fcj.nanjing.gov.cn/hdjl/wyxx/" target="_top" title="我要写信">我要写信</a></li>
+                    
+                    <li><a href="https://fcj.nanjing.gov.cn/hdjl/yjzj/" target="_top" title="意见征集">意见征集</a></li>
+                    
+                    <li><a href="https://fcj.nanjing.gov.cn/hdjl/lxbl/" target="_top" title="来信办理">来信办理</a></li>
+                    
+                </ul>
+            </div>
+            <div class="nav-con-nr undis" rel="nav_pad">
+            	<ul class="nav-bsfw">
+                	
+                    <li><a href="https://fcj.nanjing.gov.cn/zxfw/bjgs/" target="_top" title="办件公示">办件公示</a></li>
+                    
+                    <li><a href="https://fcj.nanjing.gov.cn/zxfw/phgs/" target="_top" title="批后公示">批后公示</a></li>
+                    
+                    <li><a href="https://fcj.nanjing.gov.cn/zxfw/zxfw/" target="_top" title="在线服务">在线服务</a></li>
+                    
+                    <li><a href="https://fcj.nanjing.gov.cn/zxfw/xzzx/" target="_top" title="下载中心">下载中心</a></li>
+                    
+                </ul>
+            </div>
+        </div>
+<script type="text/javascript">
+        jQuery(document).ready(function(){
+		 	jQuery("[rel=navtit]").tab('[rel=nav_pad]','nav-hover','');
+	  });
+</script>
+     
+    </div>
+</div>
+<!--header-->
+</body>
+</html>
+<!--header-->
+<div class="main clearfix">
+	<div class="list-left">
+    	
+        
+        <div class="list-left-tit">
+        	<h3>房屋管理</h3>
+        </div>
+        <div class="list-left-con">
+        	<ul>
+			
+				<li><a href="../zzjg/"   id="29148" ><span>组织机构</span></a></li>
+			
+				<li><a href="../zcfg/"   id="29151" ><span>政策法规</span></a></li>
+			
+				<li><a href="../kxzs/"   id="29152" ><span>科学知识</span></a></li>
+			
+				<li><a href="./"   id="29153" ><span>近现代建筑展示</span></a></li>
+			
+            </ul>
+        </div>
+        
+    </div>
+    <div class="list-right">
+    	<div class="list-right-tit">
+        	<p>当前位置：<a href="../../../" title="首页" class="CurrChnlCls">首页</a>&nbsp;>&nbsp;<a href="../../" title="专题专栏" class="CurrChnlCls">专题专栏</a>&nbsp;>&nbsp;<a href="../" title="房屋管理" class="CurrChnlCls">房屋管理</a>&nbsp;>&nbsp;<a href="./" title="近现代建筑展示" class="CurrChnlCls">近现代建筑展示</a></p>
+        </div>
+        <div class="list-right-con">
+        	<ul>
+            	
+                
+            	<li><a href="./202606/t20260605_5852683.html" target="_blank" title="范鸿仙墓">范鸿仙墓</a><span>2026-06-05</span></li>
+                
+            	<li><a href="./202606/t20260605_5852679.html" target="_blank" title="法国驻中华民国大使馆旧址">法国驻中华民国大使馆旧址</a><span>2026-05-27</span></li>
+                
+            	<li><a href="./202604/t20260408_5820057.html" target="_blank" title="和记洋行旧址">和记洋行旧址</a><span>2026-04-08</span></li>
+                
+            	<li><a href="./202604/t20260408_5820055.html" target="_blank" title="航空烈士公墓">航空烈士公墓</a><span>2026-03-25</span></li>
+                
+            	<li><a href="./202603/t20260311_5803728.html" target="_blank" title="国立紫金山天文台旧址">国立紫金山天文台旧址</a><span>2026-02-25</span></li>
+                
+				
+                
+            	<li><a href="./202603/t20260311_5803724.html" target="_blank" title="谭延闿墓">谭延闿墓</a><span>2026-02-24</span></li>
+                
+            	<li><a href="./202603/t20260302_5798388.html" target="_blank" title="国民革命阵亡将士纪念塔">国民革命阵亡将士纪念塔</a><span>2026-01-29</span></li>
+                
+            	<li><a href="./202601/t20260104_5756205.html" target="_blank" title="金陵船厂">金陵船厂</a><span>2025-12-23</span></li>
+                
+            	<li><a href="./202601/t20260104_5756203.html" target="_blank" title="原国民政府首都水厂">原国民政府首都水厂</a><span>2025-11-26</span></li>
+                
+            	<li><a href="./202510/t20251020_5672297.html" target="_blank" title="左所大街">左所大街</a><span>2025-10-20</span></li>
+                
+				
+                
+            	<li><a href="./202510/t20251020_5672295.html" target="_blank" title="杨廷宝住宅">杨廷宝住宅</a><span>2025-09-25</span></li>
+                
+            	<li><a href="./202509/t20250903_5642337.html" target="_blank" title="南京工艺装备制造厂检验计量房">南京工艺装备制造厂检验计量房</a><span>2025-08-29</span></li>
+                
+            	<li><a href="./202507/t20250731_5619128.html" target="_blank" title="马道街 41 号古建筑">马道街 41 号古建筑</a><span>2025-07-31</span></li>
+                
+            	<li><a href="./202507/t20250701_5597923.html" target="_blank" title="中营 31 号建筑">中营 31 号建筑</a><span>2025-06-30</span></li>
+                
+            	<li><a href="./202505/t20250528_5572074.html" target="_blank" title="南京光学仪器厂1号厂房">南京光学仪器厂1号厂房</a><span>2025-05-28</span></li>
+                
+				
+            </ul>
+        <div class="gailan03_cont_fanye">
+        	<script>createPageHTML(7, 0, "index", "html")</script>
+        </div>
+        </div>
+    </div>
+<div class="clear"></div>
+</div>
+<!--footer-->
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"/>
+    <!-- START Public head -->
+    <link type="text/css" rel="stylesheet" href="/images/trs_web_style.css" />
+    <!-- END Public head -->
+	<!-- START Plugin CSS -->
+    <link rel="stylesheet" href="/images/public_style_20171222.css">
+    <!-- END Plugin CSS -->
+    <style>
+    .foot-nj{left: 24px;}
+	.wzjc{left: 145px;}
+    </style>
+</head>
+<body>
+<!--footer-->
+<div class="footer">
+	<div class="footer-nav">
+        	<a href="https://fcj.nanjing.gov.cn/wzdt/" target="_blank" class="footer-line">网站地图</a>
+            <a href="https://fcj.nanjing.gov.cn/lxwm/" target="_blank">联系我们</a>
+    </div>
+    <div class="footer-con">
+    	
+        <p>主办单位：南京市住房保障和房产局 支持单位：南京市城市数字治理中心</p>
+        <p><a href="https://beian.miit.gov.cn/" target="_blank">苏ICP备05004952号-7</a>&nbsp;&nbsp;网站标识码：3201000073&nbsp;&nbsp;<a target="_blank" href="http://www.beian.gov.cn/portal/registerSystemInfo?recordcode=32010602010427" style="display:inline-block; width:200px;text-decoration:none;line-height:20px;"><img src="/images/typic_gabah_bn.png" style="float:left;" />苏公网安备 32010602010427号</a></p>
+<p>您是本站第 <span id='monitor_126'>显示网站总访问量</span>
+<script>var siteId = 126;var countType = 'all'; </script>
+<script language='JavaScript' charset='utf-8' src='/ubas/js/siteCounts.js'></script>位访客</p>
+        <div class="foot-nj">
+        <a href="http://www.nanjing.gov.cn" target="_blank"><img src="/images/zgnj_logo_20170905.png" alt="南京市人民政府" width="95" height="38" /></a>
+        </div>
+
+<div class="foot-dzjg" style="width:105px;right:130px">
+<img style="position: absolute;
+    left: 120px;
+    top: 12px;
+    width: 110px" src="https://www.nanjing.gov.cn/material/IMAGE/wza-20230529.png" />
+        	<script type="text/javascript">document.write(unescape("%3Cspan id='_ideConac' %3E%3C/span%3E%3Cscript src='https://dcs.conac.cn/js/11/173/0000/60923265/CA111730000609232650007.js' type='text/javascript'%3E%3C/script%3E"));</script> 
+        </div> 
+        <div class="wzjc" style="">
+<script id="_jiucuo_" sitecode='3201000073' src='https://zfwzgl.www.gov.cn/exposure/jiucuo.js'></script>
+        	<!--<script id="_jiucuo_" sitecode='3201000073' src='/images/jiucuo.js'></script>-->
+        </div>
+    </div>
+</div>
+<!--footer-->
+<script>
+	var elsemsg = "\n 您将离开“南京市住房保障和房产局”门户网站。您是否仍要继续？";
+var wangzhi="https://fcj.nanjing.gov.cn/";
+</script>
+<script type="text/javascript" src="/szfmaterial/JS/jquery_trs_web_OutSiteLink0910.js"></script>
+<!-- UBAS Start -->
+
+	<script src="/slh/esdToolsInit.js" charset="UTF-8"></script>
+
+<!-- UBAS End --></body>
+</html>
+<!--footer-->
+
+<!-- Monitor Start -->
+<!-- Monitor Start -->
+<script language='JavaScript' charset='utf-8' src='/ubas/js/count.js'></script>
+<script type='text/javascript'>
+params.docId='';
+params.doctitle='';
+params.siteId='126';
+params.channelId='29153';
+params.channelName='近现代建筑展示';
+params.siteName='房产局';
+</script>
+<script language='JavaScript' charset='utf-8' src='/ubas/js/submit.js'></script>
+<!-- Monitor End -->
+<!-- Monitor End -->
+
+</body>
+</html>

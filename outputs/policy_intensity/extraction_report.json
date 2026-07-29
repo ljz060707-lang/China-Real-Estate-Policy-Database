@@ -1,0 +1,11 @@
+{
+  "generated_at": "2026-07-22T06:51:53.512385+00:00",
+  "records_scanned": 100,
+  "actions": 858,
+  "formal_eligible_actions": 607,
+  "provisional_actions": 251,
+  "calibrations": 336,
+  "paired_calibrations": 7,
+  "raw_modified": false,
+  "rules_version": "1.0.0"
+}

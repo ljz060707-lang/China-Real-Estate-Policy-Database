@@ -7,7 +7,7 @@ import polars as pl
 import pytest
 from pydantic import ValidationError
 
-from policydb.enrich.glm import GLMEnricher, GLMExtraction
+from policydb.enrich.glm import AIActionClassification, GLMEnricher, GLMExtraction
 from policydb.settings import Settings
 
 
@@ -106,3 +106,43 @@ def test_glm_second_pass_is_independent_and_evidence_only(tmp_path):
     checked = enricher.verify("hash", "原文证据", extraction)
     assert checked and checked.field_evidence_valid and checked.confidence == 0.94
     assert calls == 2
+
+
+def test_ai_action_requires_matching_primary_secondary():
+    with pytest.raises(ValidationError):
+        AIActionClassification.model_validate(
+            {
+                "action_text": "提高公积金贷款额度",
+                "primary_category": "D",
+                "secondary_category": "F03",
+                "instrument_type": "credit_finance",
+                "direction": "loosening",
+                "evidence_excerpt": "提高公积金贷款额度",
+                "evidence_start": 0,
+                "evidence_end": 9,
+                "confidence": 0.95,
+            }
+        )
+
+
+def test_ai_action_evidence_must_uniquely_match_source():
+    extraction = GLMExtraction.model_validate(
+        {
+            **_valid_output(),
+            "policy_actions": [
+                {
+                    "action_text": "提高公积金贷款额度",
+                    "primary_category": "D",
+                    "secondary_category": "D06",
+                    "instrument_type": "credit_finance",
+                    "direction": "loosening",
+                    "evidence_excerpt": "提高公积金贷款额度",
+                    "evidence_start": 0,
+                    "evidence_end": 9,
+                    "confidence": 0.95,
+                }
+            ],
+        }
+    )
+    with pytest.raises(ValueError):
+        GLMEnricher._validate_action_evidence("提高公积金贷款额度；提高公积金贷款额度", extraction)

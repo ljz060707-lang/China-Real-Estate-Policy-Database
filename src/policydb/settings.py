@@ -81,15 +81,85 @@ class Settings(BaseModel):
         return bool(self._preference("read_only", "POLICYDB_READ_ONLY", False))
 
     @property
+    def ai_provider(self) -> str:
+        return str(self._preference("ai_provider", "AI_PROVIDER", "siliconflow")).lower()
+
+    @property
+    def siliconflow_api_key(self) -> str | None:
+        return default_secret_store().get_secret(
+            "siliconflow_api_key"
+        ) or default_secret_store().get_secret("glm_api_key")
+
+    @property
+    def siliconflow_base_url(self) -> str:
+        return str(
+            self._preference(
+                "siliconflow_base_url",
+                "SILICONFLOW_BASE_URL",
+                "https://api.siliconflow.cn/v1",
+            )
+        ).rstrip("/")
+
+    @property
+    def siliconflow_chat_model(self) -> str:
+        return str(
+            self._preference("siliconflow_chat_model", "SILICONFLOW_CHAT_MODEL", "")
+        )
+
+    @property
+    def siliconflow_verify_model(self) -> str:
+        return str(
+            self._preference(
+                "siliconflow_verify_model",
+                "SILICONFLOW_VERIFY_MODEL",
+                self.siliconflow_chat_model,
+            )
+        )
+
+    @property
+    def siliconflow_embedding_model(self) -> str:
+        return str(
+            self._preference(
+                "siliconflow_embedding_model",
+                "SILICONFLOW_EMBEDDING_MODEL",
+                "BAAI/bge-m3",
+            )
+        )
+
+    @property
+    def siliconflow_rerank_model(self) -> str:
+        return str(
+            self._preference(
+                "siliconflow_rerank_model",
+                "SILICONFLOW_RERANK_MODEL",
+                "BAAI/bge-reranker-v2-m3",
+            )
+        )
+
+    @property
+    def policy_archive_root(self) -> Path:
+        return Path(
+            self._preference(
+                "policy_archive_root", "POLICYDB_ARCHIVE_ROOT", r"D:\Data Set\CRPD"
+            )
+        )
+
+    @property
     def glm_api_key(self) -> str | None:
-        return default_secret_store().get_secret("glm_api_key")
+        return self.siliconflow_api_key if self.ai_provider == "siliconflow" else (
+            default_secret_store().get_secret("glm_api_key")
+        )
 
     @property
     def glm_model(self) -> str:
+        if self.ai_provider == "siliconflow" and self.siliconflow_chat_model:
+            return self.siliconflow_chat_model
         return str(self._preference("glm_model", "GLM_MODEL", "glm-4-flash"))
 
     @property
     def glm_base_url(self) -> str:
+        if self.ai_provider == "siliconflow":
+            return self.siliconflow_base_url + "/chat/completions"
         return str(
             self._preference(
                 "glm_base_url",

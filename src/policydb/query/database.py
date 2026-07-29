@@ -23,10 +23,41 @@ VIEW_ALIASES = [
 ]
 
 
+def _taxonomy_case(column: str, labels: dict[str, str]) -> str:
+    """Build a small, static SQL CASE expression for dashboard display labels."""
+    clauses = []
+    for code, name in labels.items():
+        safe_code = code.replace("'", "''")
+        safe_name = name.replace("'", "''")
+        clauses.append(f"WHEN {column}='{safe_code}' THEN '{safe_name}'")
+    return "CASE " + " ".join(clauses) + f" ELSE {column} END"
+
+
 def build_database(
     settings: Settings | None = None, *, materialize_geography: bool = True
 ) -> Path:
     settings = settings or Settings.discover()
+    # The dashboard view stores both durable taxonomy codes and human-readable
+    # labels.  Codes remain the join key; labels avoid each page shipping a
+    # second, subtly different category dictionary.
+    from policydb.taxonomy_v2 import load_taxonomy
+
+    # Cloud/read-only rebuild tests intentionally copy only Curated parquet.
+    # Their temporary root has no reference directory, so retain the package
+    # default taxonomy as a read-only fallback rather than making the rebuilt
+    # database dependent on an unrelated local configuration copy.
+    taxonomy_path = settings.root / "data" / "reference" / "policy_taxonomy_v2.yaml"
+    taxonomy = load_taxonomy(settings) if taxonomy_path.exists() else load_taxonomy()
+    primary_labels = {
+        code: item["name"] for code, item in taxonomy["primary_categories"].items()
+    }
+    secondary_labels = {
+        secondary_code: secondary_name
+        for item in taxonomy["primary_categories"].values()
+        for secondary_code, secondary_name in item.get("secondary", {}).items()
+    }
+    primary_label_sql = _taxonomy_case("c.primary_category", primary_labels)
+    secondary_label_sql = _taxonomy_case("c.secondary_category", secondary_labels)
     geography_inputs = (
         settings.curated / "record_jurisdictions.parquet",
         settings.curated / "jurisdictions.parquet",
@@ -44,15 +75,23 @@ def build_database(
     settings.database.parent.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect(str(settings.database))
     try:
-        for migration in sorted((settings.root / "migrations").glob("*.sql")):
-            con.execute(migration.read_text(encoding="utf-8"))
+        migrations = sorted((settings.root / "migrations").glob("*.sql"))
+        deferred_migrations = [path for path in migrations if path.name >= "021_"]
+        for migration in migrations:
+            if migration not in deferred_migrations:
+                con.execute(migration.read_text(encoding="utf-8"))
         con.execute(
             """CREATE TABLE IF NOT EXISTS manual_review_tasks (
                 task_id VARCHAR PRIMARY KEY,
                 record_id VARCHAR,
                 review_type VARCHAR NOT NULL CHECK (review_type IN (
                     'missing_title','missing_source','invalid_url','low_confidence',
-                    'unmatched_t4','unexplained_t2','duplicate_record','other'
+                    'unmatched_t4','unexplained_t2','duplicate_record','coverage_gap',
+                    'source_scope_unresolved','field_conflict','low_field_confidence',
+                    'source_health_issue','model_disagreement','glm_no_evidence',
+                    'rule_glm_numeric_conflict','classifier_direction_conflict',
+                    'low_frequency_instrument','out_of_distribution','action_duplicate',
+                    'interpretation_false_positive','revision_uncertain','intensity_outlier','other'
                 )),
                 field_name VARCHAR,
                 source_sheet VARCHAR,
@@ -69,6 +108,20 @@ def build_database(
                 updated_at TIMESTAMP WITH TIME ZONE NOT NULL
             )"""
         )
+        review_constraints = " ".join(
+            str(row[0])
+            for row in con.execute(
+                "SELECT constraint_text FROM duckdb_constraints() "
+                "WHERE table_name='manual_review_tasks'"
+            ).fetchall()
+        )
+        if "model_disagreement" not in review_constraints:
+            con.execute(
+                "CREATE OR REPLACE TABLE manual_review_tasks_v2 AS "
+                "SELECT * FROM manual_review_tasks"
+            )
+            con.execute("DROP TABLE manual_review_tasks")
+            con.execute("ALTER TABLE manual_review_tasks_v2 RENAME TO manual_review_tasks")
         for parquet in sorted(settings.curated.glob("*.parquet")):
             name = parquet.stem
             parquet_sql = str(parquet).replace("'", "''").replace("\\", "/")
@@ -90,6 +143,128 @@ def build_database(
                    string_agg(DISTINCT t.term_name, '、') AS topics
             FROM records r LEFT JOIN record_jurisdictions g USING(record_id)
             LEFT JOIN record_terms t USING(record_id) GROUP BY ALL""")
+        if (settings.curated / "policy_classifications.parquet").exists():
+            intensity_join = (
+                "LEFT JOIN policy_intensity_scores s USING(action_id)"
+                if (settings.curated / "policy_intensity_scores.parquet").exists()
+                else ""
+            )
+            file_join = (
+                "LEFT JOIN (SELECT record_id,"
+                "bool_or(archive_status='archived') has_archived_file,"
+                "bool_or(content_type ILIKE '%pdf%' AND archive_status='archived') has_pdf,"
+                "min(archive_relative_path) FILTER (WHERE archive_status='archived') archive_relative_path "
+                "FROM policy_files GROUP BY record_id) f USING(record_id)"
+                if (settings.curated / "policy_files.parquet").exists()
+                else ""
+            )
+            intensity_columns = (
+                "s.quality_adjusted_intensity policy_intensity,"
+                "s.formal_status intensity_status"
+                if intensity_join
+                else "NULL::DOUBLE policy_intensity,NULL::VARCHAR intensity_status"
+            )
+            file_columns = (
+                "COALESCE(f.has_archived_file,false) has_archived_file,"
+                "COALESCE(f.has_pdf,false) has_pdf"
+                if file_join
+                else "false has_archived_file,false has_pdf"
+            )
+            archive_path_column = (
+                "f.archive_relative_path" if file_join else "NULL::VARCHAR archive_relative_path"
+            )
+            # One row is one action (or an explicit pending action for a record without
+            # extracted actions).  The dashboard reads this view exclusively.
+            con.execute(
+                """CREATE OR REPLACE VIEW v_policy_action_center AS
+                WITH geography AS (
+                    SELECT record_id,
+                           min(province_name) AS province,
+                           min(COALESCE(parent_city_name, city_name)) AS city,
+                           min(county_name) AS district,
+                           string_agg(DISTINCT geography_original, '、') AS applicable_jurisdiction
+                    FROM record_geographies_normalized GROUP BY record_id
+                ), issuers AS (
+                    SELECT ro.record_id,
+                           min(o.name_standardized) FILTER (WHERE ro.role IN ('issuer','co_issuer')) AS original_issuer,
+                           string_agg(DISTINCT o.name_standardized, '、') FILTER (WHERE ro.role IN ('issuer','co_issuer')) AS publication_issuer
+                    FROM record_organizations ro JOIN organizations o USING(organization_id)
+                    GROUP BY ro.record_id
+                ), identities AS (
+                    SELECT pe.record_id,min(pe.policy_entity_id) AS policy_entity_id,
+                           min(pe.entity_status) AS version_status,
+                           min(c.cluster_id) AS duplicate_cluster_id
+                    FROM policy_entities pe
+                    LEFT JOIN policy_publications pp USING(record_id)
+                    LEFT JOIN policy_duplicate_clusters c
+                      ON strpos(c.member_document_version_ids, pp.document_version_id) > 0
+                    GROUP BY pe.record_id
+                )
+                SELECT a.action_id,a.record_id,r.title,r.record_date,r.publication_date,
+                       r.effective_date,r.official_status,r.official_level,r.source_quality,
+                       r.primary_source_url,r.source_sheet,r.source_row,
+                       a.clause_text,a.text_completeness,a.formal_eligible,
+                       c.primary_category AS primary_category_code,
+                       """
+                + primary_label_sql
+                + """ AS primary_category_name,
+                       c.secondary_category AS secondary_category_code,
+                       """
+                + secondary_label_sql
+                + """ AS secondary_category_name,
+                       c.instrument_type,c.direction,p.target_group AS target_actor,
+                       a.action_status AS lifecycle_stage,
+                       g.province,g.city,g.district,i.original_issuer,i.publication_issuer,
+                       g.applicable_jurisdiction,c.evidence_text AS evidence_excerpt,
+                       c.confidence,c.evidence_start,c.evidence_end,c.review_status,
+                       """
+                + file_columns
+                + ","
+                + archive_path_column
+                + ",i2.duplicate_cluster_id,i2.version_status,"
+                + intensity_columns
+                + """
+                FROM policy_actions a JOIN records r USING(record_id)
+                JOIN policy_classifications c USING(action_id)
+                LEFT JOIN policies p USING(record_id)
+                LEFT JOIN geography g USING(record_id)
+                LEFT JOIN issuers i USING(record_id)
+                LEFT JOIN identities i2 USING(record_id)
+                """
+                + intensity_join
+                + " "
+                + file_join
+                + """
+                UNION ALL
+                SELECT 'RECORD:'||r.record_id action_id,r.record_id,r.title,r.record_date,
+                       r.publication_date,r.effective_date,r.official_status,r.official_level,
+                       r.source_quality,r.primary_source_url,r.source_sheet,r.source_row,
+                       r.summary clause_text,
+                       CASE WHEN length(COALESCE(r.full_text,''))>=200
+                            THEN 'partial_official_text' ELSE 'missing_text' END text_completeness,
+                       false formal_eligible,NULL::VARCHAR primary_category_code,
+                       NULL::VARCHAR primary_category_name,NULL::VARCHAR secondary_category_code,
+                       NULL::VARCHAR secondary_category_name,NULL::VARCHAR instrument_type,
+                       r.direction,p.target_group AS target_actor,NULL::VARCHAR lifecycle_stage,
+                       g.province,g.city,g.district,i.original_issuer,i.publication_issuer,
+                       g.applicable_jurisdiction,NULL::VARCHAR evidence_excerpt,
+                       0.0 confidence,NULL::BIGINT evidence_start,NULL::BIGINT evidence_end,
+                       'pending' review_status,"""
+                + file_columns
+                + ""","""
+                + archive_path_column
+                + """,i2.duplicate_cluster_id,i2.version_status,
+                       NULL::DOUBLE policy_intensity,NULL::VARCHAR intensity_status
+                FROM records r LEFT JOIN policies p USING(record_id)
+                LEFT JOIN geography g USING(record_id)
+                LEFT JOIN issuers i USING(record_id)
+                LEFT JOIN identities i2 USING(record_id) """
+                + file_join
+                + """
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM policy_actions a WHERE a.record_id=r.record_id
+                )"""
+            )
         con.execute(
             "CREATE OR REPLACE VIEW v_policy_topic_long AS SELECT r.record_id,r.record_date,r.title,t.* FROM records r JOIN record_terms t USING(record_id)"
         )
@@ -414,6 +589,50 @@ def build_database(
                           avg(data_completeness_score)::DOUBLE data_completeness_score
                    FROM v_city_month_policy_panel_105 GROUP BY ALL"""
             )
+        if (
+            (settings.curated / "policy_actions.parquet").exists()
+            and (settings.curated / "policy_intensity_scores.parquet").exists()
+        ):
+            con.execute(
+                """CREATE OR REPLACE VIEW v_policy_action_intensity AS
+                   SELECT a.action_id,a.record_id,a.document_version_id,a.instrument,
+                          a.direction,a.clause_text,a.evidence_start,a.evidence_end,
+                          a.text_completeness,a.formal_eligible,a.action_status,
+                          s.textual_policy_design_intensity,
+                          s.textual_implementation_commitment_intensity,
+                          s.instrument_calibration_intensity,
+                          s.authority_adjusted_intensity,s.quality_adjusted_intensity,
+                          s.weight_version,s.score_version,s.formal_status,
+                          s.decision_confidence,s.review_required
+                   FROM policy_actions a JOIN policy_intensity_scores s USING(action_id)"""
+            )
+            con.execute(
+                """CREATE OR REPLACE VIEW v_policy_textual_intensity AS
+                   SELECT r.record_id,r.record_date,r.title,r.official_status,r.official_level,
+                          count(DISTINCT i.action_id)::BIGINT AS action_count,
+                          avg(i.textual_policy_design_intensity)::DOUBLE
+                            AS mean_textual_policy_design_intensity,
+                          sum(i.textual_policy_design_intensity)::DOUBLE
+                            AS gross_textual_policy_design_intensity,
+                          avg(i.textual_implementation_commitment_intensity)::DOUBLE
+                            AS textual_implementation_commitment_intensity,
+                          avg(i.instrument_calibration_intensity)::DOUBLE
+                            AS instrument_calibration_intensity,
+                          bool_and(i.formal_status='formal') AS all_actions_formal,
+                          bool_or(i.review_required) AS review_required,
+                          min(i.decision_confidence)::DOUBLE AS minimum_decision_confidence
+                   FROM records r JOIN v_policy_action_intensity i USING(record_id)
+                   GROUP BY ALL"""
+            )
+        intensity_panel = settings.research / "city_month_policy_intensity.parquet"
+        if intensity_panel.exists():
+            panel_sql = str(intensity_panel).replace("'", "''").replace("\\", "/")
+            con.execute(
+                "CREATE OR REPLACE VIEW v_city_month_textual_policy_intensity AS "
+                f"SELECT * FROM read_parquet('{panel_sql}')"
+            )
+        for migration in deferred_migrations:
+            con.execute(migration.read_text(encoding="utf-8"))
     finally:
         con.close()
     return settings.database

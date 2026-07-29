@@ -8,8 +8,15 @@ from pathlib import Path
 import polars as pl
 import yaml
 
+from policydb.coverage import record_source_window
 from policydb.crawl.checkpoint import append_unique, ensure_crawl_storage
-from policydb.crawl.dedup import content_sha256
+from policydb.crawl.dedup import (
+    RULES_VERSION,
+    content_sha256,
+    normalized_text_hash,
+    policy_identity_key,
+    simhash64,
+)
 from policydb.crawl.discovery import (
     ListPageDiscovery,
     discover_search_items,
@@ -133,17 +140,37 @@ class CrawlPipeline:
             if max_items and len(items) >= max_items:
                 items = items[:max_items]
                 break
-        items = list({item["item_id"]: item for item in items}.values())
+        prepared: dict[str, dict] = {}
+        for item in items:
+            task_key = stable_id(
+                item["source_id"], item["canonical_url"], start_date.isoformat(),
+                end_date.isoformat(), run_type, prefix="TASK",
+            )
+            item.update(
+                {
+                    "item_id": stable_id(run_id, task_key, prefix="CRAWLITEM"),
+                    "task_key": task_key,
+                    "scan_method": run_type,
+                    "requested_url": item["url"],
+                    "final_url": None,
+                    "etag": None,
+                    "last_modified": None,
+                    "last_checked_at": None,
+                    "next_check_at": None,
+                }
+            )
+            prepared[task_key] = item
+        items = list(prepared.values())
         if items and self._path("crawl_items").exists():
-            existing = {
-                row["item_id"]: row
-                for row in pl.read_parquet(self._path("crawl_items")).iter_rows(named=True)
-            }
+            existing_rows = pl.read_parquet(self._path("crawl_items")).iter_rows(named=True)
+            existing = {row["canonical_url"]: row for row in existing_rows}
             for item in items:
-                previous = existing.get(item["item_id"])
+                previous = existing.get(item["canonical_url"])
                 if previous:
                     item["first_seen_at"] = previous["first_seen_at"]
                     item["retry_count"] = previous["retry_count"]
+                    item["etag"] = previous.get("etag")
+                    item["last_modified"] = previous.get("last_modified")
         if items:
             append_unique(self._path("crawl_items"), items, "item_id")
         runs = [
@@ -206,6 +233,7 @@ class CrawlPipeline:
             else set()
         )
         versions: list[dict] = []
+        dedup_decisions: list[dict] = []
         errors: list[dict] = []
         fetched = 0
         cancelled = False
@@ -234,7 +262,9 @@ class CrawlPipeline:
             try:
                 source = source_index[item["source_id"]]
                 self.fetcher.rate_limit = source.rate_limit
-                result = self.fetcher.fetch(item["url"])
+                result = self.fetcher.fetch(
+                    item["url"], etag=item.get("etag"), last_modified=item.get("last_modified")
+                )
                 if result.not_modified:
                     items = items.with_columns(
                         pl.when(pl.col("item_id") == item["item_id"])
@@ -242,8 +272,29 @@ class CrawlPipeline:
                         .otherwise(pl.col("status"))
                         .alias("status")
                     )
+                    items = items.with_columns(
+                        pl.when(pl.col("item_id") == item["item_id"])
+                        .then(pl.lit(now.isoformat()))
+                        .otherwise(pl.col("last_checked_at"))
+                        .alias("last_checked_at")
+                    )
+                    dedup_decisions.append(
+                        {
+                            "decision_id": stable_id(run_id, item["item_id"], "L2", prefix="DEDUP"),
+                            "run_id": run_id, "crawl_item_id": item["item_id"],
+                            "document_version_id": None, "candidate_document_version_id": None,
+                            "dedup_level": "L2", "decision": "unchanged",
+                            "reason": "HTTP 304 conditional request", "score": 1.0,
+                            "threshold": 1.0, "rules_version": RULES_VERSION,
+                            "evidence_json": json.dumps({"etag": bool(item.get("etag")), "last_modified": bool(item.get("last_modified"))}),
+                            "created_at": now.isoformat(),
+                        }
+                    )
                     continue
                 parsed = parse_document(result.body, result.content_type, result.final_url)
+                text_hash = normalized_text_hash(parsed["full_text"] or "")
+                text_simhash = simhash64(parsed["full_text"] or "")
+                identity_key = policy_identity_key(title=parsed["title"])
                 extension = ".pdf" if parsed["document_type"] == "pdf" else ".html"
                 raw_dir = (
                     self.settings.root
@@ -274,7 +325,9 @@ class CrawlPipeline:
                             indent=2,
                         ).encode("utf-8"),
                     )
-                version_id = stable_id(item["item_id"], result.response_sha256, prefix="DOCVER")
+                version_id = stable_id(
+                    item["canonical_url"], result.response_sha256, prefix="DOCVER"
+                )
                 version_row = {
                         "document_version_id": version_id,
                         "record_id": None,
@@ -302,6 +355,10 @@ class CrawlPipeline:
                         "last_seen_at": now.isoformat(),
                         "created_at": now.isoformat(),
                         "updated_at": now.isoformat(),
+                        "normalized_text_hash": text_hash,
+                        "simhash64": text_simhash,
+                        "policy_identity_key": identity_key,
+                        "parser_version": "2",
                     }
                 if version_id in existing_version_ids and existing_versions is not None:
                     existing_versions = existing_versions.with_columns(
@@ -311,10 +368,24 @@ class CrawlPipeline:
                         .alias("last_seen_at")
                     )
                     item_status = "unchanged"
+                    decision = "duplicate_content"
                 else:
                     versions.append(version_row)
                     existing_version_ids.add(version_id)
                     item_status = "fetched"
+                    decision = "new_document"
+                dedup_decisions.append(
+                    {
+                        "decision_id": stable_id(run_id, item["item_id"], version_id, "L3", prefix="DEDUP"),
+                        "run_id": run_id, "crawl_item_id": item["item_id"],
+                        "document_version_id": version_id, "candidate_document_version_id": None,
+                        "dedup_level": "L3", "decision": decision,
+                        "reason": "binary SHA-256 comparison", "score": 1.0,
+                        "threshold": 1.0, "rules_version": RULES_VERSION,
+                        "evidence_json": json.dumps({"content_sha256": result.response_sha256, "normalized_text_hash": text_hash}),
+                        "created_at": now.isoformat(),
+                    }
+                )
                 for attachment in parsed.get("attachments", []):
                     if cancel_check and cancel_check():
                         cancelled = True
@@ -339,7 +410,7 @@ class CrawlPipeline:
                                 suffix = Path(str(attachment.get("label") or "")).suffix or ".bin"
                                 embedded_path = attachment_dir / f"{digest}{suffix[:10]}"
                                 if not embedded_path.exists():
-                                    embedded_path.write_bytes(embedded)
+                                    self._atomic_write(embedded_path, embedded)
                         continue
                     attachment_item_id = stable_id(item["item_id"], attachment_url, prefix="ATTACH")
                     try:
@@ -368,9 +439,9 @@ class CrawlPipeline:
                             / f"{attachment_result.response_sha256}{attachment_extension[:10]}"
                         )
                         if not attachment_path.exists():
-                            attachment_path.write_bytes(attachment_result.body)
+                            self._atomic_write(attachment_path, attachment_result.body)
                         attachment_version_id = stable_id(
-                            attachment_item_id,
+                            attachment_url,
                             attachment_result.response_sha256,
                             prefix="DOCVER",
                         )
@@ -395,6 +466,10 @@ class CrawlPipeline:
                                     "last_seen_at": now.isoformat(),
                                     "created_at": now.isoformat(),
                                     "updated_at": now.isoformat(),
+                                    "normalized_text_hash": normalized_text_hash(attachment_parsed["full_text"] or ""),
+                                    "simhash64": simhash64(attachment_parsed["full_text"] or ""),
+                                    "policy_identity_key": policy_identity_key(title=attachment.get("label") or attachment_parsed["title"]),
+                                    "parser_version": "2",
                                 }
                             )
                             existing_version_ids.add(attachment_version_id)
@@ -420,6 +495,16 @@ class CrawlPipeline:
                     .then(pl.lit(item_status))
                     .otherwise(pl.col("status"))
                     .alias("status")
+                )
+                items = items.with_columns(
+                    pl.when(pl.col("item_id") == item["item_id"])
+                    .then(pl.lit(result.final_url)).otherwise(pl.col("final_url")).alias("final_url"),
+                    pl.when(pl.col("item_id") == item["item_id"])
+                    .then(pl.lit(result.etag)).otherwise(pl.col("etag")).alias("etag"),
+                    pl.when(pl.col("item_id") == item["item_id"])
+                    .then(pl.lit(result.last_modified)).otherwise(pl.col("last_modified")).alias("last_modified"),
+                    pl.when(pl.col("item_id") == item["item_id"])
+                    .then(pl.lit(now.isoformat())).otherwise(pl.col("last_checked_at")).alias("last_checked_at"),
                 )
                 fetched += 1
             except Exception as exc:  # failure is persisted; prior data remains untouched
@@ -450,6 +535,32 @@ class CrawlPipeline:
             append_unique(self._path("policy_document_versions"), versions, "document_version_id")
         if errors:
             append_unique(self._path("fetch_errors"), errors, "error_id")
+        if dedup_decisions:
+            append_unique(self._path("dedup_decisions"), dedup_decisions, "decision_id")
+        run_rows = pl.read_parquet(self._path("crawl_runs")).filter(pl.col("run_id") == run_id)
+        if run_rows.height:
+            run_row = run_rows.row(0, named=True)
+            for source_id in pending["source_id"].unique().to_list():
+                source_items = items.filter(
+                    (pl.col("run_id") == run_id) & (pl.col("source_id") == source_id)
+                )
+                source_errors = sum(row["source_id"] == source_id for row in errors)
+                record_source_window(
+                    run_id=run_id,
+                    source_id=source_id,
+                    period_start=date.fromisoformat(run_row["period_start"]),
+                    period_end=date.fromisoformat(run_row["period_end"]),
+                    scan_method=str(run_row["run_type"]),
+                    candidate_count=source_items.height,
+                    fetched_count=source_items.filter(pl.col("status").is_in(["fetched", "unchanged"])).height,
+                    policy_count=0,
+                    error_count=source_errors,
+                    page_count=0,
+                    completion_evidence={
+                        "reason": "detail fetch evidence only; exhaustive list-page coverage not proven"
+                    },
+                    settings=self.settings,
+                )
         checkpoint = {
             "checkpoint_id": stable_id(run_id, prefix="CHECKPOINT"),
             "run_id": run_id,

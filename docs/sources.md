@@ -12,3 +12,8 @@
 当前自动规则只确定P0的域名属性；P1/P2必须人工确认。一个政策可以连接多个来源，但只有核验后的官方原文可设为canonical。无法找到官方原文时保留媒体来源，并设置
 `official_status=secondary_only`、`needs_review=true`。
 
+## V2 唯一登记与覆盖范围
+
+`data/reference/source_registry.yaml` 是唯一权威登记；`config/source_registry.yml` 不再保存来源事实。V2 新增 `scope_type`、`city_ids`、`province_codes`、`agency_type`、`required_level`、覆盖日期、频率、有效性、替代来源、解析器版本和失败状态。
+
+自动迁移只把已知中央域名映射为全国来源。其余无法证明范围的来源保持 unknown，并由 `policydb sources unresolved` 输出；不得根据域名名称猜测城市。

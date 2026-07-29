@@ -1,6 +1,6 @@
-sources:
-  - {source_id: gov_cn, source_name: 中国政府网, organization: 国务院, base_url: "https://www.gov.cn", source_type: government, jurisdiction: 全国, crawl_method: html_list, list_url: "", update_frequency: weekly, enabled: false, priority: 5, official_level: central, last_success_at: null}
-  - {source_id: mohurd, source_name: 住房和城乡建设部, organization: 住房和城乡建设部, base_url: "https://www.mohurd.gov.cn", source_type: government, jurisdiction: 全国, crawl_method: html_list, list_url: "", update_frequency: weekly, enabled: false, priority: 5, official_level: central, last_success_at: null}
-  - {source_id: pboc, source_name: 中国人民银行, organization: 中国人民银行, base_url: "https://www.pbc.gov.cn", source_type: government, jurisdiction: 全国, crawl_method: html_list, list_url: "", update_frequency: weekly, enabled: false, priority: 5, official_level: central, last_success_at: null}
-  - {source_id: nfra, source_name: 国家金融监督管理总局, organization: 国家金融监督管理总局, base_url: "https://www.nfra.gov.cn", source_type: government, jurisdiction: 全国, crawl_method: html_list, list_url: "", update_frequency: weekly, enabled: false, priority: 5, official_level: central, last_success_at: null}
-templates: [省市人民政府, 省市住建部门, 住房公积金管理中心]
+# 兼容说明：本文件不再保存来源事实，也不会被抓取器读取。
+# 唯一权威来源登记：data/reference/source_registry.yaml（schema_version=2）。
+# 请使用 `policydb sources validate-registry`、`matrix` 和 `export-audit` 管理与审计。
+deprecated: true
+canonical_registry: data/reference/source_registry.yaml
+schema_version: 2

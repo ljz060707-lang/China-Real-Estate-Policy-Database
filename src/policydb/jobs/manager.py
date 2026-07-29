@@ -169,7 +169,13 @@ class JobManager:
         secrets = default_secret_store()
         values = [
             secrets.get_secret(name) or ""
-            for name in ("glm_api_key", "tianditu_token", "search_api_key", "http_proxy")
+            for name in (
+                "siliconflow_api_key",
+                "glm_api_key",
+                "tianditu_token",
+                "search_api_key",
+                "http_proxy",
+            )
         ]
         for key in ("message", "error_message"):
             if key in changes and changes[key] is not None:
@@ -224,7 +230,13 @@ class JobManager:
             message,
             [
                 secrets.get_secret(name) or ""
-                for name in ("glm_api_key", "tianditu_token", "search_api_key", "http_proxy")
+                for name in (
+                    "siliconflow_api_key",
+                    "glm_api_key",
+                    "tianditu_token",
+                    "search_api_key",
+                    "http_proxy",
+                )
             ],
         )
         with path.open("a", encoding="utf-8") as stream:

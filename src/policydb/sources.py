@@ -9,6 +9,8 @@ from urllib.parse import urlsplit
 import polars as pl
 import yaml
 
+from policydb.crawl.models import RegisteredSource
+from policydb.crawl.registry import materialize_registry_parquet, save_registry_atomic
 from policydb.settings import Settings
 from policydb.transform.normalization import normalize_url, stable_id
 
@@ -139,24 +141,11 @@ def bootstrap_sources_from_excel(
                 "updated_at": now,
             }
         )
-    registry = {
-        "version": 1,
-        "generated_at": now,
-        "source_workbook": str(workbook) if workbook else "staging_excel_cells",
-        "source_count": len(sources),
-        "sources": sources,
-    }
-    output = settings.root / "data" / "reference" / "source_registry.yaml"
-    output.write_text(
-        yaml.safe_dump(registry, allow_unicode=True, sort_keys=False), encoding="utf-8"
+    registered = [RegisteredSource.model_validate(source) for source in sources]
+    output = save_registry_atomic(
+        registered, settings, action="bootstrap_from_excel", schema_version=2
     )
-    flat = [
-        {**source, "seed_urls": source["seed_urls"], "list_page_urls": source["list_page_urls"]}
-        for source in sources
-    ]
-    pl.DataFrame(flat, infer_schema_length=None).write_parquet(
-        settings.curated / "source_registry.parquet", compression="zstd"
-    )
+    materialize_registry_parquet(registered, settings)
     source_by_domain = {source["domain"]: source for source in sources}
     records = pl.read_parquet(settings.curated / "records.parquet")
     policy_sources = []

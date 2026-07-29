@@ -6,9 +6,10 @@ from typing import Literal
 
 import httpx
 import polars as pl
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from policydb.crawl.checkpoint import append_unique
+from policydb.crawl.dedup import glm_cache_key, normalized_text_hash
 from policydb.settings import Settings
 from policydb.transform.normalization import stable_id
 
@@ -29,6 +30,49 @@ class EvidenceSpan(BaseModel):
     excerpt: str
 
 
+class AIActionClassification(BaseModel):
+    action_text: str
+    primary_category: Literal["D", "S", "F", "H", "G"]
+    secondary_category: str
+    instrument_type: Literal[
+        "tax",
+        "subsidy",
+        "public_spending",
+        "public_provision",
+        "credit_finance",
+        "regulation",
+        "land_planning",
+        "administrative_service",
+        "information_disclosure",
+        "coordination",
+    ]
+    direction: Literal[
+        "tightening",
+        "loosening",
+        "supportive",
+        "risk_strengthening",
+        "streamlining",
+        "withdrawal_repeal",
+        "neutral",
+        "mixed",
+        "uncertain",
+    ]
+    target_groups: list[str] = Field(default_factory=list)
+    lifecycle: list[str] = Field(default_factory=list)
+    evidence_excerpt: str
+    evidence_start: int = Field(ge=0)
+    evidence_end: int = Field(gt=0)
+    confidence: float = Field(ge=0, le=1)
+
+    @model_validator(mode="after")
+    def secondary_belongs_to_primary(self):
+        if not self.secondary_category.startswith(self.primary_category):
+            raise ValueError("secondary_category must belong to primary_category")
+        if self.evidence_end <= self.evidence_start:
+            raise ValueError("invalid evidence offsets")
+        return self
+
+
 class GLMExtraction(BaseModel):
     is_relevant: bool
     policy_title: str = ""
@@ -45,6 +89,7 @@ class GLMExtraction(BaseModel):
     effective_date_candidate: date | None = None
     summary: str = ""
     evidence_spans: list[EvidenceSpan] = Field(default_factory=list)
+    policy_actions: list[AIActionClassification] = Field(default_factory=list)
     confidence: float = Field(ge=0, le=1)
     needs_review: bool = False
 
@@ -64,7 +109,8 @@ class GLMVerification(BaseModel):
 
 SYSTEM_PROMPT = """你是中国房地产政策资料结构化助手。只输出符合给定JSON schema的JSON。
 不得根据常识编造发布日期、机构、链接、行政区划代码或文件真实性。
-证据不足时保留空值并设置needs_review=true。"""
+综合文件必须拆为多个policy_actions，每个动作只能有一个D/S/F/H/G一级分类。
+每个动作必须给出正文逐字证据和字符位置；证据不足时不输出该动作并设置needs_review=true。"""
 
 VERIFICATION_PROMPT = """你是独立的政策数据复核助手。只核对输入正文与第一次抽取，输出JSON。
 逐字段给出正文证据，检查文本切割、城市过度推断、分类、方向和强度；不得补写正文中不存在的内容。
@@ -126,16 +172,29 @@ class GLMEnricher:
                 )
                 response.raise_for_status()
                 content = response.json()["choices"][0]["message"]["content"]
-                return GLMExtraction.model_validate_json(content)
+                result = GLMExtraction.model_validate_json(content)
+                self._validate_action_evidence(text, result)
+                return result
             except (httpx.HTTPError, KeyError, TypeError, json.JSONDecodeError, ValidationError) as exc:
                 error = exc
         assert error is not None
         raise ValueError(f"GLM structured output validation failed: {type(error).__name__}")
 
+    @staticmethod
+    def _validate_action_evidence(text: str, result: GLMExtraction) -> None:
+        for action in result.policy_actions:
+            excerpt = text[action.evidence_start : action.evidence_end]
+            if excerpt != action.evidence_excerpt or text.count(action.evidence_excerpt) != 1:
+                raise ValueError("policy action evidence must uniquely match source text")
+
     def extract(self, content_sha256: str, text: str) -> GLMExtraction | None:
+        text_hash = normalized_text_hash(text)
+        cache_key = glm_cache_key(text_hash, self.model, self.prompt_version, self.schema_version)
         if self.cache_path.exists():
             cached = pl.read_parquet(self.cache_path).filter(
-                (pl.col("content_sha256") == content_sha256)
+                (pl.col("cache_key") == cache_key)
+                & (pl.col("model_name") == self.model)
+                & (pl.col("prompt_version") == self.prompt_version)
                 & (pl.col("schema_version") == self.schema_version)
                 & (pl.col("status") == "complete")
             )
@@ -161,9 +220,7 @@ class GLMEnricher:
                 output = None
                 error_type = str(exc)
         row = {
-            "extraction_id": stable_id(
-                content_sha256, self.model, self.prompt_version, self.schema_version, prefix="LLM"
-            ),
+            "extraction_id": stable_id(cache_key, prefix="LLM"),
             "content_sha256": content_sha256,
             "model_name": self.model,
             "prompt_version": self.prompt_version,
@@ -178,6 +235,7 @@ class GLMEnricher:
             "called_at": now if self.api_key else None,
             "created_at": now,
             "updated_at": now,
+            "cache_key": cache_key,
         }
         append_unique(self.cache_path, [row], "extraction_id")
         return result
@@ -188,13 +246,11 @@ class GLMEnricher:
         text: str,
         extraction: GLMExtraction,
     ) -> GLMVerification | None:
-        verification_id = stable_id(
-            content_sha256,
-            self.model,
-            self.prompt_version,
-            "independent-verification-v1",
-            prefix="LLMVERIFY",
+        text_hash = normalized_text_hash(text)
+        cache_key = glm_cache_key(
+            text_hash, self.model, self.prompt_version + ":verify", self.schema_version
         )
+        verification_id = stable_id(cache_key, prefix="LLMVERIFY")
         if self.verification_cache_path.exists():
             cached = pl.read_parquet(self.verification_cache_path).filter(
                 (pl.col("verification_id") == verification_id)
@@ -254,6 +310,7 @@ class GLMEnricher:
             "called_at": now if self.api_key else None,
             "created_at": now,
             "updated_at": now,
+            "cache_key": cache_key,
         }
         append_unique(self.verification_cache_path, [row], "verification_id")
         return result

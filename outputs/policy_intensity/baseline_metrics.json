@@ -1,0 +1,7 @@
+{
+  "status": "blocked_missing_gold",
+  "training_rows": 0,
+  "models": ["tfidf_logistic_regression", "tfidf_linear_svm"],
+  "metrics": {},
+  "research_ready": false
+}

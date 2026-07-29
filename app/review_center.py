@@ -19,14 +19,11 @@ from policydb.settings import Settings
 
 TYPE_LABELS = {
     "all": "全部",
-    "missing_title": "标题问题",
-    "missing_source": "原文/来源问题",
-    "invalid_url": "链接问题",
-    "low_confidence": "分类问题",
-    "unmatched_t4": "T4问题",
-    "unexplained_t2": "T2问题",
-    "duplicate_record": "重复记录",
-    "other": "其他",
+    "model_disagreement": "AI两轮冲突",
+    "glm_no_evidence": "无证据分类",
+    "action_duplicate": "疑似误合并",
+    "field_conflict": "适用地区冲突",
+    "revision_uncertain": "重大修订与废止",
 }
 STATUS_LABELS = {
     "manual_review_required": "真正需要人工判断",
@@ -114,8 +111,7 @@ def _act(
 def render_review_center(root: str | Path | None = None) -> None:
     settings = Settings.discover(root)
     read_only = os.getenv("POLICYDB_READ_ONLY", "0").lower() in {"1", "true", "yes"}
-    st.title("人工审核中心")
-    st.caption("Manual Review Center · 审核结果先记录，运行 review apply 后才更新 Curated 数据。")
+    st.caption("仅显示自动诊断无法可靠裁决的关键冲突；审核结果先记录，运行 review apply 后才更新 Curated 数据。")
     if read_only:
         st.info("当前为 GitHub 发布版（只读）。请在本地项目中完成审核和应用修正。")
 
@@ -124,26 +120,13 @@ def render_review_center(root: str | Path | None = None) -> None:
     stats = _cached_review_stats(root_key, database_stamp)
     type_counts = stats["review_type"]
     auto_counts = stats["automation_status"]
-    automatic_done = sum(
-        auto_counts.get(name, 0)
-        for name in (
-            "auto_verified",
-            "auto_repaired_segmentation",
-            "auto_reparsed",
-            "auto_recovered_official",
-            "auto_recovered_secondary",
-            "rejected",
-        )
-    )
     cards = [
-        ("人工兜底", auto_counts.get("manual_review_required", 0)),
-        ("等待自动恢复", auto_counts.get("pending_diagnosis", 0)),
-        ("自动处理", automatic_done),
-        ("低置信分类", type_counts.get("low_confidence", 0)),
-        ("官方来源恢复", auto_counts.get("auto_recovered_official", 0)),
-        ("文本修复", auto_counts.get("auto_repaired_segmentation", 0)),
+        ("AI两轮冲突", type_counts.get("model_disagreement", 0)),
+        ("无证据分类", type_counts.get("glm_no_evidence", 0)),
+        ("疑似误合并", type_counts.get("action_duplicate", 0)),
+        ("需人工托底", auto_counts.get("manual_review_required", 0)),
     ]
-    for column, (label, value) in zip(st.columns(6), cards, strict=True):
+    for column, (label, value) in zip(st.columns(4), cards, strict=True):
         column.metric(label, int(value))
 
     filter_column, detail_column, action_column = st.columns([1.1, 3.2, 1.6])

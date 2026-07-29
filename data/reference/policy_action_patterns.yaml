@@ -1,0 +1,19 @@
+version: "1.0.0"
+negative_document_patterns: [政策解读, 一图读懂, 新闻发布会, 答记者问, 媒体报道]
+action_verbs:
+  tightening: [提高, 收紧, 限制, 暂停, 禁止, 严查, 从严]
+  loosening: [降低, 降至, 下调, 取消, 放宽, 优化, 恢复, 缩短]
+  supportive: [支持, 补贴, 增加, 提高额度, 发放, 收储, 保障]
+  neutral: [明确, 规范, 建立, 完善, 制定]
+instrument_patterns:
+  purchase_restriction: [限购, 购房资格, 住房套数]
+  sale_restriction: [限售, 不得转让, 转让年限]
+  mortgage_downpayment: [首付, 首付款比例, 最低首付款]
+  mortgage_rate: [房贷利率, 贷款利率, 利率下限]
+  provident_fund: [公积金, 贷款额度, 提取额度]
+  purchase_subsidy: [购房补贴, 契税补贴, 补贴金额]
+  talent_hukou: [人才住房, 落户, 社保, 纳税, 社保年限, 纳税年限]
+  housing_supply: [保障性住房, 住房套数, 配售型住房]
+  urban_renewal: [城市更新, 城中村改造, 老旧小区改造, 危旧房改造]
+  financing: [融资, 授信, 白名单, 保交房, PSL]
+  land: [土地供应, 土地出让, 容积率, 地价]

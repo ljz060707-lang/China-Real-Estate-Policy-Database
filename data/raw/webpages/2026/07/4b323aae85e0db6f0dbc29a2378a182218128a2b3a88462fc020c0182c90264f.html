@@ -1,0 +1,45 @@
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>出错了</title>
+    <meta name="format-detection" content="telephone=no" />
+    <meta content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=0" name="viewport" />
+    <link rel="stylesheet" type="text/css" href="https://cdnjs.cls.cn/iav/h5base.min.css" />
+    <link rel="stylesheet" type="text/css" href="https://cdnjs.cls.cn/iav/global_844.css" />
+        <link rel="stylesheet" href="https://cdnjs.cls.cn/iav/share_841.css" />
+    <link rel="stylesheet" type="text/css" href="https://cdnjs.cls.cn/iav/error_810.css" />
+</head>
+<body class="white share-body">
+        <section class="d-f f-b-c box-m-w-15 download-live-box">
+            <div class="d-f f-s-c download-live-logo-box">
+                <img class="download-live-logo" src="https://image.cls.cn/share/cailianpress.png"/>
+                <div class="l-h-14 f-s-0">
+                    <div class="f-s-15 f-w-b c-000 download-name">财联社</div>
+                    <div class="f-s-12 c-666 download-sub-name">财经通讯社</div>
+                </div>
+            </div>
+                <div class="d-f f-c-c f-s-13 c-fff f-w-b l-h-1 bg-c-de0422 download-live-button openapp" data-href="https://sj.qq.com/appdetail/com.lanjinger.choiassociatedpress">打开APP</div>
+        </section>
+    <section class="p-a w-100p error-wrap">
+        <div class="t-a-c error-box">
+                    <img src="https://cdnjs.cls.cn/iav/error-white.png" />
+        </div>
+
+            <div class="f-s-14 l-h-1 t-a-c c-cccccc6b758e error-text">版本过低，请升级App版本后分享</div>
+    </section>
+    <script type="text/javascript" src="https://cdnjs.cls.cn/iav/jquery.min.js"></script>
+    <script type="application/javascript">
+            var timer = null;
+            timer = setInterval(function(){
+                var countdown = $('.error-countdown').text();
+                if (countdown == 1) {
+                    clearInterval(timer);
+                    $('.error-back')[0].click();
+                } else {
+                    $('.error-countdown').text(Number(countdown) - 1);
+                }
+            }, 1000);
+    </script>
+        <script type="text/javascript" src="https://cdnjs.cls.cn/iav/openapp_2025081.js"></script>
+</body>
+</html>

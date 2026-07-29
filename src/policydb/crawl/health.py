@@ -15,6 +15,7 @@ def evaluate_source(source: RegisteredSource, fetcher: RespectfulFetcher) -> dic
     official = source.official_status in {"official", "official_reprint"}
     entry = (source.list_page_urls or source.seed_urls or [None])[0]
     accessible = body_ok = detail_links = False
+    robots_allowed = True
     response_ms = None
     error_type = None
     started = datetime.now(UTC)
@@ -31,6 +32,7 @@ def evaluate_source(source: RegisteredSource, fetcher: RespectfulFetcher) -> dic
                 detail_links = body_ok
         except Exception as exc:
             error_type = type(exc).__name__
+            robots_allowed = error_type != "RobotsBlocked"
     score = (
         (25 if official else 0)
         + (25 if accessible else 0)
@@ -46,8 +48,20 @@ def evaluate_source(source: RegisteredSource, fetcher: RespectfulFetcher) -> dic
         "crawl_enabled": source.crawl_enabled,
         "entry_url": entry,
         "entry_accessible": accessible,
+        "robots_allowed": robots_allowed,
+        "list_page_available": bool(source.list_page_urls and accessible),
+        "site_search_available": bool(source.search_url_template),
+        "requires_javascript": error_type in {"CaptchaDetected"},
+        "captcha_detected": error_type == "CaptchaDetected",
+        "recently_updated": source.last_scan_at is not None or accessible,
         "detail_link_detected": detail_links,
+        "detail_link_extraction_rate": 1.0 if detail_links else 0.0,
+        "title_extraction_rate": 1.0 if detail_links else 0.0,
+        "date_extraction_rate": 0.0,
         "body_parse_success": body_ok,
+        "body_parse_success_rate": 1.0 if body_ok else 0.0,
+        "http_failure_rate": 0.0 if accessible else 1.0,
+        "attachment_extraction_rate": 0.0,
         "average_response_ms": response_ms,
         "error_type": error_type,
         "source_health_score": float(score),

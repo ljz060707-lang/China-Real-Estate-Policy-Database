@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>请完成拼图验证以继续访问</title>
+    <!-- 外部 CSS -->
+    <link rel="stylesheet" href="//imgbdb3.bendibao.com/images/challenge2026.css?v=1.0.0">
+</head>
+<body>
+    <div class="challenge-container">
+        <div class="header">
+            <h1>🧩 请完成拼图验证</h1>
+            <p>拖动拼图块到正确位置以继续访问</p>
+        </div>
+        <div class="content">
+            <div class="instructions">请将下方的拼图块拖动到图片中的正确位置</div>
+            <div class="puzzle-container" id="puzzleContainer" style="background-image: url('http://imgbdb3.bendibao.com/images/puzzle_bg_5.jpg');">
+                <div class="target-area" id="targetArea" style="left:211px;top:168px;"></div>
+            </div>
+            <div class="hint-text" id="hintText">拖动蓝色拼图块到正确位置</div>
+            <div class="error-message" id="errorMessage">位置不正确，请重新尝试</div>
+            <div class="success-message" id="successMessage">✓ 验证成功！正在跳转...</div>
+            <div class="attempts-info" id="attemptsInfo">剩余尝试次数: <span id="attemptsCount">3</span></div>
+            <div class="timer" id="timer">验证超时: <span id="timeLeft">60</span> 秒</div>
+            <button class="submit-btn" id="submitBtn" onclick="submitVerification()">提交验证</button>
+        </div>
+    </div>
+    
+    <!-- 配置数据（内联，避免额外请求） -->
+    <script>
+        window.CHALLENGE_CONFIG = {
+            challengeId: "6978143e5967c7e051af4715b416c4aa",
+            token: "1784536632:a62bad310800f2995198aaebd9e62ed4:6978143e5967c7e051af4715b416c4aa",
+            targetX: 211,
+            targetY: 168,
+            tolerance: 5,
+            maxAttempts: 3,
+            timeoutSeconds: 60,
+            returnUrl: "/news/20161010/content139428.shtm",
+            host: "dg.bendibao.com"
+        };
+    </script>
+    
+    <!-- 外部 JS（不同域名） -->
+    <script src="//imgbdb3.bendibao.com/images/challenge2026.js?v=1.0.0"></script>
+</body>
+</html>
+

@@ -1,0 +1,631 @@
+<!doctype html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+		<meta name="renderer" content="webkit">
+		<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+		<meta http-equiv="Cache-Control" content="no-siteapp">
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+	<title>自然资源部 中国银行保险监督管理委员会关于协同做好不动产“带押过户”便民利企服务的通知</title>
+	<link type="text/css" rel="stylesheet" href="../../images/gtzyb_bs_2.css" />
+        <link type="text/css" rel="stylesheet" href="../../images/chosen_1.css" />
+<link href="../../images/Zrzyb_site.css" rel="stylesheet" type="text/css">
+	<script type="text/javascript" src="../../images/jquery_2.js"></script>
+	<script type="text/javascript" src="../../images/general_qh_1.js"></script>
+	<script type="text/javascript" src="../../images/jquery-1_1.4a2.min.js"></script>
+        <script src="../../images/chosen_1.jquery.js" type="text/javascript"></script>
+        <script src="../../images/pdfdownload_2.js" type="text/javascript"></script>
+		<script src="https://www.mnr.gov.cn/share2017/share-0.9.js" type="text/javascript"></script>
+<style>
+#organcat{font-weight:normal}
+#organcat_chosen .chosen-single{height:33px;}
+#organcat_chosen{margin-left:5px;}
+#organcat_chosen a.chosen-single{margin-left:0px;}
+#organcat_chosen .chosen-single span{line-height:33px;text-indent: 2px}
+
+.tab .wzb_Cons{
+ padding:12px 37px
+}
+#fj a{
+font-size:14px;
+    line-height: 21px;
+}
+#xxgk_fj li{padding-left: 2em;font-family: "Microsoft YaHei"; line-height: 24px;padding-bottom:8px;}
+
+
+.foot{height:auto;margin-bottom:0;}
+.site_table{min-width:1200px;}
+.rack{width:1200px;}
+.wzb_Cons{width:1045px;}
+.wzb_Cons input{width:740px;}
+.ak47 .xx{width:1080px;}
+.ak47 .bottom{width:1080px;}
+.wzb_Cons select{height:31px;}
+.xx h3{font-size:32px;line-height:42px;margin:0 auto;width:800px;}
+</style>
+<script language="JavaScript" type="text/JavaScript">
+function printit(){
+	window.print();
+	return false;
+}
+
+function tz(){
+    var exp = new Date();
+    exp.setTime(exp.getTime() + 5*1000);
+    var title1 = $("#title").val();
+    var search = $("#search").val();
+    var val = $("#val").val();
+    val = val.replace(/\[/ig,"\\[");
+    val = val.replace(/\]/ig,"\\]");
+    if(search=="organcat"){ //jigou
+      val=$("#organcat").val();
+       document.cookie="val="+val+";path=/; domain=.mnr.gov.cn;expires=" + exp.toGMTString();
+      document.cookie="organcat="+val+";path=/; domain=.mnr.gov.cn;expires=" + exp.toGMTString();
+      document.cookie="search=organcat;path=/; domain=.mnr.gov.cn;expires=" + exp.toGMTString();
+      window.location.href="/";//index_gkml.html";//?channelid=168669&timeline=&search=organcat&title=&filenum=&subcat=&organcat="+val+"&themecat=&mintime=&maxtime=&trscontent=&mindate=&maxdate=";
+     }else if(search=="trscontent"){//全部
+      document.cookie="val="+val+";path=/; domain=.mnr.gov.cn;expires=" + exp.toGMTString();
+      document.cookie="content="+val+";path=/; domain=.mnr.gov.cn;expires=" + exp.toGMTString();
+      document.cookie="search=trscontent;path=/; domain=.mnr.gov.cn;expires=" + exp.toGMTString();
+      window.location.href="/";//index_gkml.html";//?channelid=168669&search=trscontent&timeline=&title=&filenum=&subcat=&organcat=&themecat=&mintime=&maxtime=&mindate=&maxdate=&trscontent="+val;
+}else if(search=="searchcontent"){//正文
+      document.cookie="val="+val+";path=/; domain=.mnr.gov.cn;expires=" + exp.toGMTString();
+      document.cookie="search=searchcontent;path=/; domain=.mnr.gov.cn;expires=" + exp.toGMTString();
+      document.cookie="content="+val+";path=/; domain=.mnr.gov.cn;expires=" + exp.toGMTString();
+      window.location.href="/";//index_gkml.html";//?channelid=168669&search=searchcontent&timeline=&title=&filenum=&subcat=&organcat=&themecat=&mintime=&maxtime=&mindate=&maxdate=&trscontent="+val;
+}else if(search=="filenum"){ //文号
+      document.cookie="val="+val+";path=/; domain=.mnr.gov.cn;expires=" + exp.toGMTString();
+      document.cookie="filenum="+val+";path=/; domain=.mnr.gov.cn;expires=" + exp.toGMTString();
+      document.cookie="search=filenum;path=/; domain=.mnr.gov.cn;expires=" + exp.toGMTString();
+      window.location.href="/";//index_gkml.html";//?channelid=168669&search=filenum&timeline=&title=&filenum="+val+"&subcat=&organcat=&themecat=&mintime=&mindate=&maxdate=&maxtime=&trscontent=";
+}else if(search=="title"){//标题
+      document.cookie="val="+val+";path=/; domain=.mnr.gov.cn;expires=" + exp.toGMTString();
+      document.cookie="title="+val+";path=/; domain=.mnr.gov.cn;expires=" + exp.toGMTString();
+      document.cookie="search=title;path=/; domain=.mnr.gov.cn;expires=" + exp.toGMTString();
+      window.location.href="/";//index_gkml.html";//?channelid=168669&search=title&timeline=&title="+val+"&filenum=&subcat=&organcat=&themecat=&mintime=&mindate=&maxdate=&maxtime=&trscontent=";
+}else{
+      document.cookie="title="+val+";path=/; domain=.mnr.gov.cn;expires=" + exp.toGMTString();
+      window.location.href="/";//index_gkml.html";//?channelid=168669&timeline=&title=&filenum=&subcat=&organcat=&themecat=&mintime=&maxtime=&mindate=&maxdate=&trscontent="+val;
+}
+}
+
+
+</script>
+
+<style type="text/css" >
+   #fj{display:block;}
+   .bottom ul li{text-indent:;padding-left:2em;}
+   .ak47 .xx{font-family:"微软雅黑";line-height:200%;}
+   .ak47 .xx p,.ak47 .xx{font-family:"微软雅黑";font-size:16px;color:#000;}
+   .xx h3{font-weight:800;}
+   #F{font-family:"微软雅黑";}
+   #fj a:hover{color:#00468c;text-decoration:underline;}
+   .box table .hui{font-family:"Microsoft YaHei UI";font-weight:bold;font-size:15px;}
+   #fj a{text-indent:2em;display:inline-block;}
+   #search{line-height:25px;margin-right:0.4px;}
+   .ak47 .xx{border-bottom:none;}
+   .end{border-top:1px dashed #999;float:right;padding:0px 10px;margin-top:0px;margin-right:60px;font-size:14px;padding-top:10px;}
+   .end a{color:#999;}
+   .end img{vertical-align:text-bottom;margin-bottom:-3px;cursor:pointer;}
+   body p{line-height:200%;margin:0;}
+	.box table .hui{
+		padding:0;
+		width:140px;
+	}
+	.box table .hui p{
+		text-align:justify;
+		width:80px;
+		margin:0 auto
+	}
+</style>
+
+</head>
+<body>
+<!--head_top开始-->
+<div class="head_top">
+  <div class="head_top_nei">
+    	<div class="head_top_nei_r fr">
+
+
+         
+            <a href="http://mail.mnr.gov.cn" target="_blank" title="电子邮件"><img src="http://www.mnr.gov.cn/wzxx/yy/33529/images/P020181228372573691768.png" width="22" height="19" /></a>
+         
+         
+            <a href="http://www.mnr.gov.cn/wzxx/yy/wh/" target="_blank" title="网站维护邮箱"><img src="http://www.mnr.gov.cn/wzxx/yy/wh/images/P020181228372744327780.png" width="24" height="19" /></a>
+         
+         
+            <a href="javascript:;" id="toolbarSwitch" title="无障碍阅读"><img src="http://www.mnr.gov.cn/wzxx/yy/wza/images/P020181228372910156607.png" width="16" height="19" /></a>
+         
+         
+            <a href="http://www.mnr.gov.cn/wzxx/yy/app/" target="_blank" title="自然资源部APP"><img src="http://www.mnr.gov.cn/wzxx/yy/app/images/P020181228373012644196.png" width="18" height="19" /></a>
+         
+         
+            <a href="http://www.mnr.gov.cn/wzxx/yy/m/" target="_blank" title="手机移动版"><img src="http://www.mnr.gov.cn/wzxx/yy/m/images/P020181228373292762317.png" width="12" height="19" /></a>
+         
+         
+            <a href="http://www.mnr.gov.cn/wzxx/yy/wb/" target="_blank" title="微博"><img src="http://www.mnr.gov.cn/wzxx/yy/wb/images/P020190104338916174295.png" width="25" height="19" /></a>
+         
+         
+            <a  href="http://www.mnr.gov.cn/wzxx/yy/wx/" target="_blank" title="微信"><img src="http://www.mnr.gov.cn/wzxx/yy/wx/images/P020190104339171974300.png" width="23" height="19" /></a>
+         
+
+<!--
+            <span><a href="#">注册</a></span>
+            <span><a href="#" class="on">登录</a></span>
+-->
+      </div>
+
+		<a href="http://www.gov.cn" target="_blank">中国政府网</a>
+
+    </div>
+</div>
+<!--head_top结束-->
+<!--head_logo开始-->
+<div class="head_logo">
+	<div class="head_logo_nei clearfix">
+    	<div class="head_logo_nei_l fl"><a href="http://www.mnr.gov.cn/"><img src="../../images/Zrzyb_logo_scy201806.png" /></a></div>
+<div style="width:315px; height:100px; float:right; margin-top:10px; padding-left:15px;"> 
+			<div class="wzb">政府信息公开</div>
+		</div>
+<style>
+.wzb{font-size:32px;color:#07438a;margin-bottom:10px;font-weight:bold;text-align:right;margin-right:40px;margin-top: 20px;}
+</style>
+</div>
+</div>
+<!--head_logo结束-->
+<!--nav开始-->
+<!--nav开始-->
+<div class="nav">
+	<div class="nav_nei clearfix">
+    	<ul class="clearfix">
+            <li><a href="http://www.mnr.gov.cn/" class="sy">首页</a></li>
+            <li><a href="http://www.mnr.gov.cn/jg/" class="jg">机构</a></li>
+            <li><a href="http://www.mnr.gov.cn/dt/" class="dt">动态</a></li>
+            <li><a href="http://www.mnr.gov.cn/gk/" class="gk">公开</a></li>
+            <li><a href="http://www.mnr.gov.cn/fw/" class="bs">服务</a></li>
+            <li><a href="http://www.mnr.gov.cn/hd/" class="hd">互动</a></li>
+            <li><a href="http://www.mnr.gov.cn/sj/" class="sj">数据</a></li>
+            <li><a href="http://www.mnr.gov.cn/zt/" class="zt">专题</a></li>
+        </ul>
+    </div>
+
+</div>
+<!--nav结束-->
+<!--nav结束-->
+<!-- 头部end -->
+
+<!-- 信息 -->
+<div class="site_table">
+	<div class="rack ak47" style="padding-top: 7px;padding-bottom:15px;" >
+		<div class="tab" style="width: 1120px;margin: 0 auto;">
+			<div class="wzb_Cons" style="margin-bottom: 26px;" >
+				<select name="search" id="search" onChange="clearval()">
+
+					<option value="title">标题</option>
+					<option value="filenum">文号</option>
+					<option value="organcat">机构</option>
+					<option value="searchcontent">正文</option>
+					<option value="trscontent">全部</option>
+				</select>
+				<span><input type="text" name="vale" id="val" />
+<select name="organcat" id="organcat" style="display:none;width:585px;border-left:none;padding-left:50px;border-right:2px solid  #D6D6D6!important;"><option value="735,736,737,738,739,740,741,742,743,744,745,746,747,748,749,750,751,752,753">全部</option><option value="735">办公厅</option><option value="736">国家土地总督察办公室</option><option value="737">政策法规司</option><option value="738">调控和监测司</option><option value="739">规划司</option><option value="740">财务司</option><option value="741">耕地保护司</option><option value="742">地籍管理司(不动产登记局)</option><option value="743">土地利用管理司</option><option value="744">地质勘查司(矿产勘查办公室)</option><option value="745">矿产开发管理司</option><option value="746">矿产资源储量司</option><option value="747">地质环境司(地质灾害应急管理办公室)</option><option value="748">执法监察局</option><option value="749">科技与国际合作司</option><option value="750">人事司</option><option value="751">机关党委</option><option value="752">离退休干部局</option><option value="753">其他</option></select>
+</span>
+				<a href="javascript:void(0);" onClick="tz()"><img src="../../images/49.png" alt="检索" /></a>
+				<a href="http://search.mnr.gov.cn/g2018"><img src="../../images/50.png" alt="高级检索" /></a>
+			</div>
+		</div>
+		<div class="box" style="width: 1120px;margin: 0 auto;min-width:920px;">
+			<table border="0" cellspacing="0" cellpadding="0" style="width:100%">
+				<tr>
+					<td class="hui"><p><span style="display:inline-block;margin-right:31px">名</span>称</p></td>
+					<td colspan="3"><!--名称开始-->自然资源部 中国银行保险监督管理委员会关于协同做好不动产“带押过户”便民利企服务的通知<!--名称结束--></td>
+				</tr>
+				<tr>
+					<td class="hui"><p style="letter-spacing:9px">索引号</p></td>
+					<td><!--索引号开始-->000019174/2023-00003<!--索引号结束--></td>
+					<td class="hui"><p><span style="display:inline-block;margin-right:31px">主</span>题</p></td>
+					<td><!--主题开始-->自然资源确权登记&nbsp;<!--主题结束--></td>
+				</tr>
+
+				<tr>
+					<td class="hui"><p>发文字号</p></td>
+					<td><!--发文日期开始-->自然资发〔2023〕29号<!--发文日期结束--></td>
+					<td class="hui"><p>发布机构</p></td>
+					<td><!--机构开始-->部委联合发文<!--机构结束--></td>
+				</tr>
+				<tr>
+					<td class="hui"><p>生成日期</p></td>
+					<td><!--生成日期开始-->2023年03月03日<!--生成日期结束--></td>
+					<td class="hui"><p><span style="display:inline-block;margin-right:31px">体</span>裁</p></td>
+					<td><!--体裁开始-->通知<!--题材结束--></td>
+				</tr>
+				<tr>
+					<td class="hui"><p>实施日期</p></td>
+					<td><!--实施日期--><!--实施日期结束--></td>
+					<td class="hui"><p>废止日期</p></td>
+					<td><!--废止日期开始--><!--废止日期结束--></td>
+				</tr>
+
+			</table>
+		</div>
+		<!--startprint-->
+<!-- p style="height:36px;" ></p -->
+		<div class="xx" id="content">
+			<h3 style="margin-bottom:14px;">自然资源部 中国银行保险监督管理委员会关于协同做好不动产“带押过户”便民利企服务的通知</h3>
+                          <h6 style="text-align:center;font-size:22px;color:#555;margin:16px 0;"></h6>
+			<p>
+ <div>各省、自治区、直辖市及计划单列市自然资源主管部门，新疆生产建设兵团自然资源局，各银保监局，各政策性银行、大型银行、股份制银行：</div>
+<div>　　为贯彻中央经济工作会议精神，落实党中央、国务院扎实稳住经济一揽子政策措施的有关要求，在地方实践的基础上，自然资源部和中国银行保险监督管理委员会决定深化不动产登记和金融便民利企合作，协同做好不动产“带押过户”，进一步提升便利化服务水平，降低制度性交易成本，助力经济社会发展。现通知如下：</div>
+<div>　　<b>一、以点带面，积极做好“带押过户”</b></div>
+<div>　　“带押过户”是指依据《民法典》第四百零六条“抵押期间，抵押人可以转让抵押财产。当事人另有约定的，按照其约定”的规定，在申请办理已抵押不动产转移登记时，无需提前归还旧贷款、注销抵押登记，即可完成过户、再次抵押和发放新贷款等手续，实现不动产登记和抵押贷款的有效衔接。</div>
+<div>　　“带押过户”主要适用于在银行业金融机构存在未结清的按揭贷款，且按揭贷款当前无逾期。根据《自然资源部关于做好不动产抵押权登记工作的通知》（自然资发〔2021〕54号），不动产登记簿已记载禁止或限制转让抵押不动产的约定，或者《民法典》实施前已经办理抵押登记的，应当由当事人协商一致再行办理。各地要在已有工作的基础上，根据当地“带押过户”推行情况、模式及配套措施情况，深入探索，以点带面，积极做好“带押过户”。要推动省会城市、计划单列市率先实现，并逐步向其他市县拓展；要推动同一银行业金融机构率先实现，并逐步向跨银行业金融机构拓展；要推动住宅类不动产率先实现，并逐步向工业、商业等类型不动产拓展。实现地域范围、金融机构和不动产类型全覆盖，常态化开展“带押过户”服务。</div>
+<div>　　<b>二、因地制宜，确定“带押过户”模式</b></div>
+<div>　　地方在实践探索中，主要形成了三种“带押过户”模式。模式一：新旧抵押权组合模式。通过借新贷、还旧贷无缝衔接，实现“带押过户”。买卖双方及涉及的贷款方达成一致，约定发放新贷款、偿还旧贷款的时点和方式等内容，不动产登记机构合并办理转移登记、新抵押权首次登记与旧抵押权注销登记。</div>
+<div>　　模式二：新旧抵押权分段模式。通过借新贷、过户后还旧贷，实现“带押过户”。买卖双方及涉及的贷款方达成一致，约定发放新贷款、偿还旧贷款的时点和方式等内容，不动产登记机构合并办理转移登记、新抵押权首次登记等，卖方贷款结清后及时办理旧抵押权注销登记。</div>
+<div>　　模式三：抵押权变更模式。通过抵押权变更实现“带押过户”。买卖双方及涉及的贷款方达成一致，约定抵押权变更等内容，不动产登记机构合并办理转移登记、抵押权转移登记以及变更登记。</div>
+<div>　　各地要结合本地实际，确定适宜的办理模式，并结合实践不断丰富发展。在上述模式中，尤其买卖双方涉及不同贷款方的业务，鼓励各地积极引入预告登记，通过预告登记制度，防止“一房二卖”，防范抵押权悬空等风险，维护各方当事人合法权益，保障金融安全。</div>
+<div>　　<b>三、深化协同，提升便利化服务水平</b></div>
+<div>　　各级不动产登记机构、银行保险监督管理机构及银行业金融机构要加强业务协同，推进登记金融系统融合，优化工作流程，实时共享信息，精简办事材料，努力实现登记、贷款、放款、还款无缝衔接，切实便民利企。鼓励建立跨银行业金融机构贷款协同机制，进一步探索不动产登记机构和银行保险监督管理机构“总对总”业务和系统对接方式。</div>
+<div>　　不动产登记机构要继续向银行业金融机构延伸登记服务端口，实现预告登记、转移登记、抵押登记等业务合并办理，支持转移预告登记与抵押预告登记以及“双预告”登记转本登记一并申请、一并办理。要通过系统直联或“互联网+不动产登记”等方式，全面应用电子不动产登记证明，支持“带押过户”网上办、高效办。鼓励推进智能化辅助审核，实现系统自动提示办事进度、自动反馈业务信息，积极探索预告登记转本登记、抵押注销登记辅助自动办。</div>
+<div>　　银行业金融机构要围绕“带押过户”贷款业务新特点，建立健全对应的服务制度，加快贷款业务流程改造，制定操作规程或业务指南，完善风险管控机制，及时升级改造信贷审批放款、还款结算等系统，实现自动放款、还款、资金支付、尾款结算等，确保资金安全高效。要减轻买卖双方负担、尊重各方意愿，选择便捷的资金流转模式，明确资金划转依据、时间节点、具体方式等，实现全流程闭环管理，确保资金安全。鼓励通过银行账户等方式直接结算。引入预告登记等制度的，要根据实时推送的预告登记等结果信息及时审批、发放贷款，确保资金按时到账。</div>
+<div>　　<b>四、加强组织，防范各类业务风险</b></div>
+<div>　　各级自然资源主管部门、银行保险监督管理机构要高度重视，提高政治站位，将做好不动产“带押过户”作为当前加快推动经济运行稳步回升的重要举措之一，加强组织领导，深化部门协同，压实工作责任，积极主动落实。要建立畅通的沟通协调机制，加强业务指导和监管，梳理各环节风险点，制定应急预案，通过发布三方（四方）协议样本、风险提示、业务预警等方式切实防范风险。要细化业务流程，加强业务培训，做好宣传引导，鼓励企业群众积极选择“带押过户”服务。工作中遇到的重大问题，请及时报自然资源部、中国银行保险监督管理委员会。</div>
+<div>&nbsp;</div>
+<div style="text-align: right"><span style="font-size: 12pt">自然资源部&nbsp; &nbsp; &nbsp; 中国银行保险监督管理委员会</span></div>
+<div style="text-align: right"><span style="font-size: 12pt">2023年3月3日&nbsp;</span></div>
+				
+			</p>
+      <p class="F" id="F" ></p>
+        <ul id="xxgk_fj" ></ul>
+		</div>
+
+<p style="height:0;" ></p>
+		<!--endprint--><div class="bottom" style="font-size:14px;">
+			<div class="end" id="font">【字号：&nbsp;
+				<a href="javascript:;" onClick="fontBig();" id="biga">大</a>&nbsp;
+				<a href="javascript:;" onClick="fontMid();" id="mida">中</a>&nbsp;
+				<a href="javascript:;" onClick="fontSmall();"  id="smalla">小</a>】&nbsp;
+				【<a href="javascript:;"onclick="return printit();">打印</a>】
+				【<a href="javascript:;" id="dayin" onClick="PrintOut()"  >仅内容打印</a>】
+				【<a href="javascript:window.close();">关闭</a>】&nbsp;
+                                【<a href="javascript:;" id="pdfdownload" >下载</a>】
+  
+ &nbsp;&nbsp;&nbsp;&nbsp;分享到&nbsp;
+            <a onClick="shareWeibo()"><img src="http://www.mnr.gov.cn/share2017/images/share_Weibo.png" width="27" height="27" /></a>&nbsp;
+            <a onClick="shareQQ()"><img src="http://www.mnr.gov.cn/share2017/images/share_QQkongjian.png" width="27" height="27" /></a>&nbsp;
+            <a onClick="shareWeixin()"><img src="http://www.mnr.gov.cn/share2017/images/share_Weixin.png" width="27" height="27" /></a>&nbsp;
+			</div>
+			</div>
+		<div class="bottom" >
+<div>
+ 		<p class="F" id="XG">
+                </p>
+		 <ul id="xgxx" class="xgxx1 xgxx2" style="display:none;">
+<div class="scy_flie1" style="display:none;">
+   
+</div>
+<div class="scy_flie2" style="display:none;">
+   
+       <li><span>1. </span><a href="http://www.mnr.gov.cn/zt/zh/yshjpjdj/gzdt/202407/t20240709_2851446.html">上海上线“一站式”尽职调查综合查询服务</a></li><li><span>2. </span><a href="http://www.mnr.gov.cn/zt/zh/yshjpjdj/zcfg/zcwj/202403/t20240305_2838870.html">关于不动产登记收费有关政策问题的通知</a></li><li><span>3. </span><a href="http://www.mnr.gov.cn/zt/zh/yshjpjdj/sz/zcwj/202401/t20240118_2821517.html">深圳市龙华区人民政府办公室关于印发《深圳市龙华区国有农业用地管理办法》的通知</a></li><li><span>4. </span><a href="http://www.mnr.gov.cn/zt/zh/yshjpjdj/sz/zcwj/202401/t20240118_2821514.html">市规划和自然资源局关于落实地籍图公众查询服务等相关工作的通知</a></li><li><span>5. </span><a href="http://www.mnr.gov.cn/zt/zh/yshjpjdj/sz/zcwj/202401/t20240118_2821513.html">深圳市规划和自然资源局关于提供地籍图公众查询服务的通告</a></li><li><span>6. </span><a href="http://www.mnr.gov.cn/zt/zh/yshjpjdj/sz/zcwj/202401/P020240118610076406669.docx">不动产登记费一览表</a></li><li><span>7. </span><a href="http://www.mnr.gov.cn/zt/zh/yshjpjdj/sz/zcwj/202401/t20240118_2821511.html">深圳市不动产登记中心投诉渠道公示</a></li><li><span>8. </span><a href="http://www.mnr.gov.cn/zt/zh/yshjpjdj/sz/zcwj/202401/t20240118_2821510.html">深圳市人民政府办公厅关于加快推进城镇老旧小区改造工作的实施意见</a></li><li><span>9. </span><a href="http://www.mnr.gov.cn/zt/zh/yshjpjdj/sz/zcwj/202401/t20240118_2821509.html">深圳市不动产登记中心关于养老、托育、家政服务机构免征不动产登记费有关事宜的通知</a></li><li><span>10. </span><a href="http://www.mnr.gov.cn/zt/zh/yshjpjdj/sz/zcwj/202401/t20240118_2821507.html">批量业务申办指引</a></li>
+       <div style="border-bottom:1px dotted #b5b2a3;margin-top:10px;width:100%;"></div>
+   
+</div>
+<br style="clear:both;" />
+		</ul>
+</div>
+
+<style>
+#xgxx li{width:48%;padding-left:1%;float:none;vertical-align:text-top;}
+.xgxx1 li{display:inline-block;}
+.xgxx2 li{*display:inline;}
+#xgxx li span{float:left;width:26px;text-align:center;}
+#xgxx li a{width:480px;display:inline-block;padding-left:10px;font-size:14px;color:#333;}
+.ak47 .F{font-size:20px;}
+#xgxx li{padding-top:10px;}
+#xgxx li,#xgxx li a,#xxgk_fj li a{font-size:16px;}
+
+
+.xgxx2 li:nth-child(odd):last-child{width:100%;}
+#xgxx li:nth-child(odd):last-child{font-size:16px;}
+</style>
+
+		</div>
+	</div>
+</div>
+<!-- 信息end -->
+<!-- footer -->
+<!--尾部开始-->
+<div class="foot">
+	<div class="foot_nei">
+        <div class="foot_nei_bt">
+        	<dl class="clearfix">
+            	<dt>
+                    <script id="_jiucuo_" sitecode='bm16000001' src='https://zfwzgl.www.gov.cn/exposure/jiucuo.js'></script>
+                    
+                    <a href="http://bszs.conac.cn/sitename?method=show&id=1ACC49F8764914F7E053012819ACEFF4" target="_blank"><img src="../../images/Zrzyb_foot_tu_ico_scy201806_03.png" width="52" height="62" /></a>
+                </dt>
+                <dd>
+                	<span><a href="http://hao.mlr.gov.cn/" target="_blank">网站地图</a>&nbsp;-&nbsp;<a href="http://www.mnr.gov.cn/wzxx/gybz/" target="_blank">关于本站</a>&nbsp;-&nbsp;<a href="http://www.mnr.gov.cn/wzxx/sybz/" target="_blank">使用帮助</a>&nbsp;-&nbsp;<a href="http://www.mnr.gov.cn/wzxx/lxwm/" target="_blank">联系我们</a>&nbsp;-&nbsp;<a href="http://www.mnr.gov.cn/wzxx/wzdc/" target="_blank">网站调查</a></span>
+
+<span>主办：中华人民共和国自然资源部<em>承办：自然资源部信息中心</em><em>版权所有：中华人民共和国自然资源部</em></span>
+                    <span>政府网站标识码：bm16000001<em><a href="https://beian.miit.gov.cn/" target="_blank">京ICP备18044900号-1</a></em><em><a target="_blank" href="http://www.beian.gov.cn/portal/registerSystemInfo?recordcode=11010202007799" style="display:inline-block;height:20px;line-height:20px;color:#fff;font-size:14px;">
+    	<img src="../../images/scy_Zrzyb20180903_gawb.png" width="20" height="20" style="float:left;" />
+        <p class="hover" style="float:left;height:20px;line-height:20px;padding-left:5px;margin:0;color:#fff;">京公网安备 11010202007799号</p> <br style="clear:both;">
+</a></em></span>
+                    <span>建议使用IE9.0以上浏览器或兼容浏览器，分辨率1280*720 </span>
+                </dd>
+            </dl>
+        </div>
+
+<style>
+.hover:hover{ text-decoration:underline;}
+#_span_jiucuo img{background:#fff;}
+</style>
+
+<!--无障碍js-->
+<script src="../../images/esdToolsInit.js"></script>
+  </div>
+</div>
+<!--尾部结束-->
+<!-- footer end -->
+<div style="display:none;" id="app_div">
+ 
+</div>
+
+<form id="pdfform">
+<input name="url" type="hidden" id="url" />
+</form>
+</body>
+<script type="text/javascript:;" src="../../images/all.js"></script>
+<script>
+  var content = document.getElementById("content");
+  var font = document.getElementById("font");
+  var biga = document.getElementById("biga");
+  var mida = document.getElementById("mida");
+  var smalla = document.getElementById("smalla");
+  var aa = font.getElementsByTagName("a");
+/*附件开始---*/
+/*var fd= document.getElementById("F");
+var str='';
+var file_appendix='';
+var fjs= document.getElementById("fj");
+
+if(str!=""&file_appendix!=""){
+fd.innerHTML='附件 &nbsp;:';
+fjs.innerHTML=' ';
+}
+else{
+if(str==''){
+fd.innerHTML='';
+}
+}*/
+$(function(){
+
+
+/*
+  var str=$.trim($("#app_div").html());
+  if(str.length>0){
+    var strArr=str.split(";"),html="";
+    if(strArr.length>1){
+      $(strArr).each(function(i,item){
+         html+="<li><span>"+(i+1)+". </span>"+item+"</li>";
+      })
+    }else{
+        html="<li>"+strArr[0]+"</li>";
+    }
+    $("#F").html("附件 &nbsp;:");
+    $("#xxgk_fj").html(html);
+  }
+*/
+
+
+//20191010新加
+        var ajarr = [];
+        var ajaxstr="";
+	var str=$.trim($("#app_div").html());
+	if(str.length>0){
+		var strArr=str.split(";"),html="";
+		if(strArr.length == 1){
+		  $(strArr).each(function(i,item){
+                  if(item.indexOf(".doc")>0 || item.indexOf(".docx")>0){
+	                CompileDemo(item);
+                            //html+=(i+1)+"."+item+"<a href='http://search.mnr.gov.cn/axis2"+ajaxstr+"' style='margin-left:24px;' target='_blank'>PDF版下载</a><br>";
+			      html+="<li>"+item+"</li> ";
+		            }else{
+		            html+="<li>"+item+"</li>";
+		            }
+			})
+		} else if (strArr.length > 1){
+		  $(strArr).each(function(i,item){
+                  if(item.indexOf(".doc")>0 || item.indexOf(".docx")>0){
+	                CompileDemo(item);
+                            //html+=(i+1)+"."+item+"<a href='http://search.mnr.gov.cn/axis2"+ajaxstr+"' style='margin-left:24px;' target='_blank'>PDF版下载</a><br>";
+			      html+="<li><span>"+(i+1)+". </span>"+item+"</li> ";
+		            }else{
+		            html+="<li><span>"+(i+1)+". </span>"+item+"</li>";
+		            }
+			})
+		} else {
+		   html="<li>"+strArr[0]+"</li>";
+		}
+	    $("#F").html("附件 &nbsp;:");
+        $("#xxgk_fj").html(html);
+  }
+
+/*截取doc文件地址传给ajax*/
+function CompileDemo(str){
+    var r = new RegExp("(href=\").*?(\")", "g");
+	var sdocurl = str.match(r);
+	var urlstr = String(sdocurl)
+	var surl = urlstr.substring(6,urlstr.length-1);
+       // geturl(surl);
+        ajarr.push(surl);
+}
+/*封装的函数解决低版本IE不支持getElementsByClassName*/
+function getclass(classn) {//创建函数 传入形参
+	if(!document.getElementsByClassName) {//判断document.getElementsByClassName方法是否支持
+		var list = document.getElementsByTagName("*");//先取得所有的dom标签元素
+		   //           alert(list.length)
+		var temp = [];//创建临时数组
+		for(var i = 0; i < list.length; i++) {//循环每一个dom元素
+			if(list[i].className == classn) {//判断当前这个元素的class名称是否等于box
+				temp.push(list[i])//如果等于，将该元素添加到数组中去
+			}
+
+		}
+		 return temp;//；返回给函数
+	}
+	else{
+		return document.getElementsByClassName(classn); 
+	}
+}
+
+/*20200121新加*/
+
+/*通过getElementsByClassName给元素赋值
+var divid = document.getElementById("scy_file");
+var abtn = getclass('scypdf');
+for(var i=0;i<ajarr.length;i++){
+     abtn[i].index=i;   
+abtn[i].onclick = function (){
+     loadDoc(ajarr[this.index]);
+//console.log(ajaxstr)
+     this.href='https://search.mnr.gov.cn/axis2' + ajaxstr ;
+}
+}
+*/
+
+function loadDoc(xmlurl) {
+  if (window.XMLHttpRequest)
+	{// code for IE7+, Firefox, Chrome, Opera, Safari
+	xmlhttp=new XMLHttpRequest();
+	}else{
+
+  }
+  var xhttp = new XMLHttpRequest();               
+   xhttp.onreadystatechange = function() { 
+    if (xhttp.readyState == 4 && xhttp.status == 200) {       //当使用 async=true 时，请规定在响应处于 onreadystatechange 事件中的就绪状态时执行的函数：
+    myFunction(xhttp);
+	//console.log(this)
+     }
+  };
+ // var xmlurl = "http://www.mnr.gov.cn/fw/xzfw/rj/dz_19225/dzzhrj/201808/P020190116534282771159.doc";
+  xhttp.open("GET", "https://search.mnr.gov.cn/axis2/services/doctopdf/geturl?URL="+xmlurl, false);
+  xhttp.send();
+}
+/**/
+function myFunction(xml) {
+  var xmlDoc = xml.responseXML;
+  //console.log(xmlDoc);
+  ajaxstr = xmlDoc.getElementsByTagName("return")[0].childNodes[0].nodeValue;
+}
+/*20200121新加*/
+
+})
+/*附件结束*/
+
+
+
+
+
+/*相关信息显示 &link_appendix==''*/
+	var   XG= document.getElementById("XG");
+	var   xgxx= document.getElementById("xgxx");
+	var   lis= xgxx.getElementsByTagName("li");
+	var  some='关于协同做好不动产“带押过户”便民利企服务的通知';
+	if(lis.length>0&&some!=""){
+		XG.innerHTML='相关信息 &nbsp;:';
+		xgxx.style.display="block";
+		//------------myy修改
+		if(lis.length==1){
+			//XG.innerHTML='';
+			$("#xgxx>li>span").remove();
+		}
+	}
+
+
+  function fontBig(){
+	  clear();
+	  content.style.fontSize="20px";
+	  biga.style.color="#557197";
+  }
+  function fontSmall(){
+	  clear();
+	  content.style.fontSize="12px";
+	  smalla.style.color="#557197";
+  }
+  function fontMid(){
+	  clear();
+	  content.style.fontSize="16px";
+	  mida.style.color="#557197";
+  }
+  function clear(){
+	  for(var i=0;i<aa.length;i++){
+		  aa[i].style.color="#333";
+	  }
+  }
+   /*打印*/
+    var dayin = document.getElementById("dayin");
+function PrintOut() {  
+        bdhtml = window.document.body.innerHTML;  
+        sprnstr = "<!--startprint-->";  
+        eprnstr = "<!--endprint-->";  
+        prnhtml = bdhtml.substr(bdhtml.indexOf(sprnstr) + 17);  
+        prnhtml = prnhtml.substring(0, prnhtml.indexOf(eprnstr));  
+        var reg = /<!--startnotprint-->[\s\S]+?<!--endnotprint-->/g;  
+        prnhtml = prnhtml.replace(reg, "");  
+        window.document.body.innerHTML = prnhtml;  
+        window.print();   
+    } 
+$(document).ready(function(){
+ $.ajax({
+    type: "post",
+    url: "http://search.mnr.gov.cn/was/ajaxdata_jsonp.jsp?id=1&ip=31&search=list",
+    data: "",
+    /*dataType: "jsonp",*/
+    dataType:"jsonp",
+    jsonp:"callback",
+    jsonpCallback:"success_jsonp",
+    success: function(data){
+        var jsondata =   data;//JSON.parse(data);
+        var html="<option value='735,736,737,738,739,740,741,742,743,744,745,746,747,748,749,750,751,752,753'>全部</option>";
+    $.each(jsondata, function (n, value) {
+    if(value.id==val){
+        html += "<option value=\""+value.id+"\" selected='selected'>"+value.name+"</option>";
+    }else{
+         html += "<option value=\""+value.id+"\">"+value.name+"</option>";
+     }
+    });
+    $("#organcat").html(html);
+    }
+    })
+})
+
+function clearval(){
+            $("#val").val('');
+            $("#val2").val('');
+            var search = $("#search").val();
+            var width=$("#val").width()+"px";
+            if(search=="organcat"){
+                $("#val").hide();
+                $("#organcat").hide();
+                $("#organcat").chosen({disable_search:true,width:width,placeholder_text_single:' ',open:true,first:false});
+                $("#organcat_chosen").show();
+            }else{
+                $("#val").show();
+                $("#organcat").hide();
+                $("#organcat_chosen").hide();
+            }
+        }
+
+$(function(){
+   if($(".scy_flie1 li").length == 0){
+      $(".scy_flie1").css("display","none");
+      $(".scy_flie2").css("display","block");
+    }else{
+      $(".scy_flie1").css("display","block")
+      $(".scy_flie2").css("display","none")
+       }
+})
+</script>
+
+</html>

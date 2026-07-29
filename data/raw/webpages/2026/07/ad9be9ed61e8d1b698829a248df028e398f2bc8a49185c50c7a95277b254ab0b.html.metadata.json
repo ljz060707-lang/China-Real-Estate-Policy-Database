@@ -1,0 +1,8 @@
+{
+  "requested_url": "http://www.gaoyang.gov.cn/info_show.asp?infoid=4491",
+  "final_url": "https://www.gaoyang.gov.cn/info_show.asp?infoid=4491",
+  "status_code": 200,
+  "content_type": "text/html",
+  "retrieved_at": "2026-07-20T08:33:41.762044+00:00",
+  "response_sha256": "ad9be9ed61e8d1b698829a248df028e398f2bc8a49185c50c7a95277b254ab0b"
+}

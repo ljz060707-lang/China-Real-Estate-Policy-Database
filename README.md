@@ -32,6 +32,21 @@
 
 所有原始数据均只读保存并登记 SHA-256。标准化记录保留来源文件、工作表、原始行号、网页链接和抓取批次，确保每条政策均可追溯、可审核、可重新生成。
 
+## V2 覆盖与质量升级
+
+V2 在 V1 主链路上增量增加来源覆盖证据、L0—L7 分层去重和字段级置信度，不建立平行数据库。它明确区分“确认无政策”和“尚未扫描”：只有完成来源范围与分页核验的 `complete_confirmed_zero` 才写入研究面板的 0，其余覆盖不足月份保持 null。
+
+首次升级请依次运行：
+
+```powershell
+uv run policydb migrate-v2 dry-run
+uv run policydb migrate-v2 apply
+uv run policydb migrate-v2 verify
+uv run policydb confidence build
+```
+
+完整命令、覆盖状态和人工补录方法见 [V2 运维与研究使用指南](docs/v2_operator_guide.md)。当前架构依据见 [V2 当前系统审计](docs/v2_current_system_audit.md)。
+
 ---
 
 ## 核心能力
@@ -1158,3 +1173,107 @@ Raw Data · Traceable Entities · AI Enrichment · Research Panels
 这版 README 与仓库实际命令保持一致：项目要求 Python 3.12及以上，核心依赖包括 DuckDB、Polars、PyArrow、Pydantic、PyMuPDF、Trafilatura、Streamlit 和 Typer。
 
 其中“首次完整构建”使用的命令均已在当前 CLI 中实现，包括 `build-city-scope`、`normalize-geography`、`match-t4`、`sources bootstrap-from-excel`、`review auto`、`crawl backfill/update` 和 `enrich glm/verify`。
+
+## 房地产政策文本强度（实验阶段）
+
+强度系统以政策动作为最小单元，分开保存文本设计、实施承诺、工具校准、来源权威和数据质量。当前无裁决金标准，页面和报告会保持 `research_ready=false`。
+
+```powershell
+uv run policydb intensity literature-audit
+uv run policydb intensity prepare-annotations
+uv run policydb intensity score --limit 100 --formal-only
+uv run policydb intensity route
+uv run policydb intensity aggregate
+uv run policydb intensity validate
+uv run policydb intensity benchmark
+```
+
+传统模型与 Transformer 分别是可选依赖；详细方法、人工标注和 GLM 使用方式见 `docs/policy_intensity_operator_guide.md`。
+
+## V2：统一政策中心与 SiliconFlow AI
+
+本次 V2 升级继续使用现有 Raw → Staging → Curated → DuckDB 主链路。旧分类、七大专题集合、
+原始工作表和 GLM 兼容命令均保留；新增的 D/S/F/H/G 五域分类只写入新的动作分类表，不覆盖
+历史字段。
+
+### 一次完成本地增量构建
+
+```powershell
+uv run policydb taxonomy build
+uv run policydb archive sync
+uv run policydb archive audit
+uv run policydb coverage build
+uv run policydb build-database
+uv run policydb validate
+```
+
+默认研究档案根目录为 `D:\Data Set\CRPD`。档案采用 SHA-256 内容寻址和原子写入，不修改 Raw；
+如果 D 盘不可用，命令会明确失败，不会静默改写到 C 盘。
+
+### 配置 SiliconFlow
+
+普通用户在网站“个人设置 → AI模型”中填写 SiliconFlow API Key、Base URL、分类模型和独立复核
+模型。密钥写入 Windows Keyring，不写入 README、JSON、DuckDB、Parquet、日志或 Git。
+环境变量方式仍受支持：
+
+```powershell
+$env:AI_PROVIDER = "siliconflow"
+$env:SILICONFLOW_API_KEY = "在本机设置，不要提交"
+$env:SILICONFLOW_BASE_URL = "https://api.siliconflow.cn/v1"
+$env:SILICONFLOW_CHAT_MODEL = "从 /v1/models 返回结果中选择"
+$env:SILICONFLOW_VERIFY_MODEL = "选择另一个可用模型进行独立复核"
+```
+
+连接与处理命令：
+
+```powershell
+uv run policydb ai test
+uv run policydb ai models
+uv run policydb ai classify
+uv run policydb ai verify
+uv run policydb ai deduplicate
+uv run policydb ai audit
+```
+
+系统通过 OpenAI-compatible Python 客户端调用 SiliconFlow；模型列表以实际 `/v1/models`
+响应为准。分类结果必须包含原文唯一证据和字符偏移，数值规则优先于模型，第二轮复核不能自行
+改写事实。连接失败时不会静默换模型或伪造结果。
+
+### 105 城覆盖与 Windows 自动更新
+
+```powershell
+uv run policydb coverage build
+uv run policydb schedule status
+uv run policydb schedule install-windows --confirm
+uv run policydb schedule remove-windows --confirm
+```
+
+计划任务安装和删除必须显式传入 `--confirm`。每日任务使用 7 天重叠窗口，周度补漏使用 30 天
+窗口，月度任务执行 105 城历史完整性检查。未扫描、部分扫描和失败月份保持缺口状态，绝不写成
+“零政策”。
+
+网站新增：
+
+- “政策中心”：按动作、五域分类、工具、方向、证据、归档和审核状态统一检索；
+- “自动更新与完整性”：查看计划状态、105 城来源—月份矩阵与缺口报告；
+- “个人设置”：安全保存和测试 SiliconFlow 配置。
+
+详细文档：
+
+- `docs/policy_taxonomy_v2.md`
+- `docs/siliconflow_ai_provider_guide.md`
+- `docs/ai_dedup_method.md`
+- `docs/policy_archive_guide.md`
+- `docs/coverage_completeness_methodology.md`
+- `docs/automatic_update_operator_guide.md`
+- `docs/ai_first_system_acceptance.md`
+
+### Dashboard policy center
+
+The ordinary dashboard navigation is deliberately limited to six routes:
+`数据总览`、`政策中心`、`自动更新与完整性`、`数据质量`、`人工审核` and `个人设置`.
+`政策中心` is the single working surface for filtering, statistics, the paginated policy table,
+source archive status, full text and export. It reads the action-level DuckDB view
+`v_policy_action_center`; legacy collections remain data lineage only and are not a second
+front-end classification system. The design review is recorded in
+[`docs/dashboard_fidelity_review.md`](docs/dashboard_fidelity_review.md).

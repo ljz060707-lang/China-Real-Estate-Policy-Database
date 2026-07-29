@@ -42,7 +42,7 @@ def _cached_sources(root: str, registry_stamp: int):
 def _cached_configuration(root: str) -> dict[str, bool]:
     settings = Settings.discover(root)
     return {
-        "glm": bool(settings.glm_api_key),
+        "ai": bool(settings.siliconflow_api_key),
         "tianditu": bool(settings.tianditu_token),
         "search": bool(
             settings.search_api_key and settings.search_provider != "None"
@@ -80,7 +80,7 @@ def _start(manager: JobManager, request: CrawlJobRequest) -> bool:
 
 def _configuration_cards(configuration: dict[str, bool], sources) -> None:
     cards = [
-        ("GLM", "已配置" if configuration["glm"] else "未配置"),
+        ("AI服务", "已配置" if configuration["ai"] else "未配置"),
         ("天地图", "已配置" if configuration["tianditu"] else "未配置"),
         ("搜索服务", "已配置" if configuration["search"] else "未配置"),
         ("官方来源", sum(source.crawl_enabled and source.official_status in {"official", "official_reprint"} for source in sources)),
@@ -153,7 +153,7 @@ def _render_new_job(
     max_candidates = int(limits[0].number_input("最大候选数", min_value=1, max_value=100000, value=200))
     max_fetches = int(limits[1].number_input("最大抓取数", min_value=1, max_value=10000, value=5 if mode == "seed_backtrack" else 100))
     options = st.columns(3)
-    run_glm = options[0].checkbox("抓取后运行GLM", value=configuration["glm"])
+    run_glm = options[0].checkbox("抓取后运行AI", value=configuration["ai"])
     verify = options[1].checkbox("执行第二轮自动复核", value=True)
     rebuild = options[2].checkbox("完成后重建数据库", value=True)
     validate = st.checkbox("完成后执行 validate", value=True)
@@ -161,16 +161,16 @@ def _render_new_job(
         "处理深度",
         [
             "仅抓取并暂存",
-            "抓取＋GLM解析",
-            "抓取＋GLM＋复核",
+            "抓取＋AI解析",
+            "抓取＋AI＋独立复核",
             "完整处理并重建数据库",
         ],
         index=3,
     )
     processing_mode = {
         "仅抓取并暂存": "staged_only",
-        "抓取＋GLM解析": "glm",
-        "抓取＋GLM＋复核": "glm_verify",
+        "抓取＋AI解析": "glm",
+        "抓取＋AI＋独立复核": "glm_verify",
         "完整处理并重建数据库": "full",
     }[processing_label]
     if processing_mode == "staged_only":
@@ -258,7 +258,7 @@ def _render_job_state(manager: JobManager, job_id: str, *, key_prefix: str) -> N
             st.caption("后台进程运行正常；状态区每 2 秒局部刷新。")
     st.progress(min(state.progress_current / max(state.progress_total, 1), 1.0))
     counters = state.counters
-    labels = [("已发现", "discovered"), ("已抓取", "fetched"), ("失败", "failed"), ("新增版本", "document_versions"), ("GLM完成", "glm_completed"), ("待人工", "manual_review")]
+    labels = [("已发现", "discovered"), ("已抓取", "fetched"), ("失败", "failed"), ("新增版本", "document_versions"), ("AI完成", "glm_completed"), ("待人工", "manual_review")]
     for column, (label, key) in zip(st.columns(6), labels, strict=True):
         column.metric(label, counters.get(key, counters.get("candidate_count", 0) if key == "discovered" else 0))
     columns = st.columns(4)
@@ -361,7 +361,7 @@ def _render_reports(settings: Settings, manager: JobManager) -> None:
     st.caption(f"完整 CSV 报告目录：{output}")
 
 
-def render_crawl_center(root: str | Path | None = None) -> None:
+def render_crawl_section(root: str | Path | None, section: str) -> None:
     settings = Settings.discover(root)
     manager = JobManager(settings)
     if "active_crawl_job" not in st.session_state:
@@ -379,20 +379,23 @@ def render_crawl_center(root: str | Path | None = None) -> None:
     registry = settings.root / "data" / "reference" / "source_registry.yaml"
     sources = _cached_sources(str(settings.root), registry.stat().st_mtime_ns)
     configuration = _cached_configuration(str(settings.root))
-    st.title("智能抓取")
+    if section == "运行状态":
+        _configuration_cards(configuration, sources)
+        _render_new_job(settings, manager, sources, configuration)
+    elif section == "来源管理":
+        _render_sources(settings, manager, sources)
+    elif section == "运行历史":
+        _render_history(manager)
+    elif section == "抓取报告":
+        _render_reports(settings, manager)
+
+
+def render_crawl_center(root: str | Path | None = None) -> None:
     st.caption("选择模式、设置范围并启动后台任务；页面刷新后仍可恢复进度和报告。")
-    _configuration_cards(configuration, sources)
     view = st.segmented_control(
         "抓取中心视图",
-        ["新建任务", "来源管理", "运行历史", "抓取报告"],
-        default="新建任务",
+        ["运行状态", "来源管理", "运行历史", "抓取报告"],
+        default="运行状态",
         label_visibility="collapsed",
     )
-    if view == "新建任务":
-        _render_new_job(settings, manager, sources, configuration)
-    elif view == "来源管理":
-        _render_sources(settings, manager, sources)
-    elif view == "运行历史":
-        _render_history(manager)
-    else:
-        _render_reports(settings, manager)
+    render_crawl_section(root, view or "运行状态")

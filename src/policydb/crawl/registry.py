@@ -25,7 +25,8 @@ def load_registry(settings: Settings | None = None) -> list[RegisteredSource]:
 
 
 def save_registry_atomic(
-    sources: list[RegisteredSource], settings: Settings | None = None, *, action: str
+    sources: list[RegisteredSource], settings: Settings | None = None, *, action: str,
+    schema_version: int = 2,
 ) -> Path:
     settings = settings or Settings.discover()
     if settings.read_only:
@@ -38,7 +39,7 @@ def save_registry_atomic(
         backup_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(path, backup_dir / f"source_registry_{now:%Y%m%dT%H%M%SZ}.yaml")
     payload = {
-        "version": 1,
+        "version": schema_version,
         "generated_at": now.isoformat(),
         "source_count": len(sources),
         "sources": [source.model_dump(mode="json", exclude_none=True) for source in sources],
@@ -50,6 +51,31 @@ def save_registry_atomic(
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with log_path.open("a", encoding="utf-8") as stream:
         stream.write(json.dumps({"at": now.isoformat(), "action": action, "source_count": len(sources)}, ensure_ascii=False) + "\n")
+    return path
+
+
+def materialize_registry_parquet(
+    sources: list[RegisteredSource], settings: Settings | None = None
+) -> Path:
+    settings = settings or Settings.discover()
+    path = settings.curated / "source_registry.parquet"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rows = [source.model_dump(mode="json", exclude_none=False) for source in sources]
+    frame = pl.DataFrame(
+        rows,
+        infer_schema_length=None,
+        schema_overrides={
+            "seed_urls": pl.List(pl.String),
+            "list_page_urls": pl.List(pl.String),
+            "city_ids": pl.List(pl.String),
+            "province_codes": pl.List(pl.String),
+            "coverage_start_date": pl.String,
+            "coverage_end_date": pl.String,
+        },
+    )
+    temporary = path.with_suffix(".parquet.registry.tmp")
+    frame.write_parquet(temporary, compression="zstd")
+    os.replace(temporary, path)
     return path
 
 
