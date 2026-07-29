@@ -1,0 +1,35 @@
+﻿version: 1
+site_filters:
+  - "site:{official_domain}"
+  - "site:gov.cn"
+document_terms:
+  - 通知
+  - 意见
+  - 办法
+  - 细则
+  - 方案
+  - 公告
+  - 决定
+  - 调整
+  - 优化
+  - 取消
+  - 提高
+  - 降低
+  - 实施
+  - 废止
+  - 修订
+policy_terms:
+  - 公积金
+  - 限购
+  - 首付
+  - 保障房
+  - 土地
+  - 白名单
+  - 保交房
+  - 城市更新
+templates:
+  - "{city} {department} {topic} {year} {document_term} {site_filter}"
+  - "{city} {topic} {year} filetype:pdf {site_filter}"
+  - "{city} {document_number} {site_filter}"
+shard_key: "city_id × source_role × year"
+default_start_date: 2018-01-01

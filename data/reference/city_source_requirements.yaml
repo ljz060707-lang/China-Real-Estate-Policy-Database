@@ -1,0 +1,966 @@
+version: 1
+scope: CRPD 105 cities
+required_roles:
+- municipal_government
+- government_gazette
+- housing_department
+- provident_fund_center
+- natural_resources_department
+recommended_roles:
+- development_reform_department
+- local_financial_regulator
+- tax_department
+- public_resource_trading_center
+- administrative_approval_department
+- urban_renewal_or_expropriation_department
+supplemental_roles:
+- statistics_department
+- civil_affairs_department
+- state_assets_department
+- official_news_or_policy_interpretation
+cities:
+- city_id: CITY_310000
+  city_name: 上海市
+  province_name: 上海市
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_530100
+  city_name: 昆明市
+  province_name: 云南省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_150200
+  city_name: 包头市
+  province_name: 内蒙古自治区
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_150100
+  city_name: 呼和浩特市
+  province_name: 内蒙古自治区
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_150400
+  city_name: 赤峰市
+  province_name: 内蒙古自治区
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_110000
+  city_name: 北京市
+  province_name: 北京市
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_220200
+  city_name: 吉林市
+  province_name: 吉林省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_220100
+  city_name: 长春市
+  province_name: 吉林省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_511300
+  city_name: 南充市
+  province_name: 四川省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_511500
+  city_name: 宜宾市
+  province_name: 四川省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_510100
+  city_name: 成都市
+  province_name: 四川省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_510700
+  city_name: 绵阳市
+  province_name: 四川省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_120000
+  city_name: 天津市
+  province_name: 天津市
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_640100
+  city_name: 银川市
+  province_name: 宁夏回族自治区
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_340100
+  city_name: 合肥市
+  province_name: 安徽省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_340400
+  city_name: 淮南市
+  province_name: 安徽省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_340200
+  city_name: 芜湖市
+  province_name: 安徽省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_371300
+  city_name: 临沂市
+  province_name: 山东省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_370400
+  city_name: 枣庄市
+  province_name: 山东省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_370900
+  city_name: 泰安市
+  province_name: 山东省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_370100
+  city_name: 济南市
+  province_name: 山东省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_370800
+  city_name: 济宁市
+  province_name: 山东省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_370300
+  city_name: 淄博市
+  province_name: 山东省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_370700
+  city_name: 潍坊市
+  province_name: 山东省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_370600
+  city_name: 烟台市
+  province_name: 山东省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_371500
+  city_name: 聊城市
+  province_name: 山东省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_370200
+  city_name: 青岛市
+  province_name: 山东省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_140200
+  city_name: 大同市
+  province_name: 山西省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_140100
+  city_name: 太原市
+  province_name: 山西省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_140400
+  city_name: 长治市
+  province_name: 山西省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_441900
+  city_name: 东莞市
+  province_name: 广东省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_442000
+  city_name: 中山市
+  province_name: 广东省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_440600
+  city_name: 佛山市
+  province_name: 广东省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_440100
+  city_name: 广州市
+  province_name: 广东省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_441300
+  city_name: 惠州市
+  province_name: 广东省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_440500
+  city_name: 汕头市
+  province_name: 广东省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_440700
+  city_name: 江门市
+  province_name: 广东省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_440300
+  city_name: 深圳市
+  province_name: 广东省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_440800
+  city_name: 湛江市
+  province_name: 广东省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_440400
+  city_name: 珠海市
+  province_name: 广东省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_450100
+  city_name: 南宁市
+  province_name: 广西壮族自治区
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_450200
+  city_name: 柳州市
+  province_name: 广西壮族自治区
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_450300
+  city_name: 桂林市
+  province_name: 广西壮族自治区
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_650100
+  city_name: 乌鲁木齐市
+  province_name: 新疆维吾尔自治区
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_320100
+  city_name: 南京市
+  province_name: 江苏省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_320600
+  city_name: 南通市
+  province_name: 江苏省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_320400
+  city_name: 常州市
+  province_name: 江苏省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_320300
+  city_name: 徐州市
+  province_name: 江苏省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_321000
+  city_name: 扬州市
+  province_name: 江苏省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_320200
+  city_name: 无锡市
+  province_name: 江苏省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_320583
+  city_name: 昆山市
+  province_name: 江苏省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_320800
+  city_name: 淮安市
+  province_name: 江苏省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_320900
+  city_name: 盐城市
+  province_name: 江苏省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_320500
+  city_name: 苏州市
+  province_name: 江苏省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_320700
+  city_name: 连云港市
+  province_name: 江苏省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_361100
+  city_name: 上饶市
+  province_name: 江西省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_360100
+  city_name: 南昌市
+  province_name: 江西省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_360700
+  city_name: 赣州市
+  province_name: 江西省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_130600
+  city_name: 保定市
+  province_name: 河北省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_130200
+  city_name: 唐山市
+  province_name: 河北省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_130700
+  city_name: 张家口市
+  province_name: 河北省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_130100
+  city_name: 石家庄市
+  province_name: 河北省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_130300
+  city_name: 秦皇岛市
+  province_name: 河北省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_130500
+  city_name: 邢台市
+  province_name: 河北省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_130400
+  city_name: 邯郸市
+  province_name: 河北省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_410200
+  city_name: 开封市
+  province_name: 河南省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_410700
+  city_name: 新乡市
+  province_name: 河南省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_410300
+  city_name: 洛阳市
+  province_name: 河南省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_410100
+  city_name: 郑州市
+  province_name: 河南省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_330782
+  city_name: 义乌市
+  province_name: 浙江省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_331000
+  city_name: 台州市
+  province_name: 浙江省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_330200
+  city_name: 宁波市
+  province_name: 浙江省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_330282
+  city_name: 慈溪市
+  province_name: 浙江省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_330100
+  city_name: 杭州市
+  province_name: 浙江省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_330300
+  city_name: 温州市
+  province_name: 浙江省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_330600
+  city_name: 绍兴市
+  province_name: 浙江省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_460100
+  city_name: 海口市
+  province_name: 海南省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_420300
+  city_name: 十堰市
+  province_name: 湖北省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_420500
+  city_name: 宜昌市
+  province_name: 湖北省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_420100
+  city_name: 武汉市
+  province_name: 湖北省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_420600
+  city_name: 襄阳市
+  province_name: 湖北省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_430600
+  city_name: 岳阳市
+  province_name: 湖南省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_430200
+  city_name: 株洲市
+  province_name: 湖南省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_430400
+  city_name: 衡阳市
+  province_name: 湖南省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_430100
+  city_name: 长沙市
+  province_name: 湖南省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_620100
+  city_name: 兰州市
+  province_name: 甘肃省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_350200
+  city_name: 厦门市
+  province_name: 福建省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_350582
+  city_name: 晋江市
+  province_name: 福建省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_350500
+  city_name: 泉州市
+  province_name: 福建省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_350100
+  city_name: 福州市
+  province_name: 福建省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_350300
+  city_name: 莆田市
+  province_name: 福建省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_520100
+  city_name: 贵阳市
+  province_name: 贵州省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_520300
+  city_name: 遵义市
+  province_name: 贵州省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_210200
+  city_name: 大连市
+  province_name: 辽宁省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_210400
+  city_name: 抚顺市
+  province_name: 辽宁省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_210100
+  city_name: 沈阳市
+  province_name: 辽宁省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_210700
+  city_name: 锦州市
+  province_name: 辽宁省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_210300
+  city_name: 鞍山市
+  province_name: 辽宁省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_500000
+  city_name: 重庆市
+  province_name: 重庆市
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_610400
+  city_name: 咸阳市
+  province_name: 陕西省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_610100
+  city_name: 西安市
+  province_name: 陕西省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_630100
+  city_name: 西宁市
+  province_name: 青海省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_230100
+  city_name: 哈尔滨市
+  province_name: 黑龙江省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_230600
+  city_name: 大庆市
+  province_name: 黑龙江省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department
+- city_id: CITY_230200
+  city_name: 齐齐哈尔市
+  province_name: 黑龙江省
+  required_roles:
+  - municipal_government
+  - government_gazette
+  - housing_department
+  - provident_fund_center
+  - natural_resources_department

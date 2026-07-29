@@ -33,14 +33,21 @@ def evaluate_source(source: RegisteredSource, fetcher: RespectfulFetcher) -> dic
         except Exception as exc:
             error_type = type(exc).__name__
             robots_allowed = error_type != "RobotsBlocked"
+    no_captcha = error_type != "CaptchaDetected"
     score = (
-        (25 if official else 0)
-        + (25 if accessible else 0)
-        + (20 if detail_links else 0)
-        + (20 if body_ok else 0)
+        (20 if official else 0)
+        + (20 if accessible else 0)
+        + (15 if detail_links else 0)
+        + (15 if body_ok else 0)
         + (10 if source.list_page_urls else 0)
+        + (10 if robots_allowed else 0)
+        + (5 if no_captcha else 0)
+        + (5 if source.last_scan_at is not None or accessible else 0)
     )
-    recommended = official and accessible and body_ok and detail_links and score >= 80
+    recommended = (
+        official and accessible and body_ok and detail_links and robots_allowed
+        and no_captcha and score >= 90
+    )
     return {
         "source_id": source.source_id,
         "source_name": source.source_name,
@@ -104,6 +111,14 @@ def evaluate_sources(
                     "recommended_enabled": row["recommended_enabled"],
                     "last_health_at": row["evaluated_at"],
                     "last_error": row["error_type"],
+                    "health_status": (
+                        "healthy" if row["source_health_score"] >= 90
+                        else "review" if row["source_health_score"] >= 60
+                        else "unhealthy"
+                    ),
+                    "health_reason": row["error_type"],
+                    "robots_status": "allowed" if row["robots_allowed"] else "blocked",
+                    "tls_status": "ok" if row["entry_accessible"] else "unknown",
                 }
             )
         updated.append(source)

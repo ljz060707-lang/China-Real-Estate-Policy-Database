@@ -69,6 +69,7 @@ def materialize_registry_parquet(
             "list_page_urls": pl.List(pl.String),
             "city_ids": pl.List(pl.String),
             "province_codes": pl.List(pl.String),
+            "redirect_chain": pl.List(pl.String),
             "coverage_start_date": pl.String,
             "coverage_end_date": pl.String,
         },

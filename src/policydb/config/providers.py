@@ -98,3 +98,56 @@ def build_search_provider(name: str, api_key: str | None, *, base_url: str | Non
     if base_url:
         kwargs["base_url"] = base_url
     return classes[normalized](api_key, **kwargs)
+
+class FallbackSearchProvider:
+    """Try configured providers in order and preserve provider-level diagnostics."""
+
+    name = "Fallback"
+
+    def __init__(self, providers: list[SearchProvider]) -> None:
+        self.providers = providers
+        self.last_attempts: list[dict] = []
+
+    def search(self, query: str, **kwargs: object) -> list[SearchResult]:
+        maximum = int(kwargs.get("max_results", 10))
+        collected: list[SearchResult] = []
+        seen: set[str] = set()
+        self.last_attempts = []
+        for provider in self.providers:
+            try:
+                results = provider.search(query, **kwargs)
+                self.last_attempts.append(
+                    {"provider": provider.name, "status": "ok", "result_count": len(results)}
+                )
+            except Exception as exc:
+                self.last_attempts.append(
+                    {"provider": provider.name, "status": "failed", "error_type": type(exc).__name__}
+                )
+                continue
+            for result in results:
+                if result.url in seen:
+                    continue
+                seen.add(result.url)
+                collected.append(result)
+                if len(collected) >= maximum:
+                    return collected
+            if collected:
+                return collected
+        return collected
+
+
+def build_search_fallback(settings=None, *, clients: dict[str, httpx.Client] | None = None) -> SearchProvider:
+    from policydb.settings import Settings
+
+    settings = settings or Settings.discover()
+    providers: list[SearchProvider] = []
+    for name in settings.search_providers:
+        provider = build_search_provider(
+            name,
+            settings.search_api_key_for(name),
+            base_url=settings.search_base_url if len(settings.search_providers) == 1 else None,
+            client=(clients or {}).get(name.lower()),
+        )
+        if not isinstance(provider, NoneSearchProvider):
+            providers.append(provider)
+    return FallbackSearchProvider(providers) if providers else NoneSearchProvider()

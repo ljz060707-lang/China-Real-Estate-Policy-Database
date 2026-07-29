@@ -52,6 +52,16 @@ class RegisteredSource(BaseModel):
         "housing_department",
         "natural_resources_department",
         "provident_fund_center",
+        "government_gazette",
+        "development_reform_department",
+        "local_financial_regulator",
+        "tax_department",
+        "public_resource_trading_center",
+        "administrative_approval_department",
+        "urban_renewal_or_expropriation_department",
+        "statistics_department",
+        "civil_affairs_department",
+        "state_assets_department",
         "official_media",
         "other_official",
         "secondary_source",
@@ -68,6 +78,19 @@ class RegisteredSource(BaseModel):
     verified_at: datetime | None = None
     replacement_source_id: str | None = None
     parser_version: str = "1"
+    discovery_method: str | None = None
+    discovery_provider: str | None = None
+    official_domain_verified: bool = False
+    organization_name_standardized: str | None = None
+    organization_code: str | None = None
+    health_status: str = "unknown"
+    health_reason: str | None = None
+    last_content_seen_at: datetime | None = None
+    last_policy_seen_at: datetime | None = None
+    robots_status: str = "unknown"
+    tls_status: str = "unknown"
+    redirect_chain: list[str] = Field(default_factory=list)
+    last_success_at: datetime | None = None
     last_scan_at: datetime | None = None
     consecutive_failures: int = 0
 
