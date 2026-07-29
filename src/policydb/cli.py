@@ -175,6 +175,14 @@ def archive_audit():
     typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
 
 
+@archive_app.command("recover-missing")
+def archive_recover_missing():
+    """重新检查缺失归档；只新增内容寻址文件，不覆盖已有归档。"""
+    result = archive_document_versions()
+    build_database()
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
 @coverage_app.command("build")
 def coverage_build():
     typer.echo(
@@ -197,6 +205,14 @@ def schedule_install_windows(
         typer.echo("预览完成。确认后重新运行并增加 --confirm。")
 
 
+@schedule_app.command("install")
+def schedule_install(
+    confirm: bool = typer.Option(False, "--confirm", help="确认写入 Windows 任务计划"),
+):
+    """`install-windows` 的统一兼容入口。"""
+    schedule_install_windows(confirm)
+
+
 @schedule_app.command("remove-windows")
 def schedule_remove_windows(
     confirm: bool = typer.Option(False, "--confirm", help="确认删除 Windows 任务计划"),
@@ -206,6 +222,14 @@ def schedule_remove_windows(
             remove_windows_schedule(confirm=confirm), ensure_ascii=False, indent=2
         )
     )
+
+
+@schedule_app.command("uninstall")
+def schedule_uninstall(
+    confirm: bool = typer.Option(False, "--confirm", help="确认删除 Windows 任务计划"),
+):
+    """`remove-windows` 的统一兼容入口。"""
+    schedule_remove_windows(confirm)
 
 
 def _schedule_run(layer: str) -> None:
@@ -605,6 +629,7 @@ def _job_mode(
     to: str,
     max_fetches: int,
     run_glm: bool,
+    **request_options,
 ) -> None:
     settings = Settings.discover()
     manager = JobManager(settings)
@@ -614,6 +639,7 @@ def _job_mode(
         end_date=_date(to),
         max_fetches=max_fetches,
         run_glm=run_glm,
+        **request_options,
     )
     state = manager.create(request)
     result = run_job(state.job_id, settings)
@@ -660,6 +686,61 @@ def crawl_seed_backtrack(
 @crawl_app.command("recover-missing")
 def crawl_recover_missing(max_fetches: int = typer.Option(20, "--max-fetches")):
     _job_mode("recover_missing", "2018-01-01", "today", max_fetches, False)
+
+
+@crawl_app.command("health")
+def crawl_health(limit: int = typer.Option(20, "--limit", min=1)):
+    """检查来源健康状态，不创建抓取成功假象。"""
+    typer.echo(
+        json.dumps(
+            evaluate_sources(limit=limit),
+            ensure_ascii=False,
+            indent=2,
+            default=str,
+        )
+    )
+
+
+def _split_option(value: str) -> list[str]:
+    return [part.strip() for part in value.split(",") if part.strip()]
+
+
+@crawl_app.command("historical")
+def crawl_historical(
+    from_: str = typer.Option("2018-01-01", "--from"),
+    to: str = typer.Option("today", "--to"),
+    cities: str = typer.Option("", "--cities"),
+    provinces: str = typer.Option("", "--provinces"),
+    topics: str = typer.Option("", "--topics"),
+    source_ids: str = typer.Option("", "--source-ids"),
+    source_roles: str = typer.Option("", "--source-roles"),
+    max_pages_per_source: int = typer.Option(20, "--max-pages-per-source", min=1),
+    max_candidates_per_source: int = typer.Option(
+        50, "--max-candidates-per-source", min=1
+    ),
+    max_candidates_total: int = typer.Option(10000, "--max-candidates-total", min=1),
+    max_fetches: int = typer.Option(1000, "--max-fetches", min=1),
+    resume: bool = typer.Option(True, "--resume/--no-resume"),
+):
+    """按明确范围创建可恢复的105城市历史任务。"""
+    _job_mode(
+        "historical_105",
+        from_,
+        to,
+        max_fetches,
+        False,
+        cities=_split_option(cities),
+        provinces=_split_option(provinces),
+        topics=_split_option(topics),
+        source_ids=_split_option(source_ids),
+        source_roles=_split_option(source_roles),
+        max_pages_per_source=max_pages_per_source,
+        max_candidates_per_source=max_candidates_per_source,
+        max_candidates=max_candidates_total,
+        max_candidates_total=max_candidates_total,
+        global_safety_limit=max_candidates_total,
+        resume=resume,
+    )
 
 
 @jobs_app.command("run")

@@ -70,6 +70,26 @@ def safe_dataframe(frame, *, height: int | None = None) -> None:
 
 def safe_pandas(frame: pl.DataFrame) -> pd.DataFrame:
     """Build pandas objects from Python rows, bypassing Polars' Arrow string bridge."""
-    return pd.DataFrame(
-        [{key: _pandas_value(value) for key, value in row.items()} for row in frame.to_dicts()]
-    )
+    rows = [
+        {key: _pandas_value(value) for key, value in row.items()}
+        for row in frame.to_dicts()
+    ]
+    if not rows:
+        return pd.DataFrame()
+    columns: dict[str, pd.Series] = {}
+    for name in rows[0]:
+        values = [row.get(name) for row in rows]
+        non_null = [value for value in values if value is not None]
+        if non_null and all(
+            isinstance(value, (int, float)) and not isinstance(value, bool)
+            for value in non_null
+        ):
+            dtype = "float64" if any(
+                isinstance(value, float) for value in non_null
+            ) or len(non_null) != len(values) else "int64"
+            columns[name] = pd.Series(values, dtype=dtype)
+        else:
+            # Explicit object dtype prevents pandas' Arrow string inference from
+            # crashing inside Streamlit AppTest on Windows.
+            columns[name] = pd.Series(values, dtype="object")
+    return pd.DataFrame(columns)

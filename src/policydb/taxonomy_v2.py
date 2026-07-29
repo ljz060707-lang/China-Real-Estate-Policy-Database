@@ -11,7 +11,7 @@ from policydb.intensity.storage import atomic_write_parquet
 from policydb.settings import Settings
 from policydb.transform.normalization import stable_id
 
-VERSION = "2.0.0"
+VERSION = "3.0.0"
 
 INSTRUMENT_MAP = {
     "purchase_restriction": ("D", "D01", "regulation"),
@@ -178,10 +178,18 @@ def build_cicc_mapping(settings: Settings | None = None) -> dict:
     output_dir = settings.root / "outputs/taxonomy"
     output_dir.mkdir(parents=True, exist_ok=True)
     unresolved = [row for row in mappings if row["needs_ai_review"]]
-    with (output_dir / "unmapped_topics.csv").open("w", encoding="utf-8-sig", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(mappings[0]) if mappings else [])
-        writer.writeheader()
-        writer.writerows(unresolved)
+    fieldnames = list(mappings[0]) if mappings else []
+    for filename, rows in (
+        ("cicc_topic_inventory.csv", mappings),
+        ("cicc_unmapped_topics.csv", unresolved),
+        ("unmapped_topics.csv", unresolved),
+    ):
+        with (output_dir / filename).open(
+            "w", encoding="utf-8-sig", newline=""
+        ) as handle:
+            writer = csv.DictWriter(handle, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
     mapped_records = sum(row["record_count"] for row in mappings if not row["needs_ai_review"])
     total_records = sum(row["record_count"] for row in mappings)
     report = {

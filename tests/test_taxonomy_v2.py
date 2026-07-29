@@ -60,3 +60,5 @@ def test_cicc_mapping_keeps_ambiguous_topic_for_review(tmp_path):
     report = build_cicc_mapping(settings)
     assert report["unmapped_topics"] == 1
     assert (tmp_path / "outputs/taxonomy/unmapped_topics.csv").exists()
+    assert (tmp_path / "outputs/taxonomy/cicc_topic_inventory.csv").exists()
+    assert (tmp_path / "outputs/taxonomy/cicc_unmapped_topics.csv").exists()
