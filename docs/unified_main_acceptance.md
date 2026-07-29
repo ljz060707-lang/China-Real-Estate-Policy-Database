@@ -12,7 +12,7 @@
 
 已创建并推送三个不可变备份标签：`backup/main-before-v3-integration`、`backup/v2-before-v3-integration`、`backup/v3-before-main-integration`。整合分支为 `integration/crpd-main-v3`，先合并 V2，再合并 V3，保留普通 merge 历史。旧分支尚未删除。
 
-最终 main 和远端推送状态在完成本报告后的提交/快进步骤中更新。
+`main` 已通过 `--ff-only` 快进到整合结果并正常推送至 GitHub；未使用强推。
 
 ## 2. 统一存储
 
@@ -122,7 +122,7 @@ README 已重写为统一 main 版本，覆盖安装、D 盘迁移、SiliconFlow
 
 | 项目 | 状态 |
 |---|---|
-| 三分支代码整合 | 已完成于 integration 分支 |
+| 三分支代码整合 | 已快进合并并推送 main |
 | D 盘配置与数据复制 | 已完成并验证 |
 | 105 城市需求槽位 | 525/525 已建立 |
 | 105 城市真实 URL | 30/525 已登记，495 待搜索与验证 |
