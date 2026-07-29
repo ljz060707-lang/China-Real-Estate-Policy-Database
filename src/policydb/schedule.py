@@ -6,14 +6,14 @@ from pathlib import Path
 from policydb.settings import Settings
 
 TASKS = {
-    "daily": ("DAILY", None, "02:30", "run_daily_update.ps1"),
+    "daily": ("DAILY", None, "03:00", "run_daily_update.ps1"),
     "weekly": ("WEEKLY", "SUN", "03:00", "run_weekly_update.ps1"),
     "monthly": ("MONTHLY", "1", "03:30", "run_monthly_update.ps1"),
 }
 
 
 def _task_name(layer: str) -> str:
-    return f"PolicyDB-V2-{layer}"
+    return f"CRPD-{layer}"
 
 
 def schedule_status(runner=subprocess.run) -> dict:
@@ -23,7 +23,7 @@ def schedule_status(runner=subprocess.run) -> dict:
             result = runner(
                 ["schtasks.exe", "/Query", "/TN", _task_name(layer), "/FO", "CSV", "/V"],
                 capture_output=True,
-                text=True,
+                text=False,
                 shell=False,
                 check=False,
             )
@@ -75,7 +75,7 @@ def install_windows_schedule(
     results = []
     for command in commands:
         result = runner(
-            command, capture_output=True, text=True, shell=False, check=False
+            command, capture_output=True, text=False, shell=False, check=False
         )
         results.append({"task": command[4], "returncode": result.returncode})
     return {
@@ -93,7 +93,7 @@ def remove_windows_schedule(*, confirm: bool = False, runner=subprocess.run) -> 
         result = runner(
             ["schtasks.exe", "/Delete", "/F", "/TN", _task_name(layer)],
             capture_output=True,
-            text=True,
+            text=False,
             shell=False,
             check=False,
         )

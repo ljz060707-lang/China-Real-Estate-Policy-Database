@@ -38,6 +38,7 @@ from policydb.intensity.transformer import train_transformer
 from policydb.jobs import CrawlJobRequest, JobManager
 from policydb.jobs.worker import run_job
 from policydb.migration_v2 import apply_migration, migration_plan, verify_migration
+from policydb.policy_pools import materialize_policy_pools
 from policydb.query.database import build_database
 from policydb.recovery import recover_review_sources
 from policydb.review import apply_corrections, generate_review_tasks
@@ -49,8 +50,15 @@ from policydb.schedule import (
 )
 from policydb.scope import materialize_city_scope
 from policydb.settings import Settings
+from policydb.source_discovery import (
+    complete_source_matrix,
+    discover_all_sources,
+    discover_city_sources,
+    repair_sources,
+)
 from policydb.source_quality import export_source_audit, unresolved_sources, validate_registry
 from policydb.sources import bootstrap_sources_from_excel
+from policydb.storage import migrate_storage, storage_plan, verify_storage
 from policydb.taxonomy_v2 import build_cicc_mapping, materialize_action_classifications
 from policydb.transform.collections import build_collection_layer
 from policydb.transform.t4_matching import build_t4_match_candidates
@@ -77,6 +85,7 @@ ai_app = typer.Typer(no_args_is_help=True, help="SiliconFlow AI 分类、复核�
 archive_app = typer.Typer(no_args_is_help=True, help="D盘政策原文与附件内容寻址档案")
 schedule_app = typer.Typer(no_args_is_help=True, help="Windows每日、周度和月度自动更新")
 coverage_app = typer.Typer(no_args_is_help=True, help="105城市来源—月份完整性")
+storage_app = typer.Typer(no_args_is_help=True, help="CRPD外部存储规划、迁移和校验")
 app.add_typer(review_app, name="review")
 app.add_typer(sources_app, name="sources")
 app.add_typer(crawl_app, name="crawl")
@@ -93,6 +102,7 @@ app.add_typer(ai_app, name="ai")
 app.add_typer(archive_app, name="archive")
 app.add_typer(schedule_app, name="schedule")
 app.add_typer(coverage_app, name="coverage")
+app.add_typer(storage_app, name="storage")
 
 
 @ai_app.command("test")
@@ -133,6 +143,13 @@ def ai_deduplicate():
         else "awaiting_api_key"
     )
     result["records_deleted"] = 0
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@ai_app.command("route-pools")
+def ai_route_pools():
+    result = materialize_policy_pools()
+    build_database()
     typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
 
 
@@ -185,9 +202,34 @@ def archive_recover_missing():
 
 @coverage_app.command("build")
 def coverage_build():
-    typer.echo(
-        json.dumps(build_city_source_month_coverage(), ensure_ascii=False, indent=2)
-    )
+    result = build_city_source_month_coverage()
+    result["source_requirement_matrix"] = complete_source_matrix()
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@storage_app.command("plan-migration")
+def storage_plan_migration(
+    target: Annotated[Path, typer.Option("--target")] = Path(r"D:\Data Set\CRPD"),
+):
+    typer.echo(json.dumps(storage_plan(target=target), ensure_ascii=False, indent=2))
+
+
+@storage_app.command("migrate")
+def storage_migrate(
+    target: Annotated[Path, typer.Option("--target")] = Path(r"D:\Data Set\CRPD"),
+    confirm: bool = typer.Option(False, "--confirm"),
+):
+    typer.echo(json.dumps(migrate_storage(target=target, confirm=confirm), ensure_ascii=False, indent=2))
+
+
+@storage_app.command("verify")
+def storage_verify(
+    target: Annotated[Path, typer.Option("--target")] = Path(r"D:\Data Set\CRPD"),
+):
+    result = verify_storage(target=target)
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    if not result["passed"]:
+        raise typer.Exit(1)
 
 
 @schedule_app.command("status")
@@ -427,6 +469,37 @@ def sources_bootstrap_from_excel(
     result = bootstrap_sources_from_excel(workbook)
     build_database()
     typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@sources_app.command("discover-city")
+def sources_discover_city(
+    city: str = typer.Option(..., "--city"),
+    apply: bool = typer.Option(False, "--apply", help="只登记官方候选且保持禁用"),
+):
+    typer.echo(json.dumps(discover_city_sources(city, apply=apply), ensure_ascii=False, indent=2))
+
+
+@sources_app.command("discover-all")
+def sources_discover_all(
+    apply: bool = typer.Option(False, "--apply", help="只登记官方候选且保持禁用"),
+    city_limit: int | None = typer.Option(None, "--city-limit", min=1, max=105),
+):
+    typer.echo(json.dumps(discover_all_sources(apply=apply, city_limit=city_limit), ensure_ascii=False, indent=2))
+
+
+@sources_app.command("complete-matrix")
+def sources_complete_matrix():
+    typer.echo(json.dumps(complete_source_matrix(), ensure_ascii=False, indent=2))
+
+
+@sources_app.command("health-all")
+def sources_health_all():
+    typer.echo(json.dumps(evaluate_sources(), ensure_ascii=False, indent=2))
+
+
+@sources_app.command("repair")
+def sources_repair():
+    typer.echo(json.dumps(repair_sources(), ensure_ascii=False, indent=2))
 
 
 @sources_app.command("evaluate")
