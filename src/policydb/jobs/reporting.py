@@ -87,7 +87,7 @@ def generate_crawl_report(
 {recommendations}
 """
     (output / "report.md").write_text(markdown, encoding="utf-8")
-    job_dir = settings.root / "data" / "logs" / "crawl_jobs" / state.job_id
+    job_dir = settings.jobs / "crawl_jobs" / state.job_id
     (job_dir / "report.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     (job_dir / "report.md").write_text(markdown, encoding="utf-8")
     return output

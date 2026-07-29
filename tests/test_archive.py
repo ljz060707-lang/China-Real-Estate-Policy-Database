@@ -34,7 +34,7 @@ def test_archive_is_content_addressed_and_does_not_modify_raw(tmp_path):
     before = source.read_bytes()
     result = archive_document_versions(Settings(root=root), archive_root=archive)
     assert result["hash_verified"] == 1
-    assert (archive / f"raw/html/{digest[:2]}/{digest}.html").exists()
+    assert (archive / f"html/{digest[:2]}/{digest}.html").exists()
     assert source.read_bytes() == before
 
 

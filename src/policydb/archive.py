@@ -69,7 +69,7 @@ def archive_document_versions(
             else:
                 suffix = source.suffix.lower() or ".bin"
                 folder = _archive_folder(str(row.get("content_type") or ""), suffix)
-                relative_path = Path("raw") / folder / actual[:2] / f"{actual}{suffix}"
+                relative_path = Path(folder) / actual[:2] / f"{actual}{suffix}"
                 target = archive_root / relative_path
                 target.parent.mkdir(parents=True, exist_ok=True)
                 if not target.exists():
@@ -135,7 +135,7 @@ def archive_document_versions(
     )
     atomic_write_parquet(frame, settings.curated / "policy_files.parquet")
     atomic_write_parquet(frame, settings.curated / "archive_integrity_checks.parquet")
-    report_dir = settings.root / "outputs/archive"
+    report_dir = settings.outputs / "archive"
     report_dir.mkdir(parents=True, exist_ok=True)
     with (report_dir / "archive_coverage_report.csv").open(
         "w", encoding="utf-8-sig", newline=""

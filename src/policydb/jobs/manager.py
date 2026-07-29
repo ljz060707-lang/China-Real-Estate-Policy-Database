@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ctypes
 import json
 import os
 import subprocess
@@ -14,6 +15,24 @@ from policydb.jobs.models import CrawlJobRequest, JobState
 from policydb.settings import Settings
 from policydb.transform.normalization import stable_id
 
+
+def _process_alive(pid: int | None) -> bool:
+    if not pid or pid <= 0:
+        return False
+    if os.name == "nt":
+        process_query_limited_information = 0x1000
+        handle = ctypes.windll.kernel32.OpenProcess(
+            process_query_limited_information, False, int(pid)
+        )
+        if not handle:
+            return False
+        ctypes.windll.kernel32.CloseHandle(handle)
+        return True
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
 
 def atomic_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -38,16 +57,10 @@ def atomic_json(path: Path, payload: dict) -> None:
 
 class PolicyWriteLock:
     def __init__(self, settings: Settings, job_id: str) -> None:
-        self.path = settings.root / "data" / "logs" / "policydb-write.lock"
+        self.path = settings.logs / "policydb-write.lock"
         self.job_id = job_id
 
-    @staticmethod
-    def _alive(pid: int) -> bool:
-        try:
-            os.kill(pid, 0)
-            return True
-        except OSError:
-            return False
+    _alive = staticmethod(_process_alive)
 
     def __enter__(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -72,8 +85,8 @@ class PolicyWriteLock:
 class JobManager:
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or Settings.discover()
-        self.root = self.settings.root / "data" / "logs" / "crawl_jobs"
-        self.work_root = self.settings.root / "data" / "work" / "crawl_jobs"
+        self.root = self.settings.jobs / "crawl_jobs"
+        self.work_root = self.settings.jobs / "workspaces"
         self._state_lock = threading.RLock()
         self._last_write: dict[str, float] = {}
         self._last_event: dict[str, tuple[str, str, int]] = {}
@@ -123,15 +136,7 @@ class JobManager:
     def inspect_state(self, job_id: str) -> JobState:
         return self._recover_stale_state(self.load_state(job_id))
 
-    @staticmethod
-    def _pid_alive(pid: int | None) -> bool:
-        if not pid:
-            return False
-        try:
-            os.kill(pid, 0)
-            return True
-        except OSError:
-            return False
+    _pid_alive = staticmethod(_process_alive)
 
     def _recover_stale_state(self, state: JobState) -> JobState:
         terminal = {"completed", "completed_with_warnings", "failed", "cancelled"}

@@ -181,9 +181,26 @@ class MissingSourceRecoveryDiscovery(OfficialRegistryDiscovery):
     pass
 
 
-def discover_seed_items(source: RegisteredSource, run_id: str) -> list[dict]:
+def discover_seed_items(
+    source: RegisteredSource,
+    run_id: str,
+    *,
+    city_id: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> list[dict]:
     now = datetime.now(UTC)
     urls = dict.fromkeys(source.list_page_urls + source.seed_urls)
+
+    def in_requested_window(url: str) -> bool:
+        years = [int(value) for value in re.findall(r"20\d{2}", url)]
+        if not years:
+            return True
+        return not (
+            (start_date and max(years) < start_date.year)
+            or (end_date and min(years) > end_date.year)
+        )
+
     return [
         {
             "item_id": stable_id(source.source_id, canonicalize_url(url), prefix="CRAWLITEM"),
@@ -192,7 +209,7 @@ def discover_seed_items(source: RegisteredSource, run_id: str) -> list[dict]:
             "url": url,
             "canonical_url": canonicalize_url(url),
             "status": "pending",
-            "city_id": None,
+            "city_id": city_id,
             "query_year": None,
             "keyword_group": None,
             "retry_count": 0,
@@ -202,6 +219,7 @@ def discover_seed_items(source: RegisteredSource, run_id: str) -> list[dict]:
             "updated_at": now.isoformat(),
         }
         for url in urls
+        if in_requested_window(url)
     ]
 
 

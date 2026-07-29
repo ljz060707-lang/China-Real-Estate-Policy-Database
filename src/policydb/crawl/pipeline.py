@@ -23,7 +23,7 @@ from policydb.crawl.discovery import (
     discover_search_items,
     discover_seed_items,
 )
-from policydb.crawl.fetcher import PermissionErrorLocal, RespectfulFetcher
+from policydb.crawl.fetcher import CrawlFetchError, PermissionErrorLocal, RespectfulFetcher
 from policydb.crawl.models import DiscoveryRequest
 from policydb.crawl.parser import extract_pdf_embedded, parse_document
 from policydb.crawl.registry import load_registry
@@ -53,6 +53,12 @@ class CrawlPipeline:
 
     def _path(self, name: str) -> Path:
         return self.settings.curated / f"{name}.parquet"
+
+    def _stored_path(self, path: Path) -> str:
+        try:
+            return str(path.relative_to(self.settings.root))
+        except ValueError:
+            return str(path)
 
     def plan(
         self,
@@ -111,6 +117,7 @@ class CrawlPipeline:
             if str(province).strip()
         }
         city_frame = pl.DataFrame()
+        selected_city_ids: set[str] = set()
         if requested_cities or requested_provinces:
             city_frame = load_cities_105(self.settings)
             if requested_cities:
@@ -211,10 +218,22 @@ class CrawlPipeline:
         discovery_scans: list[dict] = []
         for source in sources:
             source_items: list[dict] = []
+            scoped_ids = selected_city_ids & set(source.city_ids)
+            if not scoped_ids and city_frame.height == 1:
+                scoped_ids = {str(city_frame[0, "city_id"])}
+            scoped_city_id = next(iter(scoped_ids)) if len(scoped_ids) == 1 else None
             seed_source = source.model_copy(
                 update={"list_page_urls": []}
             )
-            source_items.extend(discover_seed_items(seed_source, run_id))
+            source_items.extend(
+                discover_seed_items(
+                    seed_source,
+                    run_id,
+                    city_id=scoped_city_id,
+                    start_date=start_date,
+                    end_date=end_date,
+                )
+            )
             if source.list_page_urls and run_type != "seed_backtrack":
                 try:
                     discovery = ListPageDiscovery(self.fetcher)
@@ -238,7 +257,7 @@ class CrawlPipeline:
                             "url": item.url,
                             "canonical_url": item.canonical_url,
                             "status": "pending",
-                            "city_id": None,
+                            "city_id": scoped_city_id,
                             "query_year": item.date_hint.year if item.date_hint else None,
                             "keyword_group": item.keyword_group,
                             "retry_count": 0,
@@ -449,9 +468,21 @@ class CrawlPipeline:
             try:
                 source = source_index[item["source_id"]]
                 self.fetcher.rate_limit = source.rate_limit
-                result = self.fetcher.fetch(
-                    item["url"], etag=item.get("etag"), last_modified=item.get("last_modified")
-                )
+                try:
+                    result = self.fetcher.fetch(
+                        item["url"],
+                        etag=item.get("etag"),
+                        last_modified=item.get("last_modified"),
+                    )
+                except CrawlFetchError:
+                    if not str(item["url"]).lower().startswith("http://"):
+                        raise
+                    secure_url = "https://" + str(item["url"])[7:]
+                    result = self.fetcher.fetch(
+                        secure_url,
+                        etag=item.get("etag"),
+                        last_modified=item.get("last_modified"),
+                    )
                 if result.not_modified:
                     items = items.with_columns(
                         pl.when(pl.col("item_id") == item["item_id"])
@@ -483,19 +514,30 @@ class CrawlPipeline:
                 text_simhash = simhash64(parsed["full_text"] or "")
                 identity_key = policy_identity_key(title=parsed["title"])
                 extension = ".pdf" if parsed["document_type"] == "pdf" else ".html"
-                raw_dir = (
-                    self.settings.root
-                    / "data"
-                    / "raw"
-                    / "webpages"
-                    / now.strftime("%Y")
-                    / now.strftime("%m")
-                )
+                archive_kind = "pdf" if extension == ".pdf" else "html"
+                raw_dir = self.settings.archive_root / archive_kind / result.response_sha256[:2]
                 raw_dir.mkdir(parents=True, exist_ok=True)
                 raw_path = raw_dir / f"{result.response_sha256}{extension}"
                 if not raw_path.exists():
                     self._atomic_write(raw_path, result.body)
-                metadata_path = raw_path.with_suffix(raw_path.suffix + ".metadata.json")
+                text_path = None
+                if parsed["full_text"]:
+                    text_bytes = parsed["full_text"].encode("utf-8")
+                    text_digest = content_sha256(text_bytes)
+                    text_path = (
+                        self.settings.archive_root
+                        / "text"
+                        / text_digest[:2]
+                        / f"{text_digest}.txt"
+                    )
+                    if not text_path.exists():
+                        self._atomic_write(text_path, text_bytes)
+                metadata_path = (
+                    self.settings.archive_root
+                    / "metadata"
+                    / result.response_sha256[:2]
+                    / f"{result.response_sha256}.json"
+                )
                 if not metadata_path.exists():
                     self._atomic_write(
                         metadata_path,
@@ -507,6 +549,7 @@ class CrawlPipeline:
                                 "content_type": result.content_type,
                                 "retrieved_at": result.retrieved_at.isoformat(),
                                 "response_sha256": result.response_sha256,
+                                "text_path": str(text_path) if text_path else None,
                             },
                             ensure_ascii=False,
                             indent=2,
@@ -523,7 +566,7 @@ class CrawlPipeline:
                         "canonical_url": item["canonical_url"],
                         "final_url": result.final_url,
                         "content_sha256": result.response_sha256,
-                        "local_path": str(raw_path.relative_to(self.settings.root)),
+                        "local_path": self._stored_path(raw_path),
                         "content_type": result.content_type,
                         "http_status": result.status_code,
                         "title": parsed["title"],
@@ -584,17 +627,12 @@ class CrawlPipeline:
                                 attachment.get("label")
                             )
                             if embedded is not None:
-                                attachment_dir = (
-                                    self.settings.root
-                                    / "data"
-                                    / "raw"
-                                    / "documents"
-                                    / now.strftime("%Y")
-                                    / now.strftime("%m")
-                                )
-                                attachment_dir.mkdir(parents=True, exist_ok=True)
                                 digest = content_sha256(embedded)
                                 suffix = Path(str(attachment.get("label") or "")).suffix or ".bin"
+                                attachment_dir = (
+                                    self.settings.archive_root / "attachments" / digest[:2]
+                                )
+                                attachment_dir.mkdir(parents=True, exist_ok=True)
                                 embedded_path = attachment_dir / f"{digest}{suffix[:10]}"
                                 if not embedded_path.exists():
                                     self._atomic_write(embedded_path, embedded)
@@ -613,12 +651,9 @@ class CrawlPipeline:
                             else Path(attachment_result.final_url).suffix or ".bin"
                         )
                         attachment_dir = (
-                            self.settings.root
-                            / "data"
-                            / "raw"
-                            / "documents"
-                            / now.strftime("%Y")
-                            / now.strftime("%m")
+                            self.settings.archive_root
+                            / "attachments"
+                            / attachment_result.response_sha256[:2]
                         )
                         attachment_dir.mkdir(parents=True, exist_ok=True)
                         attachment_path = (
@@ -642,7 +677,7 @@ class CrawlPipeline:
                                     "canonical_url": attachment_url,
                                     "final_url": attachment_result.final_url,
                                     "content_sha256": attachment_result.response_sha256,
-                                    "local_path": str(attachment_path.relative_to(self.settings.root)),
+                                    "local_path": self._stored_path(attachment_path),
                                     "content_type": attachment_result.content_type,
                                     "http_status": attachment_result.status_code,
                                     "title": attachment.get("label") or attachment_parsed["title"],

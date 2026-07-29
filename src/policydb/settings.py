@@ -28,6 +28,15 @@ class Settings(BaseModel):
     database_path: Path | None = None
     curated_path: Path | None = None
 
+    def _path_setting(self, preference: str, environment: str) -> Path | None:
+        value = os.getenv(environment) or str(self.preferences.get(preference, "")).strip()
+        return Path(value).expanduser() if value else None
+
+    @property
+    def data_root(self) -> Path:
+        """External runtime data root; portable/test installs retain the repository fallback."""
+        return self._path_setting("crpd_data_root", "CRPD_DATA_ROOT") or self.root / "data"
+
     @classmethod
     def discover(cls, root: str | Path | None = None) -> Settings:
         value = Path(root or os.getenv("POLICYDB_ROOT", Path.cwd())).resolve()
@@ -38,15 +47,53 @@ class Settings(BaseModel):
 
     @property
     def database(self) -> Path:
-        return self.database_path or self.root / "database" / "policydb.duckdb"
+        return (
+            self.database_path
+            or self._path_setting("policydb_database", "POLICYDB_DATABASE")
+            or (
+                self.data_root / "database" / "policydb.duckdb"
+                if self.data_root != self.root / "data"
+                else self.root / "database" / "policydb.duckdb"
+            )
+        )
 
     @property
     def curated(self) -> Path:
-        return self.curated_path or self.root / "data" / "curated"
+        return (
+            self.curated_path
+            or self._path_setting("policydb_curated_root", "POLICYDB_CURATED_ROOT")
+            or self.data_root / "curated"
+        )
 
     @property
     def research(self) -> Path:
-        return self.root / "data" / "research"
+        return (
+            self._path_setting("policydb_research_root", "POLICYDB_RESEARCH_ROOT")
+            or self.data_root / "research"
+        )
+
+    @property
+    def logs(self) -> Path:
+        return self._path_setting("policydb_log_root", "POLICYDB_LOG_ROOT") or self.data_root / "logs"
+
+    @property
+    def outputs(self) -> Path:
+        return (
+            self._path_setting("policydb_output_root", "POLICYDB_OUTPUT_ROOT")
+            or (
+                self.data_root / "outputs"
+                if self.data_root != self.root / "data"
+                else self.root / "outputs"
+            )
+        )
+
+    @property
+    def jobs(self) -> Path:
+        return self.data_root / "jobs"
+
+    @property
+    def manifests(self) -> Path:
+        return self.data_root / "manifests"
 
     @property
     def manual_corrections(self) -> Path:
@@ -143,11 +190,8 @@ class Settings(BaseModel):
         )
         if explicit:
             return Path(explicit)
-        return Path(
-            self._preference(
-                "policy_archive_root", "POLICYDB_ARCHIVE_ROOT", r"D:\Data Set\CRPD"
-            )
-        )
+        configured = str(self.preferences.get("policy_archive_root", "")).strip()
+        return Path(configured) if configured else self.data_root / "archive"
 
     @property
     def archive_root(self) -> Path:
@@ -203,8 +247,21 @@ class Settings(BaseModel):
         return str(self._preference("search_provider", "SEARCH_PROVIDER", "None"))
 
     @property
+    def search_providers(self) -> list[str]:
+        value = self._preference("search_providers", "SEARCH_PROVIDERS", self.search_provider)
+        parts = value if isinstance(value, list) else str(value).split(",")
+        return [str(part).strip() for part in parts if str(part).strip()]
+
+    @property
     def search_api_key(self) -> str | None:
         return default_secret_store().get_secret("search_api_key")
+
+    def search_api_key_for(self, provider: str) -> str | None:
+        normalized = provider.strip().lower()
+        return (
+            default_secret_store().get_secret(f"search_api_key_{normalized}")
+            or self.search_api_key
+        )
 
     @property
     def search_base_url(self) -> str | None:

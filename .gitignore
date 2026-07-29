@@ -28,3 +28,8 @@ database/*.tmp.duckdb
 outputs/
 .runtime/*
 !.runtime/.gitkeep
+
+data/curated/*.parquet
+data/research/*.parquet
+database/*.duckdb
+data/reference/backups/
