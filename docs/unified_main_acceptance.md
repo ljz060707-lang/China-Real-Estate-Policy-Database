@@ -105,7 +105,7 @@ Windows 启动器实际选择 `.venv` Python 3.12.13，Streamlit 和 policydb �
 
 - `uv sync --all-extras`：通过
 - `uv run ruff check .`：通过
-- `uv run pytest`：242/242 通过，用时约 160.7 秒
+- `uv run pytest`：243/243 通过；Arrow 边界修复后复跑用时约 148.4 秒
 - `uv run policydb migrate-v2 verify`：通过；T1=3,011，2003-06-05 至 2026-07-02
 - `uv run policydb validate`：通过；28 个工作表，3,568 条记录，105 城市，invalid zero=0
 - `uv run policydb sources validate-registry`：通过，但 `SRC_33BD0596A208D584` 仍有 1 个 unresolved scope

@@ -92,4 +92,5 @@ def safe_pandas(frame: pl.DataFrame) -> pd.DataFrame:
             # Explicit object dtype prevents pandas' Arrow string inference from
             # crashing inside Streamlit AppTest on Windows.
             columns[name] = pd.Series(values, dtype="object")
-    return pd.DataFrame(columns)
+    with pd.option_context("future.infer_string", False):
+        return pd.DataFrame(columns)
