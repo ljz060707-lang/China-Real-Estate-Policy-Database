@@ -461,8 +461,17 @@ function Get-CityEnabledRoles {
         throw "无法读取 $CityId 的启用来源角色。"
     }
 
-    $Roles = @($Raw | ConvertFrom-Json)
-    return @($Roles | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    # ConvertFrom-Json emits one Object[] for a JSON array in Windows
+    # PowerShell. Flatten it before the caller serializes --source-roles.
+    $Parsed = $Raw | ConvertFrom-Json
+    $Roles = @()
+    foreach ($Role in @($Parsed)) {
+        $Value = [string]$Role
+        if (-not [string]::IsNullOrWhiteSpace($Value)) {
+            $Roles += $Value
+        }
+    }
+    return $Roles
 }
 
 function Get-YearDateRange {
