@@ -2,6 +2,8 @@
 __pycache__/
 .pytest_cache/
 .test-tmp-*/
+.test-tmp/
+.pytest-final-*/
 .ruff_cache/
 .uv-cache/
 .env
