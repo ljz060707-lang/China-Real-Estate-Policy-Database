@@ -305,6 +305,25 @@ class Settings(BaseModel):
         return default_secret_store().get_secret("http_proxy")
 
     @property
+    def crpd_proxy_url(self) -> str | None:
+        return os.getenv("CRPD_PROXY_URL") or self.http_proxy
+
+    @property
+    def ai_proxy_url(self) -> str | None:
+        return os.getenv("CRPD_AI_PROXY_URL") or self.crpd_proxy_url
+
+    @property
+    def search_proxy_url(self) -> str | None:
+        return os.getenv("CRPD_SEARCH_PROXY_URL") or self.crpd_proxy_url
+
+    @property
+    def government_route(self) -> str:
+        value = os.getenv("CRPD_GOVERNMENT_ROUTE", "direct").strip().lower()
+        if value != "direct":
+            raise ValueError("CRPD_GOVERNMENT_ROUTE must be 'direct'")
+        return value
+
+    @property
     def project_python_path(self) -> Path | None:
         value = str(self._preference("project_python_path", "POLICYDB_PYTHON", "")).strip()
         return Path(value).expanduser() if value else None

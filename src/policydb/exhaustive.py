@@ -36,6 +36,7 @@ TERMINAL_SHARD_STATUSES = {
     "partial_archive",
     "cancelled",
     "failed",
+    "split_parent",
 }
 
 
@@ -451,6 +452,8 @@ class ExhaustiveCrawler:
         pending = frame.filter(pl.col("status").is_in(runnable_status))
         total = pending.height
         completed = 0
+        run_ids: list[str] = []
+        run_metrics: dict[str, dict[str, int]] = {}
         for index, shard in enumerate(pending.iter_rows(named=True), 1):
             if resume and shard["status"] in {
                 "complete_policy_found",
@@ -485,6 +488,13 @@ class ExhaustiveCrawler:
             run_result = self.pipeline.run(
                 run_plan["run_id"], max_fetches=max_fetches_per_shard
             )
+            run_ids.append(str(run_plan["run_id"]))
+            run_metrics[str(run_plan["run_id"])] = {
+                "fetched": int(run_result.get("fetched", 0)),
+                "ai_pending_count": int(run_result.get("fetched", 0)),
+                "dedup_pending_count": int(run_result.get("fetched", 0)),
+                "archive_missing_count": 0,
+            }
             scans_path = self.settings.curated / "crawl_discovery_scans.parquet"
             scans = (
                 pl.read_parquet(scans_path).filter(
@@ -564,6 +574,8 @@ class ExhaustiveCrawler:
                         "failed": int(run_result.get("failed", 0)),
                         "retryable_errors": metrics["retryable_errors"],
                         "document_versions": int(run_result.get("fetched", 0)),
+                        "ai_pending_count": int(run_result.get("fetched", 0)),
+                        "dedup_pending_count": int(run_result.get("fetched", 0)),
                         "date_unknown_count": unknown,
                         "cross_period_rejected_count": rejected,
                         "checkpoint": run_plan["run_id"],
@@ -633,7 +645,41 @@ class ExhaustiveCrawler:
                     child["end_date"] = child_end.isoformat()
                     child["status"] = "pending"
                     child["checkpoint"] = None
+                    for field in (
+                        "pages_scanned",
+                        "candidate_count",
+                        "unique_candidate_count",
+                        "fetch_attempted",
+                        "fetched",
+                        "failed",
+                        "retryable_errors",
+                        "permanent_errors",
+                        "document_versions",
+                        "attachment_count",
+                        "date_unknown_count",
+                        "cross_period_rejected_count",
+                        "archive_missing_count",
+                        "ai_pending_count",
+                        "dedup_pending_count",
+                    ):
+                        child[field] = 0
+                    for field in (
+                        "pagination_exhausted",
+                        "candidate_cap_hit",
+                        "fetch_cap_hit",
+                        "page_cap_hit",
+                        "global_safety_limit_hit",
+                    ):
+                        child[field] = False
+                    child["last_page_url"] = None
+                    child["completion_evidence_json"] = _json(
+                        {
+                            "parent_shard_id": shard["shard_id"],
+                            "reason": "adaptive_split_child_pending",
+                        }
+                    )
                     child["created_at"] = now
+                    child["started_at"] = None
                     child["finished_at"] = None
                     child_rows.append(child)
                 _upsert(
@@ -641,6 +687,23 @@ class ExhaustiveCrawler:
                     self.shards_path,
                     "shard_id",
                 )
+                parent = update.with_columns(
+                    pl.lit("split_parent").alias("status"),
+                    pl.lit(
+                        _json(
+                            {
+                                **metrics,
+                                "run_id": run_plan["run_id"],
+                                "stop_reasons": stop_reasons,
+                                "split_children": [
+                                    row["shard_id"] for row in child_rows
+                                ],
+                            }
+                        )
+                    ).alias("completion_evidence_json"),
+                )
+                _upsert(parent, self.shards_path, "shard_id")
+                status = "split_parent"
             completed += 1
             self._event(
                 plan["batch_id"],
@@ -654,8 +717,34 @@ class ExhaustiveCrawler:
         return {
             **plan,
             "processed_shards": completed,
+            "run_ids": run_ids,
+            "run_metrics": run_metrics,
             "status": self.city_status(city),
         }
+
+    def apply_postprocess_metrics(
+        self, run_metrics: dict[str, dict[str, int]]
+    ) -> dict:
+        """Persist real per-run postprocess residuals into their leaf shards."""
+        if not self.shards_path.exists() or not run_metrics:
+            return {"updated_shards": 0}
+        frame = pl.read_parquet(self.shards_path)
+        rows: list[dict] = []
+        updated = 0
+        for row in frame.iter_rows(named=True):
+            metrics = run_metrics.get(str(row.get("checkpoint") or ""))
+            if metrics:
+                row["ai_pending_count"] = int(metrics.get("ai_pending_count", 0))
+                row["dedup_pending_count"] = int(metrics.get("dedup_pending_count", 0))
+                row["archive_missing_count"] = int(
+                    metrics.get("archive_missing_count", row.get("archive_missing_count", 0))
+                )
+                row["updated_at"] = datetime.now(UTC).isoformat()
+                updated += 1
+            rows.append(row)
+        _atomic_parquet(pl.DataFrame(rows, infer_schema_length=None), self.shards_path)
+        self.rebuild_progress()
+        return {"updated_shards": updated}
 
     def rebuild_progress(self) -> dict:
         slots_path = slot_paths(self.settings)[0]
@@ -668,6 +757,16 @@ class ExhaustiveCrawler:
         if shards.height:
             reclassified: list[dict] = []
             for row in shards.iter_rows(named=True):
+                if row.get("status") == "split_parent":
+                    reclassified.append(row)
+                    continue
+                if (
+                    row.get("status") == "pending"
+                    and not row.get("started_at")
+                    and not row.get("checkpoint")
+                ):
+                    reclassified.append(row)
+                    continue
                 source_missing = str(row.get("source_id") or "").startswith(
                     "UNRESOLVED:"
                 )
@@ -719,6 +818,7 @@ class ExhaustiveCrawler:
             )
             runnable = group.filter(
                 ~pl.col("source_id").str.starts_with("UNRESOLVED:")
+                & (pl.col("status") != "split_parent")
             )
             expected = runnable.height
             temporal_complete = runnable.filter(

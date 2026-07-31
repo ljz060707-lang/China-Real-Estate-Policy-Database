@@ -3,6 +3,7 @@ from __future__ import annotations
 import shutil
 from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 import polars as pl
@@ -17,11 +18,21 @@ from policydb.exhaustive import (
     extract_candidate_date,
     split_window,
 )
-from policydb.network import AIProxyClient, GovernmentDirectClient
+from policydb.network import (
+    AIProxyClient,
+    GovernmentDirectClient,
+    compare_routes,
+    probe_direct,
+    probe_proxy,
+)
 from policydb.settings import Settings
 from policydb.source_slots import (
     audit_525,
     build_requirement_slots,
+    list_candidates,
+    probe_candidates,
+    reconcile_registry_roles,
+    seed_candidates_from_registry,
     upsert_candidates,
     verify_candidates,
 )
@@ -136,6 +147,48 @@ def test_clients_use_separate_proxy_policies(monkeypatch):
     assert calls[1]["verify"] is True
 
 
+def test_proxy_probe_detects_mixed_protocol_without_credentials(monkeypatch):
+    monkeypatch.setattr(
+        "policydb.network._curl_proxy",
+        lambda url, proxy_url: {"ok": True, "status_code": 200},
+    )
+    result = probe_proxy(
+        url="https://example.com", proxy_url="http://user:secret@127.0.0.1:7897"
+    )
+    assert result["protocol"] == "mixed"
+    assert result["proxy"]["credentials_present"] is True
+    assert "secret" not in str(result)
+
+
+def test_direct_probe_marks_tun_fake_ip(monkeypatch):
+    monkeypatch.setattr(
+        GovernmentDirectClient,
+        "resolve_host",
+        staticmethod(lambda url: ["198.18.0.75"]),
+    )
+    monkeypatch.setattr(
+        "policydb.network._attempt_httpx",
+        lambda url, trust_env: {"ok": False, "network_status": "tls_incompatible"},
+    )
+    monkeypatch.setattr("policydb.network._curl_direct", lambda url: {"ok": False})
+    result = probe_direct(url="https://city.gov.cn/")
+    assert result["tun_fake_ip_detected"] is True
+    assert result["network_status"] == "tun_intercepted"
+
+
+def test_route_compare_prefers_proxy_when_direct_is_blocked(monkeypatch):
+    monkeypatch.setattr(
+        "policydb.network.probe_direct",
+        lambda url: {"network_status": "tun_intercepted", "tun_fake_ip_detected": True},
+    )
+    monkeypatch.setattr(
+        "policydb.network.probe_proxy",
+        lambda **kwargs: {"attempts": {"http": {"ok": True}}},
+    )
+    result = compare_routes(url="https://city.gov.cn/")
+    assert result["selected_route"] == "proxy"
+
+
 def test_requirement_grid_is_exactly_525_and_auditable(tmp_path):
     settings = _source_root(tmp_path)
     result = build_requirement_slots(settings)
@@ -163,6 +216,135 @@ def test_candidate_does_not_verify_without_city_and_role_evidence(tmp_path):
     assert result["checked"] == 1
     assert result["verified"] == 0
     assert audit_525(settings)["slots_with_enabled_source"] == 0
+
+
+def test_candidate_requires_two_direct_parser_probes(tmp_path):
+    settings = _source_root(tmp_path)
+    build_requirement_slots(settings)
+    upsert_candidates(
+        [
+            {
+                "city_id": "CITY_320100",
+                "source_role": "housing_department",
+                "candidate_url": "https://fcj.nanjing.gov.cn/zwgk/",
+                "site_name": "南京市住房和城乡建设局",
+                "department_name": "南京市住房和城乡建设局",
+            }
+        ],
+        settings,
+    )
+
+    class FakeFetcher:
+        def fetch(self, url):
+            return SimpleNamespace(
+                status_code=200,
+                body=(
+                    b"<html><title>Policies</title><nav><a href='/'>Home</a></nav>"
+                    b"<a href='/zwgk/policy-1'>Policy item one</a>"
+                    b"<a rel='next' href='/zwgk/page-2'>Next</a></html>"
+                ),
+                content_type="text/html",
+                final_url=url,
+                redirect_chain=[],
+                network_route="direct_ok",
+                response_sha256="abc",
+            )
+
+    result = probe_candidates(settings=settings, fetcher=FakeFetcher())
+    row = list_candidates(settings=settings).row(0, named=True)
+    assert result["checked"] == 1
+    assert result["parser_verified"] == 1
+    assert result["verification"]["verified"] == 1
+    assert row["health_probe_success_count"] == 2
+    assert row["pagination_strategy"] == "next_link"
+    assert row["network_route"] == "direct_ok"
+
+
+def test_authoritative_verification_revokes_detail_page_and_enablement(tmp_path):
+    settings = _source_root(tmp_path)
+    build_requirement_slots(settings)
+    upsert_candidates(
+        [
+            {
+                "city_id": "CITY_320100",
+                "source_role": "municipal_government",
+                "candidate_url": (
+                    "https://www.nanjing.gov.cn/zdgk/202302/"
+                    "t20230203_3818202.html"
+                ),
+                "site_name": "南京市人民政府",
+                "city_match_evidence": "registry city match",
+                "role_match_evidence": "registry role match",
+                "health_status": "healthy",
+                "entry_eligible": True,
+                "is_verified": True,
+                "is_enabled": True,
+                "manual_review_status": "approved",
+            }
+        ],
+        settings,
+    )
+    result = verify_candidates(city="南京市", settings=settings)
+    candidate = list_candidates(city="南京市", settings=settings).row(0, named=True)
+    assert result == {"checked": 1, "verified": 0, "enabled": 0}
+    assert candidate["is_verified"] is False
+    assert candidate["is_enabled"] is False
+    assert candidate["entry_eligible"] is False
+    assert candidate["manual_review_status"] == "rejected_by_gate"
+
+
+def test_registry_role_reconciliation_and_gazette_projection(tmp_path):
+    settings = _source_root(tmp_path)
+    registry = {
+        "version": 2,
+        "sources": [
+            {
+                "source_id": "SRC_GJJ",
+                "source_name": "南京住房公积金管理中心",
+                "domain": "gjj.nanjing.gov.cn",
+                "source_type": "government",
+                "source_role": "canonical_candidate",
+                "agency_type": "housing_department",
+                "official_status": "official",
+                "homepage_url": "https://gjj.nanjing.gov.cn/",
+                "list_page_urls": ["https://gjj.nanjing.gov.cn/zcfg/"],
+                "city_ids": ["CITY_320100"],
+                "scope_type": "municipal",
+                "crawl_enabled": False,
+            },
+            {
+                "source_id": "SRC_GOV",
+                "source_name": "南京市人民政府",
+                "domain": "nanjing.gov.cn",
+                "source_type": "government",
+                "source_role": "canonical_candidate",
+                "agency_type": "municipal_government",
+                "official_status": "official",
+                "homepage_url": "https://www.nanjing.gov.cn/",
+                "gazette_url": "https://www.nanjing.gov.cn/xxgkn/zfgb/",
+                "city_ids": ["CITY_320100"],
+                "scope_type": "municipal",
+                "crawl_enabled": False,
+            },
+        ],
+    }
+    (settings.root / "data/reference/source_registry.yaml").write_text(
+        __import__("yaml").safe_dump(registry, allow_unicode=True), encoding="utf-8"
+    )
+    build_requirement_slots(settings)
+    preview = reconcile_registry_roles(settings=settings)
+    assert preview["change_count"] == 1
+    reconcile_registry_roles(settings=settings, apply=True)
+    seed_candidates_from_registry(settings)
+    candidates = list_candidates(city="南京市", settings=settings)
+    assert candidates.filter(
+        (pl.col("source_role") == "provident_fund_center")
+        & pl.col("canonical_url").str.contains("gjj.nanjing")
+    ).height >= 1
+    assert candidates.filter(
+        (pl.col("source_role") == "government_gazette")
+        & pl.col("canonical_url").str.contains("/xxgkn/zfgb")
+    ).height == 1
 
 
 def test_cap_or_network_failure_cannot_complete():

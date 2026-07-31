@@ -16,8 +16,16 @@ Windows TLS栈不兼容时可对已核验政府域名使用 `curl.exe --noproxy 
 ```powershell
 .\.venv\Scripts\policydb.exe network diagnose --city "南京市"
 .\.venv\Scripts\policydb.exe network diagnose --url "https://example.gov.cn/"
+.\.venv\Scripts\policydb.exe network probe-proxy --url "https://github.com"
+.\.venv\Scripts\policydb.exe network probe-direct --url "https://www.nanjing.gov.cn/"
+.\.venv\Scripts\policydb.exe network compare --url "https://www.nanjing.gov.cn/"
+.\.venv\Scripts\policydb.exe network audit-sources --city "南京市" --enabled-only
 ```
 
 若默认请求失败、完全直连成功，代理客户端应将
 `DOMAIN-SUFFIX,gov.cn,DIRECT` 放在通用代理规则之前。网络失败窗口只能标为
 `partial_network`。
+
+`198.18.0.0/15` 是代理软件常用的 Fake-IP 保留网段。只要政府域名解析到该网段，报告必须标记为 `tun_intercepted`，不得把 TLS 失败写成来源站点不健康。Vortex/SakuraCat 需将 `gov.cn` 同时加入 DIRECT 与 Fake-IP 排除后，再执行真实入口健康检查。
+
+本地启动器分离两类进程：`CRPD_Run_Proxy_Process.ps1` 只为 AI/搜索设置 `CRPD_*_PROXY_URL`；`CRPD_Run_Direct_Government_Process.ps1` 清空标准代理变量并强制政府抓取直连。代理地址和凭据不会写入诊断报告。

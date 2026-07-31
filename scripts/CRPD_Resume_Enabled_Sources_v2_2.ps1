@@ -21,7 +21,9 @@
     [switch]$DiagnoseEachCity,
     [switch]$SkipAI,
     [switch]$SkipArchiveRecovery,
-    [switch]$StopOnCityYearFailure
+    [switch]$StopOnCityYearFailure,
+    [switch]$PartialEnabledSourcesOnly,
+    [switch]$AllowBlockedGovernmentRoute
 )
 
 Set-StrictMode -Version Latest
@@ -785,12 +787,39 @@ if ($Audit) {
     }
 }
 
+if (-not $Audit) {
+    throw "无法解析525来源审计，禁止启动抓取。"
+}
+if (
+    [double]$Audit.verified_coverage_pct -lt 100 -and
+    -not $PartialEnabledSourcesOnly
+) {
+    throw (
+        "verified source coverage仅为$($Audit.verified_coverage_pct)%。" +
+        "默认禁止把已启用来源的局部扫描作为全量回溯。" +
+        "仅在明确接受局部结果时使用-PartialEnabledSourcesOnly。"
+    )
+}
+
 # 先做一次南京网络诊断；逐城市诊断可通过-DiagnoseEachCity开启。
-[void](Invoke-PolicyDbTimed `
-    -Arguments @("network", "diagnose", "--city", "南京市") `
+$NanjingNetworkResult = Invoke-PolicyDbTimed `
+    -Arguments @("network", "compare", "--url", "https://www.nanjing.gov.cn/") `
     -Stage "06_network_nanjing" `
     -TimeoutMinutes 10 `
-    -ContinueOnError)
+    -ContinueOnError
+$NanjingNetwork = ConvertFrom-LastJson -Text $NanjingNetworkResult.Text
+if (
+    (
+        -not $NanjingNetwork -or
+        [string]$NanjingNetwork.selected_route -eq "blocked"
+    ) -and
+    -not $AllowBlockedGovernmentRoute
+) {
+    throw (
+        "南京政府入口的直连与代理路径均不可用，禁止启动全量回溯。" +
+        "请先修复Vortex gov.cn DIRECT/Fake-IP规则并重跑network compare。"
+    )
+}
 
 $Cities = @(
     Import-Csv $CityFile |

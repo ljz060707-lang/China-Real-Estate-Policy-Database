@@ -3,7 +3,7 @@
 import hashlib
 import re
 from datetime import UTC, datetime
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import parse_qs, urljoin, urlsplit
 
 import polars as pl
 import yaml
@@ -55,6 +55,12 @@ def is_reusable_source_entry(url: str) -> bool:
     """Return False for document-detail URLs that cannot serve as crawl entries."""
     parsed = urlsplit(url)
     target = f"{parsed.path}?{parsed.query}" if parsed.query else parsed.path
+    filename = parsed.path.rstrip("/").rsplit("/", 1)[-1]
+    if re.fullmatch(r"(?:index(?:_\d+)?|default)\.(?:s?html?|jhtml|aspx?)", filename, re.I):
+        query_keys = {key.lower() for key in parse_qs(parsed.query)}
+        return bool(parsed.scheme and parsed.netloc) and not bool(
+            query_keys & {"id", "articleid", "infoid", "docid", "contentid"}
+        )
     return bool(parsed.scheme and parsed.netloc) and not bool(
         _CONTENT_ENTRY_PATTERN.search(target)
     )

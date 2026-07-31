@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import socket
@@ -11,6 +12,7 @@ from typing import Any
 from urllib.parse import urljoin, urlsplit
 
 import httpx
+import polars as pl
 
 from policydb.crawl.dedup import content_sha256
 from policydb.settings import Settings
@@ -42,6 +44,24 @@ def _redacted_proxy_environment() -> dict[str, str | bool]:
         else:
             result[key] = True
     return result
+
+
+def _redacted_proxy_endpoint(value: str) -> dict[str, Any]:
+    parsed = urlsplit(value)
+    return {
+        "configured": bool(value),
+        "scheme": parsed.scheme or None,
+        "host": parsed.hostname,
+        "port": parsed.port,
+        "credentials_present": bool(parsed.username or parsed.password),
+    }
+
+
+def _is_tun_fake_ip(address: str) -> bool:
+    try:
+        return ipaddress.ip_address(address) in ipaddress.ip_network("198.18.0.0/15")
+    except ValueError:
+        return False
 
 
 def _same_government_domain(first: str, second: str, aliases: set[str]) -> bool:
@@ -251,12 +271,14 @@ class AIProxyClient:
         timeout: float = 60.0,
         transport: httpx.BaseTransport | None = None,
     ) -> None:
+        explicit_proxy = os.getenv("CRPD_AI_PROXY_URL") or os.getenv("CRPD_PROXY_URL")
         self.client = httpx.Client(
-            trust_env=True,
+            trust_env=not bool(explicit_proxy),
             follow_redirects=True,
             verify=True,
             timeout=timeout,
             transport=transport,
+            **({"proxy": explicit_proxy} if explicit_proxy and transport is None else {}),
         )
 
     def close(self) -> None:
@@ -339,6 +361,186 @@ def _curl_direct(url: str) -> dict[str, Any]:
         return {"ok": False, "error_type": type(exc).__name__, "error": str(exc)}
 
 
+def _curl_proxy(url: str, proxy_url: str) -> dict[str, Any]:
+    executable = "curl.exe" if os.name == "nt" else "curl"
+    try:
+        completed = subprocess.run(
+            [
+                executable,
+                "--proxy",
+                proxy_url,
+                "--max-time",
+                "15",
+                "--silent",
+                "--show-error",
+                "--head",
+                "--output",
+                os.devnull,
+                "--write-out",
+                "%{http_code}|%{url_effective}",
+                url,
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+        value = completed.stdout.strip()
+        status, _, final_url = value.partition("|")
+        return {
+            "ok": completed.returncode == 0 and status.isdigit() and int(status) > 0,
+            "return_code": completed.returncode,
+            "status_code": int(status) if status.isdigit() else None,
+            "final_url": final_url or None,
+            "stderr": completed.stderr.strip()[:500],
+        }
+    except (OSError, subprocess.SubprocessError) as exc:
+        return {"ok": False, "error_type": type(exc).__name__, "error": str(exc)}
+
+
+def probe_proxy(
+    *, url: str = "https://github.com", proxy_url: str | None = None
+) -> dict[str, Any]:
+    """Detect whether a proxy endpoint accepts HTTP CONNECT and/or SOCKS5H."""
+    value = proxy_url or os.getenv("CRPD_PROXY_URL") or "http://127.0.0.1:7897"
+    parsed = urlsplit(value if "://" in value else f"http://{value}")
+    if not parsed.hostname or not parsed.port:
+        raise ValueError("proxy URL must contain host and port")
+    authority = f"{parsed.hostname}:{parsed.port}"
+    attempts = {
+        "http": _curl_proxy(url, f"http://{authority}"),
+        "socks5h": _curl_proxy(url, f"socks5h://{authority}"),
+    }
+    working = [name for name, result in attempts.items() if result.get("ok")]
+    return {
+        "created_at": datetime.now(UTC).isoformat(),
+        "target_url": url,
+        "proxy": _redacted_proxy_endpoint(value),
+        "protocol": "mixed" if len(working) > 1 else (working[0] if working else "unavailable"),
+        "attempts": attempts,
+    }
+
+
+def probe_direct(*, url: str) -> dict[str, Any]:
+    """Compare Python trust_env=False and curl --noproxy, with TUN Fake-IP detection."""
+    dns = GovernmentDirectClient.resolve_host(url)
+    python_result = _attempt_httpx(url, trust_env=False)
+    curl_result = _curl_direct(url)
+    fake_ip = any(_is_tun_fake_ip(address) for address in dns)
+    ok = bool(python_result.get("ok") or curl_result.get("ok"))
+    status = "direct_ok" if ok else "tun_intercepted" if fake_ip else str(
+        python_result.get("network_status") or "blocked"
+    )
+    return {
+        "created_at": datetime.now(UTC).isoformat(),
+        "url": url,
+        "dns_addresses": dns,
+        "tun_fake_ip_detected": fake_ip,
+        "python_direct": python_result,
+        "curl_no_proxy": curl_result,
+        "network_status": status,
+    }
+
+
+def compare_routes(
+    *, url: str, proxy_url: str | None = None
+) -> dict[str, Any]:
+    direct = probe_direct(url=url)
+    proxy = probe_proxy(url=url, proxy_url=proxy_url)
+    proxy_ok = any(item.get("ok") for item in proxy["attempts"].values())
+    if direct["network_status"] == "direct_ok":
+        selected = "direct"
+    elif proxy_ok:
+        selected = "proxy"
+    else:
+        selected = "blocked"
+    return {
+        "created_at": datetime.now(UTC).isoformat(),
+        "url": url,
+        "selected_route": selected,
+        "direct": direct,
+        "proxy": proxy,
+        "recommendation": (
+            "Add DOMAIN-SUFFIX,gov.cn,DIRECT before generic proxy rules and disable Fake-IP for gov.cn."
+            if direct["tun_fake_ip_detected"]
+            else "Keep government fetches direct and AI/search traffic on the dedicated proxy."
+        ),
+    }
+
+
+def audit_source_routes(
+    *,
+    city: str | None = None,
+    enabled_only: bool = True,
+    limit: int | None = None,
+    settings: Settings | None = None,
+) -> dict[str, Any]:
+    """Probe registry entries without mutating health or enablement state."""
+    from policydb.crawl.registry import load_registry
+
+    settings = settings or Settings.discover()
+    city_id: str | None = None
+    if city:
+        from policydb.scope import load_cities_105
+
+        matches = load_cities_105(settings).filter(
+            (pl.col("city_name") == city)
+            | (pl.col("city_name_short") == city)
+            | (pl.col("city_id") == city)
+        )
+        if matches.height != 1:
+            raise ValueError(f"city must uniquely match the 105-city list: {city}")
+        city_id = str(matches[0, "city_id"])
+    sources = [
+        source
+        for source in load_registry(settings)
+        if (not enabled_only or source.crawl_enabled)
+        and (not city_id or city_id in source.city_ids)
+    ]
+    if limit is not None:
+        sources = sources[:limit]
+    rows: list[dict[str, Any]] = []
+    for source in sources:
+        entry = next(
+            (
+                item
+                for item in [*source.list_page_urls, source.homepage_url]
+                if item
+            ),
+            None,
+        )
+        result = probe_direct(url=entry) if entry else {"network_status": "missing_entry"}
+        rows.append(
+            {
+                "source_id": source.source_id,
+                "source_name": source.source_name,
+                "entry_url": entry,
+                "network_status": result["network_status"],
+                "tun_fake_ip_detected": bool(result.get("tun_fake_ip_detected")),
+                "evidence": result,
+            }
+        )
+    counts: dict[str, int] = {}
+    for row in rows:
+        key = str(row["network_status"])
+        counts[key] = counts.get(key, 0) + 1
+    report = {
+        "created_at": datetime.now(UTC).isoformat(),
+        "city": city,
+        "enabled_only": enabled_only,
+        "checked": len(rows),
+        "status_counts": counts,
+        "sources": rows,
+    }
+    output = settings.outputs / "acceptance" / "network_source_audit.json"
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temp = output.with_suffix(".json.tmp")
+    temp.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(temp, output)
+    report["output"] = str(output)
+    return report
+
+
 def diagnose_network(
     *,
     url: str,
@@ -351,10 +553,13 @@ def diagnose_network(
     default_result = _attempt_httpx(url, trust_env=True)
     direct_result = _attempt_httpx(url, trust_env=False)
     curl_result = _curl_direct(url)
+    fake_ip = any(_is_tun_fake_ip(address) for address in dns)
     if direct_result.get("ok"):
         classification = "direct_ok"
     elif not default_result.get("ok") and curl_result.get("ok"):
         classification = "direct_required"
+    elif fake_ip:
+        classification = "tun_intercepted"
     elif direct_result.get("network_status") == "tls_incompatible":
         classification = "tun_intercepted" if default_result.get("ok") else "tls_incompatible"
     elif not dns:
@@ -369,6 +574,7 @@ def diagnose_network(
         "scheme": parsed.scheme,
         "proxy_environment": _redacted_proxy_environment(),
         "dns_addresses": dns,
+        "tun_fake_ip_detected": fake_ip,
         "default_request": default_result,
         "direct_request": direct_result,
         "curl_no_proxy": curl_result,

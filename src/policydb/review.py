@@ -67,6 +67,12 @@ def _task_id(
 
 def ensure_review_schema(settings: Settings | None = None) -> Settings:
     settings = settings or Settings.discover()
+    if settings.read_only:
+        if not settings.database.exists():
+            raise FileNotFoundError(
+                f"review database does not exist in read-only mode: {settings.database}"
+            )
+        return settings
     settings.database.parent.mkdir(parents=True, exist_ok=True)
     with duckdb.connect(str(settings.database)) as con:
         con.execute(

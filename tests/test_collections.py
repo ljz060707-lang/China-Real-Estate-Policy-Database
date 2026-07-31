@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import shutil
 
 import duckdb
 import polars as pl
@@ -58,8 +59,15 @@ def test_all_records_have_collection_assignments(root):
     assert missing_evidence == 0
 
 
-def test_collection_build_is_idempotent_and_does_not_modify_raw(root):
-    settings = Settings.discover(root)
+def test_collection_build_is_idempotent_and_does_not_modify_raw(root, tmp_path):
+    production = Settings.discover(root)
+    isolated_curated = tmp_path / "curated"
+    isolated_curated.mkdir()
+    shutil.copy2(
+        production.curated / "records.parquet",
+        isolated_curated / "records.parquet",
+    )
+    settings = Settings(root=root, curated_path=isolated_curated)
     seed = next((root / "data" / "raw" / "seed").glob("*.xlsx"), None)
     if seed is None:
         pytest.skip("Raw seed is intentionally not published; local immutable-raw check only")

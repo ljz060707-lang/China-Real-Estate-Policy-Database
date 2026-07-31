@@ -9,6 +9,7 @@ TASKS = {
     "daily": ("DAILY", None, "03:00", "run_daily_update.ps1"),
     "weekly": ("WEEKLY", "SUN", "03:00", "run_weekly_update.ps1"),
     "monthly": ("MONTHLY", "1", "03:30", "run_monthly_update.ps1"),
+    "supervisor": ("MINUTE", "15", "00:00", "CRPD_Supervisor.ps1"),
 }
 
 
@@ -65,6 +66,8 @@ def install_windows_schedule(
             command.extend(["/D", str(day)])
         elif schedule == "MONTHLY":
             command.extend(["/D", str(day)])
+        elif schedule == "MINUTE":
+            command.extend(["/MO", str(day)])
         commands.append(command)
     if not confirm:
         return {

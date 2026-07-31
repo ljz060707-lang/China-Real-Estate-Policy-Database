@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from datetime import date
 from typing import Protocol
+from urllib.parse import parse_qs, urlsplit
 
 import httpx
+from bs4 import BeautifulSoup
 
 
 @dataclass(frozen=True)
@@ -43,9 +46,56 @@ class _HttpSearchProvider:
         self.base_url = base_url
         self.client = client or httpx.Client(
             timeout=30,
-            trust_env=True,
+            trust_env=not bool(os.getenv("CRPD_SEARCH_PROXY_URL")),
             verify=True,
+            **(
+                {"proxy": os.environ["CRPD_SEARCH_PROXY_URL"]}
+                if os.getenv("CRPD_SEARCH_PROXY_URL")
+                else {}
+            ),
         )
+
+
+class DuckDuckGoHtmlSearchProvider:
+    """Keyless discovery fallback; results remain unverified candidates."""
+
+    name = "DuckDuckGoHTML"
+
+    def __init__(self, *, client: httpx.Client | None = None) -> None:
+        proxy = os.getenv("CRPD_SEARCH_PROXY_URL")
+        self.client = client or httpx.Client(
+            timeout=30,
+            trust_env=not bool(proxy),
+            verify=True,
+            follow_redirects=True,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; CRPDSourceAudit/1.0)"},
+            **({"proxy": proxy} if proxy else {}),
+        )
+
+    def search(self, query: str, **kwargs: object) -> list[SearchResult]:
+        maximum = int(kwargs.get("max_results", 10))
+        response = self.client.post("https://html.duckduckgo.com/html/", data={"q": query})
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
+        results: list[SearchResult] = []
+        for anchor in soup.select("a.result__a[href]"):
+            href = str(anchor.get("href") or "")
+            query_string = parse_qs(urlsplit(href).query)
+            target = query_string.get("uddg", [href])[0]
+            if not target.startswith(("http://", "https://")):
+                continue
+            container = anchor.find_parent(class_="result")
+            snippet = container.select_one(".result__snippet") if container else None
+            results.append(
+                SearchResult(
+                    url=target,
+                    title=anchor.get_text(" ", strip=True),
+                    snippet=snippet.get_text(" ", strip=True) if snippet else "",
+                )
+            )
+            if len(results) >= maximum:
+                break
+        return results
 
 
 class BingSearchProvider(_HttpSearchProvider):
@@ -93,6 +143,8 @@ class TavilySearchProvider(_HttpSearchProvider):
 
 def build_search_provider(name: str, api_key: str | None, *, base_url: str | None = None, client: httpx.Client | None = None) -> SearchProvider:
     normalized = (name or "None").strip().lower()
+    if normalized in {"duckduckgohtml", "duckduckgo", "ddg"}:
+        return DuckDuckGoHtmlSearchProvider(client=client)
     if normalized == "none" or not api_key:
         return NoneSearchProvider()
     classes = {"bing": BingSearchProvider, "serper": SerperSearchProvider, "tavily": TavilySearchProvider}

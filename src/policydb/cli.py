@@ -40,7 +40,13 @@ from policydb.intensity.transformer import train_transformer
 from policydb.jobs import CrawlJobRequest, JobManager
 from policydb.jobs.worker import run_job
 from policydb.migration_v2 import apply_migration, migration_plan, verify_migration
-from policydb.network import diagnose_network
+from policydb.network import (
+    audit_source_routes,
+    compare_routes,
+    diagnose_network,
+    probe_direct,
+    probe_proxy,
+)
 from policydb.policy_pools import materialize_policy_pools
 from policydb.query.database import build_database
 from policydb.recovery import recover_review_sources
@@ -67,13 +73,21 @@ from policydb.source_quality import export_source_audit, unresolved_sources, val
 from policydb.source_slots import (
     audit_525,
     build_requirement_slots,
+    enable_source_strict,
+    enable_verified_sources,
     list_candidates,
+    probe_candidates,
+    promote_candidate,
+    promote_verified_candidates,
+    reconcile_registry,
+    reconcile_registry_roles,
     resolve_slot,
     seed_candidates_from_registry,
     verify_candidates,
 )
 from policydb.sources import bootstrap_sources_from_excel
 from policydb.storage import migrate_storage, storage_plan, verify_storage
+from policydb.supervisor import repair_recipe, supervisor_status
 from policydb.taxonomy_v2 import build_cicc_mapping, materialize_action_classifications
 from policydb.transform.collections import build_collection_layer
 from policydb.transform.t4_matching import build_t4_match_candidates
@@ -103,6 +117,9 @@ coverage_app = typer.Typer(no_args_is_help=True, help="105城市来源—月份�
 storage_app = typer.Typer(no_args_is_help=True, help="CRPD外部存储规划、迁移和校验")
 network_app = typer.Typer(no_args_is_help=True, help="政府直连与代理/TUN网络诊断")
 progress_app = typer.Typer(no_args_is_help=True, help="105城市全量搜索持久化进度")
+supervisor_app = typer.Typer(
+    no_args_is_help=True, help="Full-run watchdog and repair recipes"
+)
 app.add_typer(review_app, name="review")
 app.add_typer(sources_app, name="sources")
 app.add_typer(crawl_app, name="crawl")
@@ -122,6 +139,7 @@ app.add_typer(coverage_app, name="coverage")
 app.add_typer(storage_app, name="storage")
 app.add_typer(network_app, name="network")
 app.add_typer(progress_app, name="progress")
+app.add_typer(supervisor_app, name="supervisor")
 
 
 @ai_app.command("test")
@@ -541,6 +559,101 @@ def sources_verify_candidates(
     )
 
 
+@sources_app.command("probe-candidates")
+def sources_probe_candidates(
+    city: str | None = typer.Option(None, "--city"),
+    limit: int | None = typer.Option(None, "--limit", min=1),
+):
+    """Run real network and list-parser probes, then apply verification gates."""
+    typer.echo(
+        json.dumps(
+            probe_candidates(city=city, limit=limit),
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+
+
+@sources_app.command("promote")
+def sources_promote(
+    candidate_id: str = typer.Option(..., "--candidate-id"),
+):
+    """Promote one fully verified reusable entry; the new source remains disabled."""
+    typer.echo(
+        json.dumps(promote_candidate(candidate_id), ensure_ascii=False, indent=2)
+    )
+
+
+@sources_app.command("promote-verified")
+def sources_promote_verified(
+    city: str | None = typer.Option(None, "--city"),
+    slot_id: str | None = typer.Option(None, "--slot-id"),
+):
+    """Promote fully probed candidates into the registry, disabled by default."""
+    typer.echo(
+        json.dumps(
+            promote_verified_candidates(city=city, slot_id=slot_id),
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+
+
+@sources_app.command("enable")
+def sources_enable(
+    source_id: str = typer.Option(..., "--source-id"),
+):
+    """Enable one source only after all official, entry, health and role gates pass."""
+    typer.echo(
+        json.dumps(enable_source_strict(source_id), ensure_ascii=False, indent=2)
+    )
+
+
+@sources_app.command("enable-verified")
+def sources_enable_verified(
+    city: str | None = typer.Option(None, "--city"),
+):
+    typer.echo(
+        json.dumps(enable_verified_sources(city=city), ensure_ascii=False, indent=2)
+    )
+
+
+@sources_app.command("reconcile")
+def sources_reconcile(
+    apply: bool = typer.Option(False, "--apply/--dry-run"),
+):
+    """Audit enabled sources against verified reusable candidates; dry-run by default."""
+    typer.echo(
+        json.dumps(reconcile_registry(apply=apply), ensure_ascii=False, indent=2)
+    )
+
+
+@sources_app.command("disable-invalid-entries")
+def sources_disable_invalid_entries():
+    typer.echo(
+        json.dumps(reconcile_registry(apply=True), ensure_ascii=False, indent=2)
+    )
+
+
+@sources_app.command("reconcile-registry")
+def sources_reconcile_registry(
+    apply: bool = typer.Option(False, "--apply/--dry-run"),
+):
+    typer.echo(
+        json.dumps(reconcile_registry(apply=apply), ensure_ascii=False, indent=2)
+    )
+
+
+@sources_app.command("reconcile-roles")
+def sources_reconcile_roles(
+    apply: bool = typer.Option(False, "--apply/--dry-run"),
+):
+    """Correct high-confidence organization role mismatches; dry-run by default."""
+    typer.echo(
+        json.dumps(reconcile_registry_roles(apply=apply), ensure_ascii=False, indent=2)
+    )
+
+
 @sources_app.command("resolve-slot")
 def sources_resolve_slot(
     slot_id: str = typer.Option(..., "--slot-id"),
@@ -844,6 +957,69 @@ def network_diagnose(
     )
 
 
+@network_app.command("probe-proxy")
+def network_probe_proxy(
+    url: str = typer.Option("https://github.com", "--url"),
+    proxy_url: str | None = typer.Option(None, "--proxy-url", hidden=True),
+):
+    """Detect HTTP CONNECT versus SOCKS5H without printing proxy credentials."""
+    typer.echo(json.dumps(probe_proxy(url=url, proxy_url=proxy_url), ensure_ascii=False, indent=2))
+
+
+@network_app.command("probe-direct")
+def network_probe_direct(url: str = typer.Option(..., "--url")):
+    """Probe with Python proxy inheritance disabled and curl --noproxy."""
+    typer.echo(json.dumps(probe_direct(url=url), ensure_ascii=False, indent=2))
+
+
+@network_app.command("compare")
+def network_compare(
+    url: str = typer.Option(..., "--url"),
+    proxy_url: str | None = typer.Option(None, "--proxy-url", hidden=True),
+):
+    typer.echo(json.dumps(compare_routes(url=url, proxy_url=proxy_url), ensure_ascii=False, indent=2))
+
+
+@network_app.command("audit-sources")
+def network_audit_sources(
+    city: str | None = typer.Option(None, "--city"),
+    enabled_only: bool = typer.Option(True, "--enabled-only/--all"),
+    limit: int | None = typer.Option(None, "--limit", min=1),
+):
+    typer.echo(
+        json.dumps(
+            audit_source_routes(city=city, enabled_only=enabled_only, limit=limit),
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+
+
+@supervisor_app.command("status")
+def supervisor_status_command(
+    stale_minutes: int = typer.Option(30, "--stale-minutes", min=1),
+):
+    result = supervisor_status(stale_minutes=stale_minutes)
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+    if not result["healthy"]:
+        raise typer.Exit(2)
+
+
+@supervisor_app.command("repair-recipe")
+def supervisor_repair_recipe(
+    status: str = typer.Option(..., "--status"),
+    city: str | None = typer.Option(None, "--city"),
+    run_id: str | None = typer.Option(None, "--run-id"),
+):
+    typer.echo(
+        json.dumps(
+            repair_recipe(status, city=city, run_id=run_id),
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+
+
 @progress_app.command("status")
 def progress_status(city: str | None = typer.Option(None, "--city")):
     crawler = ExhaustiveCrawler()
@@ -1052,6 +1228,62 @@ def _exhaustive_progress(current: int, total: int, status: str, shard: dict) -> 
     )
 
 
+def _execute_exhaustive_postprocess(
+    crawler: ExhaustiveCrawler,
+    result: dict,
+    *,
+    run_ai: bool,
+    archive: bool,
+) -> dict:
+    """Execute requested work and persist residual counts; never report flags only."""
+    run_ids = [str(value) for value in result.get("run_ids", [])]
+    postprocess: dict[str, object] = {}
+    captured_metrics = result.get("run_metrics", {})
+    per_run = {
+        run_id: {
+            "ai_pending_count": int(
+                captured_metrics.get(run_id, {}).get("ai_pending_count", 0)
+            ),
+            "dedup_pending_count": int(
+                captured_metrics.get(run_id, {}).get("dedup_pending_count", 0)
+            ),
+            "archive_missing_count": int(
+                captured_metrics.get(run_id, {}).get("archive_missing_count", 0)
+            ),
+        }
+        for run_id in run_ids
+    }
+    if archive:
+        postprocess["archive"] = archive_document_versions(crawler.settings)
+    if run_ai:
+        enricher = GLMEnricher(crawler.settings)
+        ai_rows: dict[str, dict] = {}
+        for run_id in run_ids:
+            classified = enricher.enrich_pending(run_id=run_id)
+            verified = enricher.verify_pending(run_id=run_id)
+            per_run[run_id]["ai_pending_count"] = int(
+                classified.get("awaiting_api_key", 0)
+            ) + int(classified.get("failed", 0)) + int(
+                verified.get("pending", 0)
+            ) + int(verified.get("awaiting_api_key", 0)) + int(
+                verified.get("failed", 0)
+            )
+            ai_rows[run_id] = {"classify": classified, "verify": verified}
+        postprocess["ai"] = ai_rows
+        postprocess["taxonomy"] = materialize_action_classifications(crawler.settings)
+        postprocess["dedup"] = materialize_policy_identity(crawler.settings)
+        postprocess["route_pools"] = materialize_policy_pools(crawler.settings)
+        postprocess["confidence"] = materialize_field_confidence(crawler.settings)
+        postprocess["coverage"] = build_city_source_month_coverage(crawler.settings)
+        postprocess["database"] = build_database(crawler.settings)
+    postprocess["progress_update"] = crawler.apply_postprocess_metrics(per_run)
+    result["postprocess"] = postprocess
+    result["run_ai_executed"] = run_ai
+    result["archive_executed"] = archive
+    result["status"] = crawler.city_status(str(result["city_id"]))
+    return result
+
+
 @crawl_app.command("exhaustive-city")
 def crawl_exhaustive_city(
     city: str = typer.Option(..., "--city"),
@@ -1077,7 +1309,8 @@ def crawl_exhaustive_city(
     """逐城市、逐来源、逐月扫描；状态和检查点均写入D盘Curated层。"""
     if not sequential:
         raise typer.BadParameter("当前正式写入仅支持 --sequential，避免并发覆盖。")
-    result = ExhaustiveCrawler().run_city(
+    crawler = ExhaustiveCrawler()
+    result = crawler.run_city(
         city,
         start_date=_date(from_),
         end_date=_date(to),
@@ -1096,6 +1329,12 @@ def crawl_exhaustive_city(
         result["ai_note"] = (
             "本命令仅在抓取闭环后按新增run处理AI；未配置模型时保持ai_pending。"
         )
+    result = _execute_exhaustive_postprocess(
+        crawler, result, run_ai=run_ai, archive=archive
+    )
+    result.pop("ai_note", None)
+    result.pop("run_ai_requested", None)
+    result.pop("archive_requested", None)
     typer.echo(json.dumps(result, ensure_ascii=False, indent=2, default=str))
 
 
@@ -1114,6 +1353,7 @@ def crawl_exhaustive_all(
     ),
     resume: bool = typer.Option(True, "--resume/--no-resume"),
     run_ai: bool = typer.Option(False, "--run-ai/--no-run-ai"),
+    archive: bool = typer.Option(True, "--archive/--no-archive"),
 ):
     """105城市默认顺序执行；可用--cities先做小规模验收。"""
     crawler = ExhaustiveCrawler()
@@ -1127,8 +1367,7 @@ def crawl_exhaustive_all(
     results = []
     for index, city in enumerate(names, 1):
         typer.echo(f"城市 {index}/{len(names)}：{city}")
-        results.append(
-            crawler.run_city(
+        city_result = crawler.run_city(
                 city,
                 start_date=_date(from_),
                 end_date=_date(to),
@@ -1139,12 +1378,20 @@ def crawl_exhaustive_all(
                 resume=resume,
                 progress=_exhaustive_progress,
             )
+        results.append(
+            _execute_exhaustive_postprocess(
+                crawler,
+                city_result,
+                run_ai=run_ai,
+                archive=archive,
+            )
         )
     typer.echo(
         json.dumps(
             {
                 "cities": len(results),
-                "run_ai_requested": run_ai,
+                "run_ai_executed": run_ai,
+                "archive_executed": archive,
                 "results": results,
             },
             ensure_ascii=False,

@@ -74,6 +74,9 @@
 | source_candidates | candidate_kind / page_type / entry_eligible | enum/string/bool | 是 | 区分正文证据、部门入口和市政府统一公开入口替代候选 |
 | source_candidates | is_verified / is_enabled | bool | 否 | 种子反向候选固定为 false；只能由独立核验/启用流程改变 |
 | source_candidates | source_record_count / evidence_count / conflict_count | int | 否 | 候选的可追溯记录数、证据数与冲突数 |
+| crawl_shards | status | enum | 否 | `pending` 表示尚未启动的叶分片；`split_parent` 表示因容量命中而被子分片取代的父节点，不参与叶分片完成率；其余 `partial_*`、`source_incomplete` 和完成状态保留真实失败语义 |
+| crawl_shards | ai_pending_count / dedup_pending_count / archive_missing_count | int | 否 | 按 crawl run 持久化的真实后处理残余；未实际运行 AI 不得写为 0 |
+| pipeline_progress_events | stage / counts_json | string/json | 否 | 分片阶段事件及当时计数，用于监督器判定停滞和生成修复处方 |
 | source_candidate_evidence | evidence_id | string | 否 | 候选、记录、地区和关系类型组合的稳定证据主键 |
 | source_candidate_evidence | record_id / original_url / jurisdiction_id / relation_type | string | 否 | 原始种子 URL 与 record—jurisdiction 证据链 |
 | source_candidate_evidence | role_assignment_method / role_assignment_evidence | string | 否 | 来源槽位角色的确定性判定方法及证据 |
