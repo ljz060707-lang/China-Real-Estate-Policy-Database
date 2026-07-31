@@ -2,12 +2,14 @@
 
 import hashlib
 from datetime import UTC, datetime
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 import polars as pl
 import yaml
+from bs4 import BeautifulSoup
 
 from policydb.config.providers import SearchProvider, build_search_fallback
+from policydb.crawl.fetcher import RespectfulFetcher
 from policydb.crawl.models import RegisteredSource
 from policydb.crawl.registry import load_registry, save_registry_atomic
 from policydb.scope import load_cities_105
@@ -101,6 +103,57 @@ def discover_city_sources(
                     "query": query,
                 }
             )
+    if not candidates and getattr(provider, "name", "") == "None":
+        candidates.extend(
+            discover_city_portal_candidates(
+                row,
+                settings=settings,
+                roles=selected_roles,
+                max_results=max_results,
+            )
+        )
+    if candidates and (
+        settings.root / "data/reference/city_source_requirements.yaml"
+    ).exists():
+        from policydb.source_slots import build_requirement_slots, upsert_candidates
+
+        build_requirement_slots(settings)
+        upsert_candidates(
+            [
+                {
+                    "city_id": item["city_id"],
+                    "source_role": item["source_role"],
+                    "candidate_url": item["url"],
+                    "site_name": item["title"],
+                    "discovery_method": "search_provider",
+                    "discovery_evidence_text": item["query"],
+                    "official_domain_evidence": (
+                        "hostname is gov.cn or a subdomain"
+                        if item["official_domain_verified"]
+                        else None
+                    ),
+                    "city_match_evidence": (
+                        f"query explicitly contains {row['city_name']}"
+                    ),
+                    "role_match_evidence": (
+                        f"query explicitly contains {ROLE_TERMS.get(item['source_role'], item['source_role'])}"
+                    ),
+                    "official_confidence": (
+                        1.0 if item["official_domain_verified"] else 0.0
+                    ),
+                    "city_confidence": 0.7,
+                    "role_confidence": 0.7,
+                    "overall_confidence": (
+                        0.8 if item["official_domain_verified"] else 0.3
+                    ),
+                    "is_official": item["official_domain_verified"],
+                    "is_verified": False,
+                    "manual_review_status": "pending",
+                }
+                for item in candidates
+            ],
+            settings,
+        )
     added = 0
     if apply and candidates:
         existing = load_registry(settings)
@@ -150,6 +203,97 @@ def discover_city_sources(
         "attempts": attempts,
         "candidates": candidates,
     }
+
+
+def discover_city_portal_candidates(
+    city_row: dict,
+    *,
+    settings: Settings,
+    roles: list[str],
+    max_results: int = 5,
+    fetcher: RespectfulFetcher | None = None,
+) -> list[dict]:
+    """Discover department links from an existing verified municipal portal.
+
+    This is the no-search-API path. It never manufactures subdomains: only links
+    that actually occur on registered official pages are retained as candidates.
+    """
+    fetcher = fetcher or RespectfulFetcher(
+        timeout=settings.request_timeout,
+        connect_timeout=settings.connect_timeout,
+        retries=settings.max_retries,
+        rate_limit=settings.default_rate_limit,
+        check_robots=settings.respect_robots,
+    )
+    portals = [
+        source
+        for source in load_registry(settings)
+        if city_row["city_id"] in source.city_ids
+        and source.agency_type == "municipal_government"
+        and any(
+            _official_domain(str(item))
+            for item in [
+                source.homepage_url,
+                *source.list_page_urls,
+                *source.seed_urls,
+            ]
+            if item
+        )
+    ]
+    candidates: list[dict] = []
+    for portal in portals:
+        entries = [
+            portal.homepage_url,
+            *portal.list_page_urls,
+            *portal.seed_urls,
+        ]
+        for entry in dict.fromkeys(item for item in entries if item):
+            try:
+                result = fetcher.fetch(str(entry))
+            except Exception:
+                continue
+            soup = BeautifulSoup(result.body, "html.parser")
+            for anchor in soup.select("a[href]"):
+                text = " ".join(anchor.get_text(" ", strip=True).split())
+                target = urljoin(result.final_url, anchor.get("href", ""))
+                if not _official_domain(target):
+                    continue
+                for role in roles:
+                    term = ROLE_TERMS.get(role, role)
+                    alternatives = {
+                        term,
+                        term.replace("住房和城乡建设局", "住建局"),
+                        term.replace("自然资源和规划局", "自然资源局"),
+                        term.replace("住房公积金管理中心", "公积金中心"),
+                    }
+                    if not any(value and value in text for value in alternatives):
+                        continue
+                    candidates.append(
+                        {
+                            "city_id": city_row["city_id"],
+                            "city_name": city_row["city_name"],
+                            "province_name": city_row["province_name"],
+                            "source_role": role,
+                            "url": target,
+                            "domain": (
+                                urlsplit(target).hostname or ""
+                            ).lower().removeprefix("www."),
+                            "title": text,
+                            "official_domain_verified": True,
+                            "candidate_status": "official_candidate",
+                            "discovery_provider": "OfficialPortalNavigation",
+                            "query": f"anchor from {result.final_url}",
+                        }
+                    )
+                    break
+                if sum(
+                    item["source_role"] == role for item in candidates
+                ) >= max_results:
+                    continue
+    unique: dict[tuple[str, str], dict] = {}
+    for candidate in candidates:
+        unique[(candidate["source_role"], candidate["url"])] = candidate
+    return list(unique.values())
 
 
 def discover_all_sources(

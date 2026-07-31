@@ -279,3 +279,26 @@ uv run policydb sources validate-registry
 
 政府网站会改版、下线、启用验证码或调整 robots；系统提供持续监测、重试、替代入口和失败报告，
 但不能承诺所有来源永久可用。付费搜索和 AI 结果必须以实际 API 配置与运行日志为准。
+
+## 可审计逐城全量搜索（V2）
+
+实际运行统一使用控制台入口：
+
+```powershell
+.\.venv\Scripts\policydb.exe storage verify --target "D:\Data Set\CRPD"
+.\.venv\Scripts\policydb.exe network diagnose --city "南京市"
+.\.venv\Scripts\policydb.exe sources discover-all
+.\.venv\Scripts\policydb.exe sources verify-candidates
+.\.venv\Scripts\policydb.exe sources audit-525
+.\.venv\Scripts\policydb.exe sources seed-record-candidates
+.\.venv\Scripts\policydb.exe sources export-candidate-audit
+.\.venv\Scripts\policydb.exe crawl exhaustive-city --city "南京市" --from "2018-01-01" --to "today" --no-run-ai
+.\.venv\Scripts\policydb.exe crawl exhaustive-all --from "2018-01-01" --to "today" --no-run-ai
+.\.venv\Scripts\policydb.exe progress watch
+.\.venv\Scripts\policydb.exe coverage build
+.\.venv\Scripts\policydb.exe dashboard
+```
+
+政府网页抓取固定完全直连且不读取环境代理；AI和搜索API使用独立代理会话。525个槽位中没有
+证据的项保持 `unresolved`，不会用推测URL补齐。城市—年度只有在来源、时间、分页、错误、
+归档、正文、AI和去重全部闭环后才会标为 `certified_complete`。

@@ -68,6 +68,18 @@
 | source_registry | domain / official_status / priority / crawl_enabled | string/int/bool | 否 | 来源等级和抓取开关 |
 | policy_sources | policy_source_id | string | 否 | 一条政策连接一个来源URL的关系主键 |
 | policy_sources | record_id / source_id / normalized_url | string | 否 | 政策、来源与规范化URL |
+| source_requirement_slots | slot_id | string | 否 | 由城市 ID 与五类必需来源角色生成的稳定槽位主键 |
+| source_requirement_slots | coverage_status | enum | 否 | 区分无候选、仅正文证据、市政府替代候选、部门入口候选及启用来源，不把候选覆盖冒充真实覆盖 |
+| source_candidates | candidate_id | string | 否 | 城市槽位与规范化 URL 的稳定候选主键 |
+| source_candidates | candidate_kind / page_type / entry_eligible | enum/string/bool | 是 | 区分正文证据、部门入口和市政府统一公开入口替代候选 |
+| source_candidates | is_verified / is_enabled | bool | 否 | 种子反向候选固定为 false；只能由独立核验/启用流程改变 |
+| source_candidates | source_record_count / evidence_count / conflict_count | int | 否 | 候选的可追溯记录数、证据数与冲突数 |
+| source_candidate_evidence | evidence_id | string | 否 | 候选、记录、地区和关系类型组合的稳定证据主键 |
+| source_candidate_evidence | record_id / original_url / jurisdiction_id / relation_type | string | 否 | 原始种子 URL 与 record—jurisdiction 证据链 |
+| source_candidate_evidence | role_assignment_method / role_assignment_evidence | string | 否 | 来源槽位角色的确定性判定方法及证据 |
+| source_candidate_evidence | is_verified / is_enabled | bool | 否 | 种子证据固定为 false；与既有启用候选 URL 重叠也不继承启用状态 |
+| source_candidate_evidence | needs_manual_review / review_reason | bool/string | 否/是 | 跨城市、多地区或角色冲突的人工复核门控 |
+| source_candidate_generation_runs | generation_batch_id | string | 否 | 输入文件哈希与算法版本生成的幂等批次 ID |
 | policy_document_versions | document_version_id | string | 否 | URL任务＋内容SHA-256稳定版本主键 |
 | crawl_runs / crawl_items / crawl_checkpoints | *_id | string | 否 | 抓取批次、URL任务和断点审计 |
 | fetch_errors | error_id | string | 否 | 抓取失败、可重试状态和错误类型 |

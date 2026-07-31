@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 import os
 from collections import deque
@@ -23,7 +24,7 @@ from policydb.crawl.discovery import (
     discover_search_items,
     discover_seed_items,
 )
-from policydb.crawl.fetcher import CrawlFetchError, PermissionErrorLocal, RespectfulFetcher
+from policydb.crawl.fetcher import PermissionErrorLocal, RespectfulFetcher
 from policydb.crawl.models import DiscoveryRequest
 from policydb.crawl.parser import extract_pdf_embedded, parse_document
 from policydb.crawl.registry import load_registry
@@ -107,6 +108,7 @@ class CrawlPipeline:
                 source
                 for source in sources
                 if source.source_role in selected_source_roles
+                or source.agency_type in selected_source_roles
             ]
         requested_cities = {
             str(city).strip() for city in (cities or []) if str(city).strip()
@@ -259,6 +261,18 @@ class CrawlPipeline:
                             "status": "pending",
                             "city_id": scoped_city_id,
                             "query_year": item.date_hint.year if item.date_hint else None,
+                            "candidate_date": (
+                                item.date_hint.isoformat()
+                                if item.date_hint
+                                else None
+                            ),
+                            "candidate_date_source": (
+                                "list_item" if item.date_hint else "unknown"
+                            ),
+                            "candidate_date_confidence": (
+                                0.99 if item.date_hint else 0.0
+                            ),
+                            "period_decision": None,
                             "keyword_group": item.keyword_group,
                             "retry_count": 0,
                             "first_seen_at": now_text,
@@ -411,6 +425,12 @@ class CrawlPipeline:
             temp.unlink(missing_ok=True)
             raise PermissionErrorLocal(f"local write denied: {path}") from exc
 
+    @classmethod
+    def _atomic_parquet(cls, path: Path, frame: pl.DataFrame) -> None:
+        buffer = io.BytesIO()
+        frame.write_parquet(buffer, compression="zstd")
+        cls._atomic_write(path, buffer.getvalue())
+
     def run(
         self,
         run_id: str,
@@ -468,21 +488,11 @@ class CrawlPipeline:
             try:
                 source = source_index[item["source_id"]]
                 self.fetcher.rate_limit = source.rate_limit
-                try:
-                    result = self.fetcher.fetch(
-                        item["url"],
-                        etag=item.get("etag"),
-                        last_modified=item.get("last_modified"),
-                    )
-                except CrawlFetchError:
-                    if not str(item["url"]).lower().startswith("http://"):
-                        raise
-                    secure_url = "https://" + str(item["url"])[7:]
-                    result = self.fetcher.fetch(
-                        secure_url,
-                        etag=item.get("etag"),
-                        last_modified=item.get("last_modified"),
-                    )
+                result = self.fetcher.fetch(
+                    item["url"],
+                    etag=item.get("etag"),
+                    last_modified=item.get("last_modified"),
+                )
                 if result.not_modified:
                     items = items.with_columns(
                         pl.when(pl.col("item_id") == item["item_id"])
@@ -550,6 +560,11 @@ class CrawlPipeline:
                                 "retrieved_at": result.retrieved_at.isoformat(),
                                 "response_sha256": result.response_sha256,
                                 "text_path": str(text_path) if text_path else None,
+                                "protocol": result.protocol,
+                                "network_route": result.network_route,
+                                "redirect_chain": result.redirect_chain,
+                                "resolved_addresses": result.resolved_addresses,
+                                "fallback_used": result.fallback_used,
                             },
                             ensure_ascii=False,
                             indent=2,
@@ -589,6 +604,11 @@ class CrawlPipeline:
                         "simhash64": text_simhash,
                         "policy_identity_key": identity_key,
                         "parser_version": "2",
+                        "network_route": result.network_route,
+                        "redirect_chain_json": json.dumps(
+                            result.redirect_chain, ensure_ascii=False
+                        ),
+                        "protocol": result.protocol,
                     }
                 if version_id in existing_version_ids and existing_versions is not None:
                     existing_versions = existing_versions.with_columns(
@@ -708,6 +728,11 @@ class CrawlPipeline:
                                 "error_type": type(attachment_error).__name__,
                                 "error_message": str(attachment_error)[:1000],
                                 "retryable": True,
+                                "requested_protocol": str(attachment_url).split(
+                                    ":", 1
+                                )[0].lower(),
+                                "network_route": "direct",
+                                "redirect_chain_json": "[]",
                                 "created_at": now.isoformat(),
                                 "updated_at": now.isoformat(),
                             }
@@ -739,7 +764,17 @@ class CrawlPipeline:
                         "url": item["url"],
                         "error_type": type(exc).__name__,
                         "error_message": str(exc)[:1000],
-                            "retryable": bool(getattr(exc, "retryable", True)),
+                        "retryable": bool(getattr(exc, "retryable", True)),
+                        "requested_protocol": getattr(
+                            exc,
+                            "requested_protocol",
+                            str(item["url"]).split(":", 1)[0].lower(),
+                        ),
+                        "network_route": getattr(exc, "network_route", "direct"),
+                        "redirect_chain_json": json.dumps(
+                            getattr(exc, "redirect_chain", []),
+                            ensure_ascii=False,
+                        ),
                         "created_at": now.isoformat(),
                         "updated_at": now.isoformat(),
                     }
@@ -750,9 +785,9 @@ class CrawlPipeline:
                     .otherwise(pl.col("status"))
                     .alias("status")
                 )
-        items.write_parquet(items_path, compression="zstd")
+        self._atomic_parquet(items_path, items)
         if existing_versions is not None:
-            existing_versions.write_parquet(versions_path, compression="zstd")
+            self._atomic_parquet(versions_path, existing_versions)
         if versions:
             append_unique(self._path("policy_document_versions"), versions, "document_version_id")
         if errors:

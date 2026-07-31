@@ -41,7 +41,11 @@ class _HttpSearchProvider:
     def __init__(self, api_key: str, *, base_url: str, client: httpx.Client | None = None) -> None:
         self.api_key = api_key
         self.base_url = base_url
-        self.client = client or httpx.Client(timeout=30)
+        self.client = client or httpx.Client(
+            timeout=30,
+            trust_env=True,
+            verify=True,
+        )
 
 
 class BingSearchProvider(_HttpSearchProvider):

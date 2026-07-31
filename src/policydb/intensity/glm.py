@@ -82,7 +82,11 @@ class GLMIntensityClient:
         self.settings = settings or Settings.discover()
         self.api_key = self.settings.glm_api_key
         self.model = self.settings.glm_model
-        self.client = client or httpx.Client(timeout=self.settings.request_timeout)
+        self.client = client or httpx.Client(
+            timeout=self.settings.request_timeout,
+            trust_env=True,
+            verify=True,
+        )
         self.predictions_path = self.settings.curated / "policy_model_predictions.parquet"
         self.usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 

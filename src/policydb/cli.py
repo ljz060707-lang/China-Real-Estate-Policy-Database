@@ -4,7 +4,7 @@ import json
 import os
 import subprocess
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Annotated
 
@@ -20,6 +20,8 @@ from policydb.crawl.health import disable_unhealthy, enable_recommended, evaluat
 from policydb.crawl.pipeline import CrawlPipeline
 from policydb.dedup_audit import materialize_policy_identity
 from policydb.enrich.glm import GLMEnricher
+from policydb.exhaustive import ExhaustiveCrawler, export_progress
+from policydb.exhaustive_acceptance import build_exhaustive_acceptance
 from policydb.export.excel_compatible import export_excel_compatible
 from policydb.export.release import create_release
 from policydb.geography import materialize_geography
@@ -38,6 +40,7 @@ from policydb.intensity.transformer import train_transformer
 from policydb.jobs import CrawlJobRequest, JobManager
 from policydb.jobs.worker import run_job
 from policydb.migration_v2 import apply_migration, migration_plan, verify_migration
+from policydb.network import diagnose_network
 from policydb.policy_pools import materialize_policy_pools
 from policydb.query.database import build_database
 from policydb.recovery import recover_review_sources
@@ -48,7 +51,11 @@ from policydb.schedule import (
     remove_windows_schedule,
     schedule_status,
 )
-from policydb.scope import materialize_city_scope
+from policydb.scope import load_cities_105, materialize_city_scope
+from policydb.seed_source_candidates import (
+    export_source_candidate_audit,
+    generate_candidates_from_seed_records,
+)
 from policydb.settings import Settings
 from policydb.source_discovery import (
     complete_source_matrix,
@@ -57,6 +64,14 @@ from policydb.source_discovery import (
     repair_sources,
 )
 from policydb.source_quality import export_source_audit, unresolved_sources, validate_registry
+from policydb.source_slots import (
+    audit_525,
+    build_requirement_slots,
+    list_candidates,
+    resolve_slot,
+    seed_candidates_from_registry,
+    verify_candidates,
+)
 from policydb.sources import bootstrap_sources_from_excel
 from policydb.storage import migrate_storage, storage_plan, verify_storage
 from policydb.taxonomy_v2 import build_cicc_mapping, materialize_action_classifications
@@ -86,6 +101,8 @@ archive_app = typer.Typer(no_args_is_help=True, help="D盘政策原文与附件�
 schedule_app = typer.Typer(no_args_is_help=True, help="Windows每日、周度和月度自动更新")
 coverage_app = typer.Typer(no_args_is_help=True, help="105城市来源—月份完整性")
 storage_app = typer.Typer(no_args_is_help=True, help="CRPD外部存储规划、迁移和校验")
+network_app = typer.Typer(no_args_is_help=True, help="政府直连与代理/TUN网络诊断")
+progress_app = typer.Typer(no_args_is_help=True, help="105城市全量搜索持久化进度")
 app.add_typer(review_app, name="review")
 app.add_typer(sources_app, name="sources")
 app.add_typer(crawl_app, name="crawl")
@@ -103,6 +120,8 @@ app.add_typer(archive_app, name="archive")
 app.add_typer(schedule_app, name="schedule")
 app.add_typer(coverage_app, name="coverage")
 app.add_typer(storage_app, name="storage")
+app.add_typer(network_app, name="network")
+app.add_typer(progress_app, name="progress")
 
 
 @ai_app.command("test")
@@ -502,6 +521,108 @@ def sources_repair():
     typer.echo(json.dumps(repair_sources(), ensure_ascii=False, indent=2))
 
 
+@sources_app.command("candidates")
+def sources_candidates(
+    city: str | None = typer.Option(None, "--city"),
+    status: str | None = typer.Option(None, "--status"),
+):
+    """查看来源候选；候选不等于已核验或已启用来源。"""
+    frame = list_candidates(city=city, status=status)
+    typer.echo(frame.write_csv() if frame.height else "未找到符合条件的来源候选。")
+
+
+@sources_app.command("verify-candidates")
+def sources_verify_candidates(
+    city: str | None = typer.Option(None, "--city"),
+):
+    """按官方域名、城市与部门角色证据执行确定性核验，不自动启用。"""
+    typer.echo(
+        json.dumps(verify_candidates(city=city), ensure_ascii=False, indent=2)
+    )
+
+
+@sources_app.command("resolve-slot")
+def sources_resolve_slot(
+    slot_id: str = typer.Option(..., "--slot-id"),
+    candidate_id: str | None = typer.Option(None, "--candidate-id"),
+    note: str | None = typer.Option(None, "--note"),
+):
+    typer.echo(
+        json.dumps(
+            resolve_slot(slot_id, candidate_id=candidate_id, note=note),
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+
+
+@sources_app.command("export-candidates")
+def sources_export_candidates(
+    output: Annotated[Path, typer.Option("--output")],
+    city: str | None = typer.Option(None, "--city"),
+    status: str | None = typer.Option(None, "--status"),
+):
+    frame = list_candidates(city=city, status=status)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    if output.suffix.lower() == ".parquet":
+        frame.write_parquet(output, compression="zstd")
+    elif output.suffix.lower() == ".xlsx":
+        frame.write_excel(output, autofit=True)
+    else:
+        frame.write_csv(output)
+    typer.echo(str(output.resolve()))
+
+
+@sources_app.command("seed-record-candidates")
+def sources_seed_record_candidates(
+    dry_run: bool = typer.Option(False, "--dry-run"),
+):
+    """从真实种子URL及记录—地区关系生成未核验、未启用候选。"""
+    typer.echo(
+        json.dumps(
+            generate_candidates_from_seed_records(write=not dry_run),
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+
+
+@sources_app.command("export-candidate-audit")
+def sources_export_candidate_audit(
+    output: Annotated[Path | None, typer.Option("--output")] = None,
+    city: str | None = typer.Option(None, "--city"),
+    source_role: str | None = typer.Option(None, "--source-role"),
+    coverage_status: str | None = typer.Option(None, "--coverage-status"),
+):
+    """导出城市×槽位×候选审计；未提供路径时同时生成三种格式。"""
+    typer.echo(
+        json.dumps(
+            export_source_candidate_audit(
+                output,
+                city=city,
+                source_role=source_role,
+                coverage_status=coverage_status,
+            ),
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+
+
+@sources_app.command("audit-525")
+def sources_audit_525(
+    seed_registry: bool = typer.Option(
+        True, "--seed-registry/--no-seed-registry"
+    ),
+):
+    """构建105×5槽位并从既有注册表提取候选，绝不填充猜测URL。"""
+    build_requirement_slots()
+    if seed_registry:
+        seed_candidates_from_registry()
+    ExhaustiveCrawler().rebuild_progress()
+    typer.echo(json.dumps(audit_525(), ensure_ascii=False, indent=2))
+
+
 @sources_app.command("evaluate")
 def sources_evaluate(limit: int | None = typer.Option(None, "--limit")):
     """检测来源入口、解析能力与健康评分；网络访问只发生在显式运行时。"""
@@ -598,6 +719,18 @@ def audit_coverage(
     )
 
 
+@audit_app.command("exhaustive")
+def audit_exhaustive():
+    typer.echo(
+        json.dumps(
+            build_exhaustive_acceptance(),
+            ensure_ascii=False,
+            indent=2,
+            default=str,
+        )
+    )
+
+
 def _start_layered_update(layer: str) -> None:
     typer.echo(json.dumps(start_update(layer), ensure_ascii=False, indent=2))
 
@@ -665,6 +798,100 @@ def _date(value: str) -> date:
     if value == "overlap3":
         return date.today() - timedelta(days=3)
     return date.fromisoformat(value)
+
+
+@network_app.command("diagnose")
+def network_diagnose(
+    city: str | None = typer.Option(None, "--city"),
+    url: str | None = typer.Option(None, "--url"),
+):
+    """比较环境代理、完全直连与curl --noproxy；输出不含密钥。"""
+    settings = Settings.discover()
+    if url is None:
+        if city:
+            crawler = ExhaustiveCrawler(settings)
+            city_row = crawler.resolve_city(city)
+            from policydb.crawl.registry import load_registry
+
+            sources = [
+                source
+                for source in load_registry(settings)
+                if city_row["city_id"] in source.city_ids
+            ]
+            url = next(
+                (
+                    item
+                    for source in sources
+                    for item in [
+                        source.homepage_url,
+                        *source.list_page_urls,
+                        *source.seed_urls,
+                    ]
+                    if item
+                ),
+                None,
+            )
+        if url is None:
+            raise typer.BadParameter(
+                "请提供 --url，或提供注册表中已有来源的 --city。"
+            )
+    typer.echo(
+        json.dumps(
+            diagnose_network(url=url, city=city, settings=settings),
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+
+
+@progress_app.command("status")
+def progress_status(city: str | None = typer.Option(None, "--city")):
+    crawler = ExhaustiveCrawler()
+    crawler.rebuild_progress()
+    typer.echo(
+        json.dumps(
+            crawler.city_status(city),
+            ensure_ascii=False,
+            indent=2,
+            default=str,
+        )
+    )
+
+
+@progress_app.command("watch")
+def progress_watch(
+    city: str | None = typer.Option(None, "--city"),
+    interval: float = typer.Option(2.0, "--interval", min=0.5, max=60.0),
+):
+    """TTY中原位刷新；非TTY输出结构化快照，Ctrl+C安全退出。"""
+    import time
+
+    crawler = ExhaustiveCrawler()
+    try:
+        while True:
+            snapshot = crawler.city_status(city)
+            typer.echo(
+                json.dumps(
+                    {
+                        "at": datetime.now().isoformat(),
+                        "rows": snapshot["rows"],
+                        "data": snapshot["data"][:10],
+                    },
+                    ensure_ascii=False,
+                    default=str,
+                )
+            )
+            time.sleep(interval)
+    except KeyboardInterrupt:
+        typer.echo("已停止监视；抓取任务状态未被修改。")
+
+
+@progress_app.command("export")
+def progress_export(
+    format: str = typer.Option("csv", "--format"),
+    city: str | None = typer.Option(None, "--city"),
+):
+    typer.echo(str(export_progress(format=format, city=city)))
 
 
 @crawl_app.command("backfill")
@@ -814,6 +1041,161 @@ def crawl_historical(
         global_safety_limit=max_candidates_total,
         resume=resume,
     )
+
+
+def _exhaustive_progress(current: int, total: int, status: str, shard: dict) -> None:
+    percent = (current / total * 100) if total else 100.0
+    typer.echo(
+        f"[{current}/{total} {percent:5.1f}%] "
+        f"{shard['city_name']} {shard['source_role']} "
+        f"{shard['start_date']}—{shard['end_date']}: {status}"
+    )
+
+
+@crawl_app.command("exhaustive-city")
+def crawl_exhaustive_city(
+    city: str = typer.Option(..., "--city"),
+    from_: str = typer.Option("2018-01-01", "--from"),
+    to: str = typer.Option("today", "--to"),
+    source_roles: str = typer.Option("", "--source-roles"),
+    source_ids: str = typer.Option("", "--source-ids"),
+    max_pages_per_source: int = typer.Option(50, "--max-pages-per-source", min=1),
+    max_candidates_per_shard: int = typer.Option(
+        500, "--max-candidates-per-shard", min=1
+    ),
+    max_fetches_per_shard: int = typer.Option(
+        500, "--max-fetches-per-shard", min=1
+    ),
+    retry_errors: bool = typer.Option(
+        False, "--retry-errors/--no-retry-errors"
+    ),
+    resume: bool = typer.Option(True, "--resume/--no-resume"),
+    run_ai: bool = typer.Option(False, "--run-ai/--no-run-ai"),
+    archive: bool = typer.Option(True, "--archive/--no-archive"),
+    sequential: bool = typer.Option(True, "--sequential/--no-sequential"),
+):
+    """逐城市、逐来源、逐月扫描；状态和检查点均写入D盘Curated层。"""
+    if not sequential:
+        raise typer.BadParameter("当前正式写入仅支持 --sequential，避免并发覆盖。")
+    result = ExhaustiveCrawler().run_city(
+        city,
+        start_date=_date(from_),
+        end_date=_date(to),
+        source_roles=_split_option(source_roles),
+        source_ids=_split_option(source_ids),
+        max_pages_per_source=max_pages_per_source,
+        max_candidates_per_shard=max_candidates_per_shard,
+        max_fetches_per_shard=max_fetches_per_shard,
+        resume=resume,
+        retry_errors=retry_errors,
+        progress=_exhaustive_progress,
+    )
+    result["run_ai_requested"] = run_ai
+    result["archive_requested"] = archive
+    if run_ai:
+        result["ai_note"] = (
+            "本命令仅在抓取闭环后按新增run处理AI；未配置模型时保持ai_pending。"
+        )
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+
+
+@crawl_app.command("exhaustive-all")
+def crawl_exhaustive_all(
+    from_: str = typer.Option("2018-01-01", "--from"),
+    to: str = typer.Option("today", "--to"),
+    cities: str = typer.Option("", "--cities"),
+    source_roles: str = typer.Option("", "--source-roles"),
+    max_pages_per_source: int = typer.Option(50, "--max-pages-per-source", min=1),
+    max_candidates_per_shard: int = typer.Option(
+        500, "--max-candidates-per-shard", min=1
+    ),
+    max_fetches_per_shard: int = typer.Option(
+        500, "--max-fetches-per-shard", min=1
+    ),
+    resume: bool = typer.Option(True, "--resume/--no-resume"),
+    run_ai: bool = typer.Option(False, "--run-ai/--no-run-ai"),
+):
+    """105城市默认顺序执行；可用--cities先做小规模验收。"""
+    crawler = ExhaustiveCrawler()
+    city_frame = load_cities_105(crawler.settings)
+    requested = _split_option(cities)
+    names = (
+        requested
+        if requested
+        else city_frame["city_name"].to_list()
+    )
+    results = []
+    for index, city in enumerate(names, 1):
+        typer.echo(f"城市 {index}/{len(names)}：{city}")
+        results.append(
+            crawler.run_city(
+                city,
+                start_date=_date(from_),
+                end_date=_date(to),
+                source_roles=_split_option(source_roles),
+                max_pages_per_source=max_pages_per_source,
+                max_candidates_per_shard=max_candidates_per_shard,
+                max_fetches_per_shard=max_fetches_per_shard,
+                resume=resume,
+                progress=_exhaustive_progress,
+            )
+        )
+    typer.echo(
+        json.dumps(
+            {
+                "cities": len(results),
+                "run_ai_requested": run_ai,
+                "results": results,
+            },
+            ensure_ascii=False,
+            indent=2,
+            default=str,
+        )
+    )
+
+
+@crawl_app.command("exhaustive-status")
+def crawl_exhaustive_status(
+    city: str | None = typer.Option(None, "--city"),
+):
+    crawler = ExhaustiveCrawler()
+    crawler.rebuild_progress()
+    typer.echo(
+        json.dumps(crawler.city_status(city), ensure_ascii=False, indent=2, default=str)
+    )
+
+
+@crawl_app.command("exhaustive-resume")
+def crawl_exhaustive_resume(
+    city: str = typer.Option(..., "--city"),
+    from_: str = typer.Option("2018-01-01", "--from"),
+    to: str = typer.Option("today", "--to"),
+):
+    result = ExhaustiveCrawler().run_city(
+        city,
+        start_date=_date(from_),
+        end_date=_date(to),
+        resume=True,
+        progress=_exhaustive_progress,
+    )
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+
+
+@crawl_app.command("exhaustive-retry")
+def crawl_exhaustive_retry(
+    city: str = typer.Option(..., "--city"),
+    from_: str = typer.Option("2018-01-01", "--from"),
+    to: str = typer.Option("today", "--to"),
+):
+    result = ExhaustiveCrawler().run_city(
+        city,
+        start_date=_date(from_),
+        end_date=_date(to),
+        resume=True,
+        retry_errors=True,
+        progress=_exhaustive_progress,
+    )
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2, default=str))
 
 
 @jobs_app.command("run")

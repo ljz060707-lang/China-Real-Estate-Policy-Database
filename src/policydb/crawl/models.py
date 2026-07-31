@@ -145,6 +145,11 @@ class FetchResult(BaseModel):
     etag: str | None = None
     last_modified: str | None = None
     not_modified: bool = False
+    redirect_chain: list[dict] = Field(default_factory=list)
+    network_route: str = "unknown"
+    protocol: str | None = None
+    resolved_addresses: list[str] = Field(default_factory=list)
+    fallback_used: str | None = None
 
 
 class DiscoveryCandidate(BaseModel):

@@ -128,6 +128,23 @@ def build_database(
             con.execute(
                 f"CREATE OR REPLACE VIEW {name} AS SELECT * FROM read_parquet('{parquet_sql}')"
             )
+        exhaustive_views = {
+            "source_requirement_slots": "v_source_requirement_slots",
+            "source_candidates": "v_source_candidates",
+            "source_candidate_evidence": "v_source_candidate_evidence",
+            "source_candidate_generation_runs": "v_source_candidate_generation_runs",
+            "crawl_shards": "v_crawl_shards",
+            "crawl_shard_evidence": "v_crawl_shard_evidence",
+            "city_source_year_progress": "v_city_source_year_progress",
+            "city_year_progress": "v_city_year_progress",
+            "source_slot_progress": "v_source_slot_progress",
+            "pipeline_progress_events": "v_pipeline_progress_events",
+        }
+        for source_name, view_name in exhaustive_views.items():
+            if (settings.curated / f"{source_name}.parquet").exists():
+                con.execute(
+                    f"CREATE OR REPLACE VIEW {view_name} AS SELECT * FROM {source_name}"
+                )
         staging_excel = settings.root / "data" / "staging" / "excel"
         has_staging_excel = any(staging_excel.glob("*.parquet"))
         if has_staging_excel:

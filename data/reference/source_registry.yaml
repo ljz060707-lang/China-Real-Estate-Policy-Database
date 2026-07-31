@@ -1,5 +1,5 @@
 version: 2
-generated_at: '2026-07-23T07:30:27.025464+00:00'
+generated_at: '2026-07-30T08:48:00.837064+00:00'
 source_count: 42
 sources:
 - source_id: SRC_404201CEEE840150
@@ -29,10 +29,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
-  recommended_enabled: false
-  last_health_at: '2026-07-23T06:55:01.500200+00:00'
-  last_error: ConnectError
+  source_health_score: 100.0
+  recommended_enabled: true
+  last_health_at: '2026-07-30T08:46:38.545303+00:00'
   city_ids:
   - CITY_110000
   province_codes:
@@ -47,6 +46,11 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: healthy
+  robots_status: allowed
+  tls_status: ok
+  redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
   agency_name: 北京市人民政府
@@ -80,9 +84,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
+  source_health_score: 45.0
   recommended_enabled: false
-  last_health_at: '2026-07-23T06:55:13.991507+00:00'
+  last_health_at: '2026-07-30T08:46:41.839072+00:00'
   last_error: ConnectError
   city_ids:
   - CITY_510100
@@ -97,6 +101,12 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: unhealthy
+  health_reason: ConnectError
+  robots_status: allowed
+  tls_status: unknown
+  redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
   agency_name: 成都住房公积金管理中心
@@ -130,9 +140,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
+  source_health_score: 45.0
   recommended_enabled: false
-  last_health_at: '2026-07-23T06:55:26.792652+00:00'
+  last_health_at: '2026-07-30T08:46:45.173631+00:00'
   last_error: ConnectError
   city_ids:
   - CITY_510100
@@ -147,6 +157,12 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: unhealthy
+  health_reason: ConnectError
+  robots_status: allowed
+  tls_status: unknown
+  redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
   agency_name: 成都市住房和城乡建设局
@@ -178,10 +194,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
+  source_health_score: 85.0
   recommended_enabled: false
-  last_health_at: '2026-07-23T06:55:40.521158+00:00'
-  last_error: ConnectError
+  last_health_at: '2026-07-30T08:46:45.544513+00:00'
   city_ids:
   - CITY_320100
   province_codes:
@@ -195,6 +210,11 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: review
+  robots_status: allowed
+  tls_status: ok
+  redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
   agency_name: 南京市住房保障和房产局
@@ -226,10 +246,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
-  recommended_enabled: false
-  last_health_at: '2026-07-23T06:55:56.332188+00:00'
-  last_error: ConnectError
+  source_health_score: 100.0
+  recommended_enabled: true
+  last_health_at: '2026-07-30T08:46:45.866411+00:00'
   city_ids:
   - CITY_210100
   province_codes:
@@ -243,6 +262,11 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: healthy
+  robots_status: allowed
+  tls_status: ok
+  redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
   agency_name: 沈阳市房产局
@@ -277,10 +301,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
+  source_health_score: 85.0
   recommended_enabled: false
-  last_health_at: '2026-07-23T06:56:11.745225+00:00'
-  last_error: ConnectError
+  last_health_at: '2026-07-30T08:46:46.473464+00:00'
   city_ids:
   - CITY_330100
   province_codes:
@@ -294,6 +317,11 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: review
+  robots_status: allowed
+  tls_status: ok
+  redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
   agency_name: 杭州市住房保障和房产管理局
@@ -327,10 +355,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
-  recommended_enabled: false
-  last_health_at: '2026-07-23T06:56:24.804408+00:00'
-  last_error: ConnectError
+  source_health_score: 100.0
+  recommended_enabled: true
+  last_health_at: '2026-07-30T08:46:47.120295+00:00'
   city_ids:
   - CITY_310000
   province_codes:
@@ -344,6 +371,11 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: healthy
+  robots_status: allowed
+  tls_status: ok
+  redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
   agency_name: 上海市房屋管理局
@@ -379,10 +411,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.5
-  source_health_score: 25.0
+  source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-23T06:56:37.607292+00:00'
-  last_error: Http5xx
+  last_health_at: '2026-07-30T08:46:50.169652+00:00'
+  last_error: ConnectError
   city_ids: []
   province_codes: []
   scope_type: unknown
@@ -393,6 +425,12 @@ sources:
   is_valid: true
   replacement_source_id: SRC_BBB36EE51CA46417
   parser_version: '1'
+  official_domain_verified: false
+  health_status: unhealthy
+  health_reason: ConnectError
+  robots_status: allowed
+  tls_status: unknown
+  redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: unknown
   agency_name: fgj.wuhan.gov.cn
@@ -417,10 +455,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
-  recommended_enabled: false
-  last_health_at: '2026-07-23T06:56:50.611577+00:00'
-  last_error: ConnectError
+  source_health_score: 100.0
+  recommended_enabled: true
+  last_health_at: '2026-07-30T08:46:50.846838+00:00'
   city_ids:
   - CITY_320100
   province_codes:
@@ -434,6 +471,11 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: healthy
+  robots_status: allowed
+  tls_status: ok
+  redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
   agency_name: 南京市规划和自然资源局
@@ -464,10 +506,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
-  recommended_enabled: false
-  last_health_at: '2026-07-23T06:57:04.741009+00:00'
-  last_error: ConnectError
+  source_health_score: 100.0
+  recommended_enabled: true
+  last_health_at: '2026-07-30T08:46:51.353344+00:00'
   city_ids:
   - CITY_110000
   province_codes:
@@ -481,6 +522,11 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: healthy
+  robots_status: allowed
+  tls_status: ok
+  redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
   agency_name: 北京住房公积金管理中心
@@ -510,10 +556,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
-  recommended_enabled: false
-  last_health_at: '2026-07-23T06:57:18.197090+00:00'
-  last_error: ConnectError
+  source_health_score: 100.0
+  recommended_enabled: true
+  last_health_at: '2026-07-30T08:46:51.965204+00:00'
   city_ids:
   - CITY_330100
   province_codes:
@@ -527,6 +572,11 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: healthy
+  robots_status: allowed
+  tls_status: ok
+  redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
   agency_name: 杭州住房公积金管理中心
@@ -561,10 +611,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
-  recommended_enabled: false
-  last_health_at: '2026-07-23T06:57:30.739717+00:00'
-  last_error: ConnectError
+  source_health_score: 100.0
+  recommended_enabled: true
+  last_health_at: '2026-07-30T08:46:58.486169+00:00'
   city_ids:
   - CITY_320100
   province_codes:
@@ -578,6 +627,11 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: healthy
+  robots_status: allowed
+  tls_status: ok
+  redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
   agency_name: 南京住房公积金管理中心
@@ -604,10 +658,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
-  recommended_enabled: false
-  last_health_at: '2026-07-23T06:57:44.568874+00:00'
-  last_error: ConnectError
+  source_health_score: 100.0
+  recommended_enabled: true
+  last_health_at: '2026-07-30T08:46:58.727772+00:00'
   city_ids:
   - CITY_420100
   province_codes:
@@ -621,6 +674,11 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: healthy
+  robots_status: allowed
+  tls_status: ok
+  redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
   agency_name: 武汉住房公积金管理中心
@@ -655,9 +713,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
+  source_health_score: 45.0
   recommended_enabled: false
-  last_health_at: '2026-07-23T06:57:57.155491+00:00'
+  last_health_at: '2026-07-30T08:47:01.776097+00:00'
   last_error: ConnectError
   city_ids:
   - CITY_510100
@@ -672,6 +730,12 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: unhealthy
+  health_reason: ConnectError
+  robots_status: allowed
+  tls_status: unknown
+  redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
   agency_name: 成都市政府信息公开平台
@@ -707,10 +771,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
+  source_health_score: 45.0
   recommended_enabled: false
-  last_health_at: '2026-07-23T06:58:10.727286+00:00'
-  last_error: ConnectError
+  last_health_at: '2026-07-30T08:47:05.328999+00:00'
+  last_error: Http404
   city_ids:
   - CITY_230100
   province_codes:
@@ -724,6 +788,12 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: unhealthy
+  health_reason: Http404
+  robots_status: allowed
+  tls_status: unknown
+  redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
   agency_name: 哈尔滨市人民政府
@@ -759,10 +829,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
-  recommended_enabled: false
-  last_health_at: '2026-07-23T06:58:24.442066+00:00'
-  last_error: ConnectError
+  source_health_score: 100.0
+  recommended_enabled: true
+  last_health_at: '2026-07-30T08:47:05.619628+00:00'
   city_ids:
   - CITY_320100
   province_codes:
@@ -777,6 +846,11 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: healthy
+  robots_status: allowed
+  tls_status: ok
+  redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
   agency_name: 南京市人民政府
@@ -804,10 +878,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
-  recommended_enabled: false
-  last_health_at: '2026-07-23T06:58:38.997944+00:00'
-  last_error: ConnectError
+  source_health_score: 100.0
+  recommended_enabled: true
+  last_health_at: '2026-07-30T08:47:07.559166+00:00'
   city_ids:
   - CITY_450100
   province_codes:
@@ -822,6 +895,11 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: healthy
+  robots_status: allowed
+  tls_status: ok
+  redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
   agency_name: 南宁市人民政府
@@ -848,10 +926,10 @@ sources:
   crawl_enabled: true
   priority: 2
   rate_limit: 0.5
-  source_health_score: 0.0
+  source_health_score: 15.0
   recommended_enabled: false
-  last_health_at: '2026-07-23T07:00:42.081632+00:00'
-  last_error: ReadTimeout
+  last_health_at: '2026-07-30T08:47:10.901819+00:00'
+  last_error: Http404
   city_ids:
   - CITY_450100
   province_codes:
@@ -864,6 +942,12 @@ sources:
   is_valid: true
   replacement_source_id: SRC_764DB35C50928F5D
   parser_version: '1'
+  official_domain_verified: false
+  health_status: unhealthy
+  health_reason: Http404
+  robots_status: allowed
+  tls_status: unknown
+  redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: unknown
   agency_name: nngjj.org.cn
@@ -895,10 +979,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
-  recommended_enabled: false
-  last_health_at: '2026-07-23T07:00:55.337886+00:00'
-  last_error: ConnectError
+  source_health_score: 100.0
+  recommended_enabled: true
+  last_health_at: '2026-07-30T08:47:11.147127+00:00'
   city_ids:
   - CITY_310000
   province_codes:
@@ -913,6 +996,11 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: healthy
+  robots_status: allowed
+  tls_status: ok
+  redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
   agency_name: 上海市人民政府
@@ -943,10 +1031,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
+  source_health_score: 85.0
   recommended_enabled: false
-  last_health_at: '2026-07-23T07:01:08.090264+00:00'
-  last_error: ConnectError
+  last_health_at: '2026-07-30T08:47:11.479789+00:00'
   city_ids:
   - CITY_210100
   province_codes:
@@ -960,6 +1047,11 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: review
+  robots_status: allowed
+  tls_status: ok
+  redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
   agency_name: 沈阳市人民政府
@@ -987,10 +1079,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
+  source_health_score: 45.0
   recommended_enabled: false
-  last_health_at: '2026-07-23T07:01:51.166751+00:00'
-  last_error: ConnectTimeout
+  last_health_at: '2026-07-30T08:47:15.619600+00:00'
+  last_error: ConnectError
   city_ids:
   - CITY_310000
   province_codes:
@@ -1004,6 +1096,12 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: unhealthy
+  health_reason: ConnectError
+  robots_status: allowed
+  tls_status: unknown
+  redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
   agency_name: 上海市公积金管理中心
@@ -1033,10 +1131,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
-  recommended_enabled: false
-  last_health_at: '2026-07-23T07:02:03.853700+00:00'
-  last_error: ConnectError
+  source_health_score: 100.0
+  recommended_enabled: true
+  last_health_at: '2026-07-30T08:47:16.379045+00:00'
   city_ids:
   - CITY_130100
   province_codes:
@@ -1050,6 +1147,11 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: healthy
+  robots_status: allowed
+  tls_status: ok
+  redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
   agency_name: 石家庄市人民政府
@@ -1077,7 +1179,7 @@ sources:
   rate_limit: 0.2
   source_health_score: 100.0
   recommended_enabled: true
-  last_health_at: '2026-07-23T07:02:08.485138+00:00'
+  last_health_at: '2026-07-30T08:47:16.968454+00:00'
   city_ids:
   - CITY_130100
   province_codes:
@@ -1091,6 +1193,11 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: healthy
+  robots_status: allowed
+  tls_status: ok
+  redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
   agency_name: 石家庄住房公积金管理中心
@@ -1118,10 +1225,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
-  recommended_enabled: false
-  last_health_at: '2026-07-23T07:02:21.764100+00:00'
-  last_error: ConnectError
+  source_health_score: 100.0
+  recommended_enabled: true
+  last_health_at: '2026-07-30T08:47:17.303787+00:00'
   city_ids:
   - CITY_210100
   province_codes:
@@ -1135,6 +1241,11 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: healthy
+  robots_status: allowed
+  tls_status: ok
+  redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
   agency_name: 沈阳住房公积金管理中心
@@ -1165,10 +1276,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
-  recommended_enabled: false
-  last_health_at: '2026-07-23T07:02:34.514358+00:00'
-  last_error: ConnectError
+  source_health_score: 100.0
+  recommended_enabled: true
+  last_health_at: '2026-07-30T08:47:17.705805+00:00'
   city_ids:
   - CITY_420100
   province_codes:
@@ -1183,6 +1293,11 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: healthy
+  robots_status: allowed
+  tls_status: ok
+  redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
   agency_name: 武汉市人民政府
@@ -1208,10 +1323,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
+  source_health_score: 85.0
   recommended_enabled: false
-  last_health_at: '2026-07-23T07:02:47.575347+00:00'
-  last_error: ConnectError
+  last_health_at: '2026-07-30T08:47:17.967225+00:00'
   city_ids:
   - CITY_330100
   province_codes:
@@ -1226,6 +1340,11 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: review
+  robots_status: allowed
+  tls_status: ok
+  redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
   agency_name: 杭州市人民政府及政府公报
@@ -1254,10 +1373,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
-  recommended_enabled: false
-  last_health_at: '2026-07-23T07:03:00.867227+00:00'
-  last_error: ConnectError
+  source_health_score: 100.0
+  recommended_enabled: true
+  last_health_at: '2026-07-30T08:47:19.850728+00:00'
   city_ids:
   - CITY_450100
   province_codes:
@@ -1271,6 +1389,11 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: healthy
+  robots_status: allowed
+  tls_status: ok
+  redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
   agency_name: 南宁市住房和城乡建设局
@@ -1298,10 +1421,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
-  recommended_enabled: false
-  last_health_at: '2026-07-23T07:03:14.389877+00:00'
-  last_error: ConnectError
+  source_health_score: 100.0
+  recommended_enabled: true
+  last_health_at: '2026-07-30T08:47:20.578568+00:00'
   city_ids:
   - CITY_130100
   province_codes:
@@ -1315,6 +1437,11 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: healthy
+  robots_status: allowed
+  tls_status: ok
+  redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
   agency_name: 石家庄市住房和城乡建设局
@@ -1357,10 +1484,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
+  source_health_score: 45.0
   recommended_enabled: false
-  last_health_at: '2026-07-23T07:05:17.418704+00:00'
-  last_error: ConnectError
+  last_health_at: '2026-07-30T08:47:24.427043+00:00'
+  last_error: Http404
   city_ids:
   - CITY_110000
   province_codes:
@@ -1374,6 +1501,12 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: unhealthy
+  health_reason: Http404
+  robots_status: allowed
+  tls_status: unknown
+  redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
   agency_name: 北京市住房和城乡建设委员会
@@ -1398,10 +1531,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
-  recommended_enabled: false
-  last_health_at: '2026-07-23T07:07:20.447877+00:00'
-  last_error: ConnectError
+  source_health_score: 100.0
+  recommended_enabled: true
+  last_health_at: '2026-07-30T08:47:24.699756+00:00'
   city_ids:
   - CITY_110000
   province_codes:
@@ -1415,6 +1547,11 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: healthy
+  robots_status: allowed
+  tls_status: ok
+  redirect_chain: []
   consecutive_failures: 0
   created_at: '2026-07-21T18:00:00+08:00'
   valid_from: '2018-01-01'
@@ -1439,10 +1576,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
-  recommended_enabled: false
-  last_health_at: '2026-07-23T07:09:23.487751+00:00'
-  last_error: ConnectError
+  source_health_score: 100.0
+  recommended_enabled: true
+  last_health_at: '2026-07-30T08:47:24.965303+00:00'
   city_ids:
   - CITY_310000
   province_codes:
@@ -1456,6 +1592,11 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: healthy
+  robots_status: allowed
+  tls_status: ok
+  redirect_chain: []
   consecutive_failures: 0
   created_at: '2026-07-21T18:00:00+08:00'
   valid_from: '2018-01-01'
@@ -1483,10 +1624,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
+  source_health_score: 85.0
   recommended_enabled: false
-  last_health_at: '2026-07-23T07:11:26.535215+00:00'
-  last_error: ConnectError
+  last_health_at: '2026-07-30T08:47:25.565297+00:00'
   city_ids:
   - CITY_420100
   province_codes:
@@ -1500,6 +1640,11 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: review
+  robots_status: allowed
+  tls_status: ok
+  redirect_chain: []
   consecutive_failures: 0
   created_at: '2026-07-21T18:00:00+08:00'
   valid_from: '2018-01-01'
@@ -1524,10 +1669,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
+  source_health_score: 85.0
   recommended_enabled: false
-  last_health_at: '2026-07-23T07:13:29.554417+00:00'
-  last_error: ConnectError
+  last_health_at: '2026-07-30T08:47:25.770232+00:00'
   city_ids:
   - CITY_420100
   province_codes:
@@ -1541,6 +1685,11 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: review
+  robots_status: allowed
+  tls_status: ok
+  redirect_chain: []
   consecutive_failures: 0
   created_at: '2026-07-21T18:00:00+08:00'
   valid_from: '2018-01-01'
@@ -1565,9 +1714,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
+  source_health_score: 45.0
   recommended_enabled: false
-  last_health_at: '2026-07-23T07:15:32.597146+00:00'
+  last_health_at: '2026-07-30T08:47:29.660459+00:00'
   last_error: ConnectError
   city_ids:
   - CITY_510100
@@ -1582,6 +1731,12 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: unhealthy
+  health_reason: ConnectError
+  robots_status: allowed
+  tls_status: unknown
+  redirect_chain: []
   consecutive_failures: 0
   created_at: '2026-07-21T18:00:00+08:00'
   valid_from: '2018-01-01'
@@ -1606,10 +1761,9 @@ sources:
   crawl_enabled: true
   priority: 1
   rate_limit: 0.2
-  source_health_score: 35.0
+  source_health_score: 85.0
   recommended_enabled: false
-  last_health_at: '2026-07-23T07:17:05.614963+00:00'
-  last_error: ConnectError
+  last_health_at: '2026-07-30T08:47:29.854700+00:00'
   city_ids:
   - CITY_330100
   province_codes:
@@ -1623,6 +1777,11 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: review
+  robots_status: allowed
+  tls_status: ok
+  redirect_chain: []
   consecutive_failures: 0
   created_at: '2026-07-21T18:00:00+08:00'
   valid_from: '2018-01-01'
@@ -1648,10 +1807,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
-  recommended_enabled: false
-  last_health_at: '2026-07-23T07:19:08.656707+00:00'
-  last_error: ConnectError
+  source_health_score: 100.0
+  recommended_enabled: true
+  last_health_at: '2026-07-30T08:47:30.322730+00:00'
   city_ids:
   - CITY_210100
   province_codes:
@@ -1665,6 +1823,11 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: healthy
+  robots_status: allowed
+  tls_status: ok
+  redirect_chain: []
   consecutive_failures: 0
   created_at: '2026-07-21T18:00:00+08:00'
   valid_from: '2018-01-01'
@@ -1689,9 +1852,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
+  source_health_score: 45.0
   recommended_enabled: false
-  last_health_at: '2026-07-23T07:21:11.675134+00:00'
+  last_health_at: '2026-07-30T08:47:42.225891+00:00'
   last_error: ConnectError
   city_ids:
   - CITY_230100
@@ -1706,6 +1869,12 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: unhealthy
+  health_reason: ConnectError
+  robots_status: allowed
+  tls_status: unknown
+  redirect_chain: []
   consecutive_failures: 0
   created_at: '2026-07-21T18:00:00+08:00'
   valid_from: '2018-01-01'
@@ -1730,10 +1899,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
+  source_health_score: 45.0
   recommended_enabled: false
-  last_health_at: '2026-07-23T07:23:14.759796+00:00'
-  last_error: ReadTimeout
+  last_health_at: '2026-07-30T08:47:55.184728+00:00'
+  last_error: ConnectError
   city_ids:
   - CITY_230100
   province_codes:
@@ -1747,6 +1916,12 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: unhealthy
+  health_reason: ConnectError
+  robots_status: allowed
+  tls_status: unknown
+  redirect_chain: []
   consecutive_failures: 0
   created_at: '2026-07-21T18:00:00+08:00'
   valid_from: '2018-01-01'
@@ -1771,10 +1946,10 @@ sources:
   crawl_enabled: true
   priority: 1
   rate_limit: 0.2
-  source_health_score: 35.0
+  source_health_score: 45.0
   recommended_enabled: false
-  last_health_at: '2026-07-23T07:24:47.784003+00:00'
-  last_error: ConnectError
+  last_health_at: '2026-07-30T08:47:58.939231+00:00'
+  last_error: Http404
   city_ids:
   - CITY_230100
   province_codes:
@@ -1788,6 +1963,12 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: unhealthy
+  health_reason: Http404
+  robots_status: allowed
+  tls_status: unknown
+  redirect_chain: []
   consecutive_failures: 0
   created_at: '2026-07-21T18:00:00+08:00'
   valid_from: '2018-01-01'
@@ -1812,10 +1993,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
-  recommended_enabled: false
-  last_health_at: '2026-07-23T07:26:50.821059+00:00'
-  last_error: ConnectError
+  source_health_score: 100.0
+  recommended_enabled: true
+  last_health_at: '2026-07-30T08:47:59.619498+00:00'
   city_ids:
   - CITY_450100
   province_codes:
@@ -1829,6 +2009,11 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: healthy
+  robots_status: allowed
+  tls_status: ok
+  redirect_chain: []
   consecutive_failures: 0
   created_at: '2026-07-21T18:00:00+08:00'
   valid_from: '2018-01-01'
@@ -1853,10 +2038,9 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 35.0
-  recommended_enabled: false
-  last_health_at: '2026-07-23T07:28:53.854065+00:00'
-  last_error: ConnectError
+  source_health_score: 100.0
+  recommended_enabled: true
+  last_health_at: '2026-07-30T08:48:00.346587+00:00'
   city_ids:
   - CITY_450100
   province_codes:
@@ -1870,6 +2054,11 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: healthy
+  robots_status: allowed
+  tls_status: ok
+  redirect_chain: []
   consecutive_failures: 0
   created_at: '2026-07-21T18:00:00+08:00'
   valid_from: '2018-01-01'
@@ -1894,10 +2083,9 @@ sources:
   crawl_enabled: true
   priority: 1
   rate_limit: 0.2
-  source_health_score: 35.0
-  recommended_enabled: false
-  last_health_at: '2026-07-23T07:30:26.875974+00:00'
-  last_error: ConnectError
+  source_health_score: 100.0
+  recommended_enabled: true
+  last_health_at: '2026-07-30T08:48:00.679240+00:00'
   city_ids:
   - CITY_130100
   province_codes:
@@ -1911,6 +2099,11 @@ sources:
   is_valid: true
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
+  official_domain_verified: false
+  health_status: healthy
+  robots_status: allowed
+  tls_status: ok
+  redirect_chain: []
   consecutive_failures: 0
   created_at: '2026-07-21T18:00:00+08:00'
   valid_from: '2018-01-01'

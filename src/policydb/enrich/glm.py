@@ -137,7 +137,11 @@ class GLMEnricher:
         self.api_key: str | None = resolved_key if isinstance(resolved_key, str) else None
         self.model = model or self.settings.glm_model
         self.base_url = self.settings.glm_base_url
-        self.client = client or httpx.Client(timeout=self.settings.request_timeout)
+        self.client = client or httpx.Client(
+            timeout=self.settings.request_timeout,
+            trust_env=True,
+            verify=True,
+        )
         self.retries = retries
         self.cache_path = self.settings.curated / "llm_extractions.parquet"
         self.verification_cache_path = self.settings.curated / "llm_verifications.parquet"

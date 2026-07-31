@@ -8,6 +8,7 @@ import polars as pl
 import streamlit as st
 
 from app.crawl_center import render_crawl_section
+from app.exhaustive_progress import render_exhaustive_progress
 from app.theme import style_plotly_figure
 from app.ui import safe_pandas
 from policydb.coverage import build_city_source_month_coverage
@@ -32,7 +33,9 @@ def _start(layer: str, settings: Settings) -> None:
 
 def render_automation_center(root: str | Path) -> None:
     settings = Settings.discover(root)
-    tabs = st.tabs(["运行状态", "覆盖完整性", "来源管理", "任务与报告"])
+    tabs = st.tabs(
+        ["运行状态", "全量搜索进度", "覆盖完整性", "来源管理", "任务与报告"]
+    )
     with tabs[0]:
         status = schedule_status()
         states = JobManager(settings).list_states()
@@ -64,6 +67,8 @@ def render_automation_center(root: str | Path) -> None:
         with st.expander("高级：新建智能抓取任务"):
             render_crawl_section(settings.root, "运行状态")
     with tabs[1]:
+        render_exhaustive_progress(settings.root)
+    with tabs[2]:
         coverage = _coverage(settings)
         if coverage.is_empty():
             st.info("尚未生成覆盖矩阵。")
@@ -102,9 +107,9 @@ def render_automation_center(root: str | Path) -> None:
         st.markdown("#### 城市缺口")
         st.dataframe(safe_pandas(gaps), hide_index=True, width="stretch", height=320)
         st.download_button("下载覆盖矩阵 CSV", coverage.write_csv().encode("utf-8-sig"), "city_source_month_coverage.csv")
-    with tabs[2]:
-        render_crawl_section(settings.root, "来源管理")
     with tabs[3]:
+        render_crawl_section(settings.root, "来源管理")
+    with tabs[4]:
         history, reports = st.tabs(["运行历史", "抓取报告"])
         with history:
             render_crawl_section(settings.root, "运行历史")

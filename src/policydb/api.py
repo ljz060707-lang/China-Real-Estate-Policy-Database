@@ -165,6 +165,23 @@ class PolicyDB:
         ).to_dicts()
         return rows[0] if rows else None
 
+    def source_candidate_audit(
+        self,
+        *,
+        city: str | None = None,
+        source_role: str | None = None,
+        coverage_status: str | None = None,
+    ) -> pl.DataFrame:
+        """Read the auditable city-slot candidate layer without changing sources."""
+        from policydb.seed_source_candidates import source_candidate_audit_frame
+
+        return source_candidate_audit_frame(
+            self.settings,
+            city=city,
+            source_role=source_role,
+            coverage_status=coverage_status,
+        )
+
     def timeline(self, region=None, topic=None) -> pl.DataFrame:
         clauses, params = ["1=1"], []
         if region:

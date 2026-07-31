@@ -10,6 +10,7 @@ import httpx
 
 from policydb.crawl.dedup import content_sha256
 from policydb.crawl.models import FetchResult
+from policydb.network import GovernmentDirectClient
 
 
 class CrawlFetchError(RuntimeError):
@@ -45,12 +46,25 @@ def classify_fetch_error(error: Exception, url: str = "") -> CrawlFetchError:
     if isinstance(error, CrawlFetchError):
         return error
     if isinstance(error, httpx.ConnectTimeout):
-        return ConnectTimeout(message)
+        result = ConnectTimeout(message)
+        _copy_network_context(error, result)
+        return result
     if isinstance(error, httpx.ReadTimeout):
-        return ReadTimeout(message)
+        result = ReadTimeout(message)
+        _copy_network_context(error, result)
+        return result
     if isinstance(error, httpx.ConnectError):
         lowered = str(error).lower()
-        return DnsError(message) if "name" in lowered or "dns" in lowered else ConnectError(message)
+        if "ssl" in lowered or "tls" in lowered or "unexpected_eof" in lowered or "eof while reading" in lowered:
+            result = TlsError(message)
+        else:
+            result = (
+                DnsError(message)
+                if "name" in lowered or "dns" in lowered
+                else ConnectError(message)
+            )
+        _copy_network_context(error, result)
+        return result
     if isinstance(error, httpx.HTTPStatusError):
         status = error.response.status_code
         if status == 403:
@@ -62,6 +76,17 @@ def classify_fetch_error(error: Exception, url: str = "") -> CrawlFetchError:
         if status >= 500:
             return Http5xx(message)
     return ConnectError(message)
+
+
+def _copy_network_context(source: Exception, target: Exception) -> None:
+    for name in (
+        "redirect_chain",
+        "network_route",
+        "requested_protocol",
+        "failed_url",
+    ):
+        if hasattr(source, name):
+            setattr(target, name, getattr(source, name))
 
 
 class RespectfulFetcher:
@@ -78,12 +103,16 @@ class RespectfulFetcher:
         max_response_bytes: int = 50 * 1024 * 1024,
     ) -> None:
         self.user_agent = user_agent
-        self.client = client or httpx.Client(
-            headers={"User-Agent": user_agent},
-            timeout=httpx.Timeout(timeout, connect=connect_timeout),
-            follow_redirects=True,
-            max_redirects=10,
+        self.direct_client = (
+            None
+            if client is not None
+            else GovernmentDirectClient(
+                user_agent=user_agent,
+                timeout=timeout,
+                connect_timeout=connect_timeout,
+            )
         )
+        self.client = client or self.direct_client.client
         self.retries = retries
         self.rate_limit = rate_limit
         self.check_robots = check_robots
@@ -127,43 +156,118 @@ class RespectfulFetcher:
                     headers["If-None-Match"] = etag
                 if last_modified:
                     headers["If-Modified-Since"] = last_modified
-                response = self.client.get(url, headers=headers)
-                if response.status_code == 304:
+                direct_response = (
+                    self.direct_client.get(url, headers=headers)
+                    if self.direct_client is not None
+                    else None
+                )
+                response = (
+                    self.client.get(url, headers=headers)
+                    if direct_response is None
+                    else None
+                )
+                status_code = (
+                    direct_response.status_code
+                    if direct_response is not None
+                    else response.status_code
+                )
+                response_headers = (
+                    direct_response.headers
+                    if direct_response is not None
+                    else response.headers
+                )
+                response_content = (
+                    direct_response.content
+                    if direct_response is not None
+                    else response.content
+                )
+                response_url = (
+                    direct_response.final_url
+                    if direct_response is not None
+                    else str(response.url)
+                )
+                if status_code == 304:
                     return FetchResult(
                         requested_url=url,
-                        final_url=str(response.url),
+                        final_url=response_url,
                         status_code=304,
-                        content_type=response.headers.get("content-type"),
+                        content_type=response_headers.get("content-type"),
                         body=b"",
                         response_sha256="",
                         retrieved_at=datetime.now(UTC),
-                        etag=response.headers.get("etag") or etag,
-                        last_modified=response.headers.get("last-modified") or last_modified,
+                        etag=response_headers.get("etag") or etag,
+                        last_modified=response_headers.get("last-modified") or last_modified,
                         not_modified=True,
+                        redirect_chain=(
+                            direct_response.redirect_chain
+                            if direct_response is not None
+                            else []
+                        ),
+                        network_route=(
+                            direct_response.network_route
+                            if direct_response is not None
+                            else "injected_client"
+                        ),
+                        protocol=urlsplit(response_url).scheme,
                     )
-                if response.status_code == 429:
+                if status_code == 429:
                     error = Http429(f"HTTP 429 for {url}")
                     if attempt + 1 < self.retries:
-                        time.sleep(self._retry_delay(response, attempt))
+                        if response is not None:
+                            time.sleep(self._retry_delay(response, attempt))
+                        else:
+                            time.sleep(min(2**attempt, 8))
                         continue
-                response.raise_for_status()
-                if len(response.content) > self.max_response_bytes:
+                if response is not None:
+                    response.raise_for_status()
+                elif status_code >= 400:
+                    raise httpx.HTTPStatusError(
+                        f"HTTP {status_code}",
+                        request=httpx.Request("GET", url),
+                        response=httpx.Response(status_code, request=httpx.Request("GET", url)),
+                    )
+                if len(response_content) > self.max_response_bytes:
                     raise EmptyContent(f"response exceeds {self.max_response_bytes} bytes")
-                content_type = response.headers.get("content-type", "").lower()
-                sample = response.text[:5000].lower() if "text" in content_type else ""
+                content_type = response_headers.get("content-type", "").lower()
+                sample = (
+                    response_content[:5000].decode("utf-8", errors="ignore").lower()
+                    if "text" in content_type
+                    else ""
+                )
                 if any(marker in sample for marker in ("请输入验证码", "captcha", "访问验证")):
                     raise CaptchaDetected(f"captcha detected for {url}")
                 self._last_request[origin] = time.monotonic()
                 return FetchResult(
                     requested_url=url,
-                    final_url=str(response.url),
-                    status_code=response.status_code,
-                    content_type=response.headers.get("content-type"),
-                    body=response.content,
-                    response_sha256=content_sha256(response.content),
+                    final_url=response_url,
+                    status_code=status_code,
+                    content_type=response_headers.get("content-type"),
+                    body=response_content,
+                    response_sha256=content_sha256(response_content),
                     retrieved_at=datetime.now(UTC),
-                    etag=response.headers.get("etag"),
-                    last_modified=response.headers.get("last-modified"),
+                    etag=response_headers.get("etag"),
+                    last_modified=response_headers.get("last-modified"),
+                    redirect_chain=(
+                        direct_response.redirect_chain
+                        if direct_response is not None
+                        else []
+                    ),
+                    network_route=(
+                        direct_response.network_route
+                        if direct_response is not None
+                        else "injected_client"
+                    ),
+                    protocol=urlsplit(response_url).scheme,
+                    resolved_addresses=(
+                        direct_response.resolved_addresses
+                        if direct_response is not None
+                        else []
+                    ),
+                    fallback_used=(
+                        direct_response.fallback_used
+                        if direct_response is not None
+                        else None
+                    ),
                 )
             except (httpx.HTTPError, CrawlFetchError) as exc:
                 error = classify_fetch_error(exc, url)
