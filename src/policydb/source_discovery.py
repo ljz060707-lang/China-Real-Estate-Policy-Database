@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import hashlib
+import re
 from datetime import UTC, datetime
 from urllib.parse import urljoin, urlsplit
 
@@ -36,10 +37,27 @@ ROLE_TERMS = {
     "urban_renewal_or_expropriation_department": "城市更新 征收",
 }
 
+_CONTENT_ENTRY_PATTERN = re.compile(
+    r"(?:\.(?:s?html?|jhtml|aspx?)(?:$|[?#])|"
+    r"/(?:art|article|content|detail|info|news|notice)/|"
+    r"/t?20\d{2}(?:[-_/]?\d{2})|"
+    r"[?&](?:id|articleid|infoid|docid|contentid)=)",
+    re.IGNORECASE,
+)
+
 
 def _official_domain(url: str) -> bool:
     host = (urlsplit(url).hostname or "").lower().removeprefix("www.")
     return host == "gov.cn" or host.endswith(".gov.cn")
+
+
+def is_reusable_source_entry(url: str) -> bool:
+    """Return False for document-detail URLs that cannot serve as crawl entries."""
+    parsed = urlsplit(url)
+    target = f"{parsed.path}?{parsed.query}" if parsed.query else parsed.path
+    return bool(parsed.scheme and parsed.netloc) and not bool(
+        _CONTENT_ENTRY_PATTERN.search(target)
+    )
 
 
 def _source_id(city_id: str, role: str, domain: str) -> str:
@@ -252,13 +270,37 @@ def discover_city_portal_candidates(
                 result = fetcher.fetch(str(entry))
             except Exception:
                 continue
+            if (
+                "municipal_government" in roles
+                and _official_domain(result.final_url)
+                and is_reusable_source_entry(result.final_url)
+            ):
+                candidates.append(
+                    {
+                        "city_id": city_row["city_id"],
+                        "city_name": city_row["city_name"],
+                        "province_name": city_row["province_name"],
+                        "source_role": "municipal_government",
+                        "url": result.final_url,
+                        "domain": (urlsplit(result.final_url).hostname or "").lower().removeprefix("www."),
+                        "title": portal.source_name,
+                        "official_domain_verified": True,
+                        "candidate_status": "official_candidate",
+                        "discovery_provider": "OfficialPortalNavigation",
+                        "query": f"registered portal entry {entry}",
+                        "candidate_kind": "official_entry_candidate",
+                        "entry_eligible": True,
+                    }
+                )
             soup = BeautifulSoup(result.body, "html.parser")
             for anchor in soup.select("a[href]"):
                 text = " ".join(anchor.get_text(" ", strip=True).split())
                 target = urljoin(result.final_url, anchor.get("href", ""))
-                if not _official_domain(target):
+                if not _official_domain(target) or not is_reusable_source_entry(target):
                     continue
                 for role in roles:
+                    if role == "municipal_government":
+                        continue
                     term = ROLE_TERMS.get(role, role)
                     alternatives = {
                         term,
@@ -283,6 +325,8 @@ def discover_city_portal_candidates(
                             "candidate_status": "official_candidate",
                             "discovery_provider": "OfficialPortalNavigation",
                             "query": f"anchor from {result.final_url}",
+                            "candidate_kind": "department_entry_candidate",
+                            "entry_eligible": True,
                         }
                     )
                     break

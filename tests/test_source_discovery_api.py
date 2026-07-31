@@ -1,6 +1,14 @@
 from policydb.config.providers import SearchResult
 from policydb.settings import Settings
-from policydb.source_discovery import discover_city_sources
+from policydb.source_discovery import discover_city_sources, is_reusable_source_entry
+
+
+def test_content_pages_are_never_reusable_source_entries():
+    assert not is_reusable_source_entry(
+        "https://www.beijing.gov.cn/zhengce/zhengcefagui/202511/t20251128_4310605.html"
+    )
+    assert not is_reusable_source_entry("https://example.gov.cn/article?id=42")
+    assert is_reusable_source_entry("https://www.beijing.gov.cn/zhengce/zhengcefagui/")
 
 
 class FakeProvider:

@@ -12,7 +12,12 @@ from policydb.crawl.dedup import canonicalize_url
 from policydb.crawl.registry import load_registry
 from policydb.scope import load_cities_105
 from policydb.settings import Settings
-from policydb.source_discovery import REQUIRED_ROLES, ROLE_TERMS, load_source_requirements
+from policydb.source_discovery import (
+    REQUIRED_ROLES,
+    ROLE_TERMS,
+    is_reusable_source_entry,
+    load_source_requirements,
+)
 from policydb.transform.normalization import stable_id
 
 SLOT_STATUSES = {"unresolved", "candidate", "verified", "enabled", "rejected"}
@@ -462,12 +467,18 @@ def verify_candidates(
             "ok",
             "direct_ok",
         }
-        verified = official and city_ok and role_ok and health_ok
+        entry_ok = bool(row.get("entry_eligible", False)) or (
+            str(row.get("candidate_kind") or "")
+            in {"department_entry_candidate", "official_entry_candidate", "municipal_portal_substitute_candidate"}
+            and is_reusable_source_entry(str(row["canonical_url"]))
+        )
+        verified = official and city_ok and role_ok and health_ok and entry_ok
         row.update(
             {
                 "official_confidence": 1.0 if official else 0.0,
                 "city_confidence": 1.0 if city_ok else 0.0,
                 "role_confidence": 1.0 if role_ok else 0.0,
+                "entry_eligible": entry_ok,
                 "overall_confidence": 1.0 if verified else min(
                     0.89,
                     (
