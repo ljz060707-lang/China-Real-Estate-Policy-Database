@@ -37,6 +37,7 @@ $PolicyDbExe = Join-Path $ProjectRoot ".venv\Scripts\policydb.exe"
 $PythonExe = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $CityFile = Join-Path $ProjectRoot "data\reference\cities_105.csv"
 $ShardPath = Join-Path $DataRoot "curated\crawl_shards.parquet"
+$SlotPath = Join-Path $DataRoot "curated\source_requirement_slots.parquet"
 
 foreach ($RequiredPath in @($PolicyDbExe, $PythonExe, $CityFile)) {
     if (-not (Test-Path $RequiredPath)) {
@@ -68,6 +69,30 @@ import sys
 from pathlib import Path
 
 import polars as pl
+
+if len(sys.argv) == 4 and sys.argv[1] == "enabled_roles":
+    path = Path(sys.argv[2])
+    city_id = sys.argv[3]
+    if not path.exists():
+        print("[]")
+        raise SystemExit(0)
+    slots = pl.read_parquet(path)
+    if not {"city_id", "source_role", "enabled_source_count"}.issubset(slots.columns):
+        print("[]")
+        raise SystemExit(0)
+    roles = (
+        slots.filter(
+            (pl.col("city_id") == city_id)
+            & (pl.col("enabled_source_count").fill_null(0) > 0)
+        )
+        .select("source_role")
+        .unique()
+        .sort("source_role")
+        .get_column("source_role")
+        .to_list()
+    )
+    print(json.dumps(roles, ensure_ascii=False))
+    raise SystemExit(0)
 
 path = Path(sys.argv[1])
 city_id = sys.argv[2]
@@ -428,6 +453,18 @@ function Get-CityYearShardStatus {
     return $Raw | ConvertFrom-Json
 }
 
+function Get-CityEnabledRoles {
+    param([string]$CityId)
+
+    $Raw = & $PythonExe $StatusHelper "enabled_roles" $SlotPath $CityId
+    if ($LASTEXITCODE -ne 0) {
+        throw "无法读取 $CityId 的启用来源角色。"
+    }
+
+    $Roles = @($Raw | ConvertFrom-Json)
+    return @($Roles | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+}
+
 function Get-YearDateRange {
     param([int]$Year)
 
@@ -452,6 +489,7 @@ function Invoke-CityYearPass {
         [object]$City,
         [int]$Year,
         [string]$StageSuffix,
+        [string[]]$SourceRoles,
         [switch]$RetryErrors
     )
 
@@ -470,6 +508,10 @@ function Invoke-CityYearPass {
         "--archive",
         "--sequential"
     )
+
+    if ($SourceRoles.Count -gt 0) {
+        $Arguments += "--source-roles", ($SourceRoles -join ",")
+    }
 
     if ($RetryErrors) {
         $Arguments += "--retry-errors"
@@ -529,6 +571,21 @@ function Run-CityYear {
     $CityId = [string]$City.city_id
 
     Write-RunLog -Message "[$CityIndex/$TotalCities] 开始：$CityName，年份=$Year" -Level "INFO"
+    $EnabledRoles = @(Get-CityEnabledRoles -CityId $CityId)
+    if ($EnabledRoles.Count -eq 0) {
+        $Message = "未发现启用来源；跳过调度，不创建空分片。"
+        Write-RunLog -Message "$CityName $Year：$Message" -Level "WARN"
+        Add-ControllerState `
+            -CityIndex $CityIndex `
+            -City $City `
+            -Year $Year `
+            -Phase "source_gate" `
+            -Status "source_gate_skipped" `
+            -Message $Message
+        return
+    }
+
+    Write-RunLog -Message "$CityName $Year：仅调度已启用角色 $($EnabledRoles -join ', ')。" -Level "INFO"
     Add-ControllerState `
         -CityIndex $CityIndex `
         -City $City `
@@ -554,7 +611,8 @@ function Run-CityYear {
         $Initial = Invoke-CityYearPass `
             -City $City `
             -Year $Year `
-            -StageSuffix "initial"
+            -StageSuffix "initial" `
+            -SourceRoles $EnabledRoles
 
         if ($Initial.ExitCode -ne 0) {
             Add-ControllerState `
@@ -586,7 +644,8 @@ function Run-CityYear {
         $PassResult = Invoke-CityYearPass `
             -City $City `
             -Year $Year `
-            -StageSuffix ("splitpass_{0:D2}" -f $Pass)
+            -StageSuffix ("splitpass_{0:D2}" -f $Pass) `
+            -SourceRoles $EnabledRoles
 
         if ($PassResult.ExitCode -ne 0) {
             Write-RunLog -Message "$CityName $Year 第$Pass次分片续扫失败。" -Level "WARN"
@@ -615,6 +674,7 @@ function Run-CityYear {
             -City $City `
             -Year $Year `
             -StageSuffix ("retry_{0:D2}" -f $Retry) `
+            -SourceRoles $EnabledRoles `
             -RetryErrors
 
         if ($RetryResult.ExitCode -ne 0) {
