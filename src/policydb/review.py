@@ -411,8 +411,14 @@ def review_stats(settings: Settings | None = None) -> dict:
         type_rows = con.execute(
             "SELECT review_type,count(*) FROM manual_review_tasks GROUP BY review_type"
         ).fetchall()
+        columns = {row[0] for row in con.execute("DESCRIBE manual_review_tasks").fetchall()}
+        automation_expression = (
+            "COALESCE(automation_status,'pending_diagnosis')"
+            if "automation_status" in columns
+            else "'pending_diagnosis'"
+        )
         automation_rows = con.execute(
-            "SELECT COALESCE(automation_status,'pending_diagnosis'),count(*) "
+            f"SELECT {automation_expression},count(*) "
             "FROM manual_review_tasks GROUP BY 1"
         ).fetchall()
     statuses = {status: count for status, count in status_rows}
