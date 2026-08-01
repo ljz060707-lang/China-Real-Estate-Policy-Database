@@ -461,7 +461,7 @@ def list_review_tasks(
             clauses.append("COALESCE(t.automation_status,'pending_diagnosis')=?")
             params.append(automation_status)
         elif automation_status != "pending_diagnosis":
-            return 0
+            return pl.DataFrame()
     sql = f"""SELECT t.*,r.title,r.record_date,r.summary,r.primary_source_url
               FROM manual_review_tasks t LEFT JOIN records r ON t.record_id=r.record_id
               WHERE {' AND '.join(clauses)}
