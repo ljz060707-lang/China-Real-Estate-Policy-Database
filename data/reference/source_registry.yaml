@@ -1,6 +1,6 @@
 version: 2
-generated_at: '2026-07-30T08:48:00.837064+00:00'
-source_count: 42
+generated_at: '2026-07-31T17:11:52.578213+00:00'
+source_count: 57
 sources:
 - source_id: SRC_404201CEEE840150
   source_name: 北京市人民政府
@@ -29,9 +29,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 100.0
-  recommended_enabled: true
-  last_health_at: '2026-07-30T08:46:38.545303+00:00'
+  source_health_score: 45.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T15:54:27.119395Z'
+  last_error: TlsError
   city_ids:
   - CITY_110000
   province_codes:
@@ -47,9 +48,10 @@ sources:
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
   official_domain_verified: false
-  health_status: healthy
+  health_status: unhealthy
+  health_reason: TlsError
   robots_status: allowed
-  tls_status: ok
+  tls_status: unknown
   redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
@@ -86,14 +88,14 @@ sources:
   rate_limit: 0.2
   source_health_score: 45.0
   recommended_enabled: false
-  last_health_at: '2026-07-30T08:46:41.839072+00:00'
-  last_error: ConnectError
+  last_health_at: '2026-07-31T15:54:52.729348Z'
+  last_error: TlsError
   city_ids:
   - CITY_510100
   province_codes:
   - '51'
   scope_type: municipal
-  agency_type: housing_department
+  agency_type: provident_fund_center
   required_level: required
   coverage_start_date: '2018-01-01'
   expected_frequency: daily
@@ -103,7 +105,7 @@ sources:
   parser_version: '1'
   official_domain_verified: false
   health_status: unhealthy
-  health_reason: ConnectError
+  health_reason: TlsError
   robots_status: allowed
   tls_status: unknown
   redirect_chain: []
@@ -112,12 +114,14 @@ sources:
   agency_name: 成都住房公积金管理中心
   notes: 中心官方域名及多类政策分类已确认；列表模板须来源体检。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-22T10:42:03.945586+00:00'
+  updated_at: '2026-07-31T17:11:52.577212+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
   verification_evidence_urls:
   - https://cdzfgjj.chengdu.gov.cn/
+  original_agency_type: housing_department
+  role_assignment_evidence: organization name contains 公积金
 - source_id: SRC_0F5ECE338B20BAFC
   source_name: 成都市住房和城乡建设局
   domain: cdzj.chengdu.gov.cn
@@ -142,8 +146,8 @@ sources:
   rate_limit: 0.2
   source_health_score: 45.0
   recommended_enabled: false
-  last_health_at: '2026-07-30T08:46:45.173631+00:00'
-  last_error: ConnectError
+  last_health_at: '2026-07-31T15:55:17.121012Z'
+  last_error: TlsError
   city_ids:
   - CITY_510100
   province_codes:
@@ -159,7 +163,7 @@ sources:
   parser_version: '1'
   official_domain_verified: false
   health_status: unhealthy
-  health_reason: ConnectError
+  health_reason: TlsError
   robots_status: allowed
   tls_status: unknown
   redirect_chain: []
@@ -194,9 +198,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 85.0
+  source_health_score: 45.0
   recommended_enabled: false
-  last_health_at: '2026-07-30T08:46:45.544513+00:00'
+  last_health_at: '2026-07-31T15:55:39.629913Z'
+  last_error: TlsError
   city_ids:
   - CITY_320100
   province_codes:
@@ -211,9 +216,10 @@ sources:
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
   official_domain_verified: false
-  health_status: review
+  health_status: unhealthy
+  health_reason: TlsError
   robots_status: allowed
-  tls_status: ok
+  tls_status: unknown
   redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
@@ -246,9 +252,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 100.0
-  recommended_enabled: true
-  last_health_at: '2026-07-30T08:46:45.866411+00:00'
+  source_health_score: 45.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T15:56:09.275684Z'
+  last_error: TlsError
   city_ids:
   - CITY_210100
   province_codes:
@@ -263,9 +270,10 @@ sources:
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
   official_domain_verified: false
-  health_status: healthy
+  health_status: unhealthy
+  health_reason: TlsError
   robots_status: allowed
-  tls_status: ok
+  tls_status: unknown
   redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
@@ -301,9 +309,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 85.0
+  source_health_score: 45.0
   recommended_enabled: false
-  last_health_at: '2026-07-30T08:46:46.473464+00:00'
+  last_health_at: '2026-07-31T15:56:37.292694Z'
+  last_error: TlsError
   city_ids:
   - CITY_330100
   province_codes:
@@ -318,9 +327,10 @@ sources:
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
   official_domain_verified: false
-  health_status: review
+  health_status: unhealthy
+  health_reason: TlsError
   robots_status: allowed
-  tls_status: ok
+  tls_status: unknown
   redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
@@ -355,9 +365,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 100.0
-  recommended_enabled: true
-  last_health_at: '2026-07-30T08:46:47.120295+00:00'
+  source_health_score: 45.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T15:56:57.058257Z'
+  last_error: TlsError
   city_ids:
   - CITY_310000
   province_codes:
@@ -372,9 +383,10 @@ sources:
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
   official_domain_verified: false
-  health_status: healthy
+  health_status: unhealthy
+  health_reason: TlsError
   robots_status: allowed
-  tls_status: ok
+  tls_status: unknown
   redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
@@ -413,7 +425,7 @@ sources:
   rate_limit: 0.5
   source_health_score: 35.0
   recommended_enabled: false
-  last_health_at: '2026-07-30T08:46:50.169652+00:00'
+  last_health_at: '2026-07-31T15:57:10.057346Z'
   last_error: ConnectError
   city_ids: []
   province_codes: []
@@ -455,9 +467,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 100.0
-  recommended_enabled: true
-  last_health_at: '2026-07-30T08:46:50.846838+00:00'
+  source_health_score: 45.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T15:57:33.079136Z'
+  last_error: TlsError
   city_ids:
   - CITY_320100
   province_codes:
@@ -472,9 +485,10 @@ sources:
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
   official_domain_verified: false
-  health_status: healthy
+  health_status: unhealthy
+  health_reason: TlsError
   robots_status: allowed
-  tls_status: ok
+  tls_status: unknown
   redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
@@ -506,15 +520,16 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 100.0
-  recommended_enabled: true
-  last_health_at: '2026-07-30T08:46:51.353344+00:00'
+  source_health_score: 45.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T15:58:00.913901Z'
+  last_error: TlsError
   city_ids:
   - CITY_110000
   province_codes:
   - '11'
   scope_type: municipal
-  agency_type: housing_department
+  agency_type: provident_fund_center
   required_level: required
   coverage_start_date: '2018-01-01'
   expected_frequency: daily
@@ -523,21 +538,24 @@ sources:
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
   official_domain_verified: false
-  health_status: healthy
+  health_status: unhealthy
+  health_reason: TlsError
   robots_status: allowed
-  tls_status: ok
+  tls_status: unknown
   redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
   agency_name: 北京住房公积金管理中心
   notes: 已核验管委会、综合、归集和贷款政策列表。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-22T10:42:03.945586+00:00'
+  updated_at: '2026-07-31T17:11:52.577212+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
   verification_evidence_urls:
   - https://gjj.beijing.gov.cn/
+  original_agency_type: housing_department
+  role_assignment_evidence: organization name contains 公积金
 - source_id: SRC_B620ECC301F1D898
   source_name: 杭州住房公积金管理中心
   domain: gjj.hangzhou.gov.cn
@@ -556,15 +574,16 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 100.0
-  recommended_enabled: true
-  last_health_at: '2026-07-30T08:46:51.965204+00:00'
+  source_health_score: 45.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T15:58:25.008812Z'
+  last_error: TlsError
   city_ids:
   - CITY_330100
   province_codes:
   - '33'
   scope_type: municipal
-  agency_type: housing_department
+  agency_type: provident_fund_center
   required_level: required
   coverage_start_date: '2018-01-01'
   expected_frequency: daily
@@ -573,21 +592,24 @@ sources:
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
   official_domain_verified: false
-  health_status: healthy
+  health_status: unhealthy
+  health_reason: TlsError
   robots_status: allowed
-  tls_status: ok
+  tls_status: unknown
   redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
   agency_name: 杭州住房公积金管理中心
   notes: 公积金政策分类路径由既有官方正文反推，需来源体检确认列表模板。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-22T10:42:03.945586+00:00'
+  updated_at: '2026-07-31T17:11:52.577212+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
   verification_evidence_urls:
   - https://gjj.hangzhou.gov.cn/
+  original_agency_type: housing_department
+  role_assignment_evidence: organization name contains 公积金
 - source_id: SRC_921FD1F9B7808B3D
   source_name: 南京住房公积金管理中心
   domain: gjj.nanjing.gov.cn
@@ -611,15 +633,16 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 100.0
-  recommended_enabled: true
-  last_health_at: '2026-07-30T08:46:58.486169+00:00'
+  source_health_score: 45.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T15:58:46.884885Z'
+  last_error: TlsError
   city_ids:
   - CITY_320100
   province_codes:
   - '32'
   scope_type: municipal
-  agency_type: housing_department
+  agency_type: provident_fund_center
   required_level: required
   coverage_start_date: '2018-01-01'
   expected_frequency: daily
@@ -628,21 +651,24 @@ sources:
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
   official_domain_verified: false
-  health_status: healthy
+  health_status: unhealthy
+  health_reason: TlsError
   robots_status: allowed
-  tls_status: ok
+  tls_status: unknown
   redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
   agency_name: 南京住房公积金管理中心
   notes: 综合、缴存、提取和贷款政策栏目已核验。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-22T10:42:03.945586+00:00'
+  updated_at: '2026-07-31T17:11:52.577212+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
   verification_evidence_urls:
   - https://gjj.nanjing.gov.cn/zcfg/
+  original_agency_type: housing_department
+  role_assignment_evidence: organization name contains 公积金
 - source_id: SRC_0484FA3C6A1F1A0E
   source_name: 武汉住房公积金管理中心
   domain: gjj.wuhan.gov.cn
@@ -658,15 +684,16 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 100.0
-  recommended_enabled: true
-  last_health_at: '2026-07-30T08:46:58.727772+00:00'
+  source_health_score: 45.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T15:59:12.632023Z'
+  last_error: TlsError
   city_ids:
   - CITY_420100
   province_codes:
   - '42'
   scope_type: municipal
-  agency_type: housing_department
+  agency_type: provident_fund_center
   required_level: required
   coverage_start_date: '2018-01-01'
   expected_frequency: daily
@@ -675,21 +702,24 @@ sources:
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
   official_domain_verified: false
-  health_status: healthy
+  health_status: unhealthy
+  health_reason: TlsError
   robots_status: allowed
-  tls_status: ok
+  tls_status: unknown
   redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
   agency_name: 武汉住房公积金管理中心
   notes: 政府信息公开与公积金政策来源已核验。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-22T10:42:03.945586+00:00'
+  updated_at: '2026-07-31T17:11:52.577212+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
   verification_evidence_urls:
   - https://gjj.wuhan.gov.cn/zwgk/
+  original_agency_type: housing_department
+  role_assignment_evidence: organization name contains 公积金
 - source_id: SRC_1084B8B3D1BA6AF8
   source_name: 成都市政府信息公开平台
   domain: gk.chengdu.gov.cn
@@ -715,8 +745,8 @@ sources:
   rate_limit: 0.2
   source_health_score: 45.0
   recommended_enabled: false
-  last_health_at: '2026-07-30T08:47:01.776097+00:00'
-  last_error: ConnectError
+  last_health_at: '2026-07-31T15:59:35.920727Z'
+  last_error: TlsError
   city_ids:
   - CITY_510100
   province_codes:
@@ -732,7 +762,7 @@ sources:
   parser_version: '1'
   official_domain_verified: false
   health_status: unhealthy
-  health_reason: ConnectError
+  health_reason: TlsError
   robots_status: allowed
   tls_status: unknown
   redirect_chain: []
@@ -773,8 +803,8 @@ sources:
   rate_limit: 0.2
   source_health_score: 45.0
   recommended_enabled: false
-  last_health_at: '2026-07-30T08:47:05.328999+00:00'
-  last_error: Http404
+  last_health_at: '2026-07-31T16:00:05.637701Z'
+  last_error: ConnectTimeout
   city_ids:
   - CITY_230100
   province_codes:
@@ -790,7 +820,7 @@ sources:
   parser_version: '1'
   official_domain_verified: false
   health_status: unhealthy
-  health_reason: Http404
+  health_reason: ConnectTimeout
   robots_status: allowed
   tls_status: unknown
   redirect_chain: []
@@ -829,9 +859,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 100.0
-  recommended_enabled: true
-  last_health_at: '2026-07-30T08:47:05.619628+00:00'
+  source_health_score: 45.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T16:00:28.337261Z'
+  last_error: TlsError
   city_ids:
   - CITY_320100
   province_codes:
@@ -847,9 +878,10 @@ sources:
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
   official_domain_verified: false
-  health_status: healthy
+  health_status: unhealthy
+  health_reason: TlsError
   robots_status: allowed
-  tls_status: ok
+  tls_status: unknown
   redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
@@ -878,9 +910,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 100.0
-  recommended_enabled: true
-  last_health_at: '2026-07-30T08:47:07.559166+00:00'
+  source_health_score: 45.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T16:00:50.978723Z'
+  last_error: TlsError
   city_ids:
   - CITY_450100
   province_codes:
@@ -896,9 +929,10 @@ sources:
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
   official_domain_verified: false
-  health_status: healthy
+  health_status: unhealthy
+  health_reason: TlsError
   robots_status: allowed
-  tls_status: ok
+  tls_status: unknown
   redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
@@ -928,8 +962,8 @@ sources:
   rate_limit: 0.5
   source_health_score: 15.0
   recommended_enabled: false
-  last_health_at: '2026-07-30T08:47:10.901819+00:00'
-  last_error: Http404
+  last_health_at: '2026-07-31T16:02:54.073465Z'
+  last_error: ReadTimeout
   city_ids:
   - CITY_450100
   province_codes:
@@ -944,7 +978,7 @@ sources:
   parser_version: '1'
   official_domain_verified: false
   health_status: unhealthy
-  health_reason: Http404
+  health_reason: ReadTimeout
   robots_status: allowed
   tls_status: unknown
   redirect_chain: []
@@ -979,9 +1013,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 100.0
-  recommended_enabled: true
-  last_health_at: '2026-07-30T08:47:11.147127+00:00'
+  source_health_score: 45.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T16:03:17.423336Z'
+  last_error: TlsError
   city_ids:
   - CITY_310000
   province_codes:
@@ -997,9 +1032,10 @@ sources:
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
   official_domain_verified: false
-  health_status: healthy
+  health_status: unhealthy
+  health_reason: TlsError
   robots_status: allowed
-  tls_status: ok
+  tls_status: unknown
   redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
@@ -1031,9 +1067,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 85.0
+  source_health_score: 45.0
   recommended_enabled: false
-  last_health_at: '2026-07-30T08:47:11.479789+00:00'
+  last_health_at: '2026-07-31T16:03:41.377504Z'
+  last_error: TlsError
   city_ids:
   - CITY_210100
   province_codes:
@@ -1048,9 +1085,10 @@ sources:
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
   official_domain_verified: false
-  health_status: review
+  health_status: unhealthy
+  health_reason: TlsError
   robots_status: allowed
-  tls_status: ok
+  tls_status: unknown
   redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
@@ -1081,14 +1119,14 @@ sources:
   rate_limit: 0.2
   source_health_score: 45.0
   recommended_enabled: false
-  last_health_at: '2026-07-30T08:47:15.619600+00:00'
-  last_error: ConnectError
+  last_health_at: '2026-07-31T16:04:24.472110Z'
+  last_error: ConnectTimeout
   city_ids:
   - CITY_310000
   province_codes:
   - '31'
   scope_type: municipal
-  agency_type: housing_department
+  agency_type: provident_fund_center
   required_level: required
   coverage_start_date: '2018-01-01'
   expected_frequency: daily
@@ -1098,7 +1136,7 @@ sources:
   parser_version: '1'
   official_domain_verified: false
   health_status: unhealthy
-  health_reason: ConnectError
+  health_reason: ConnectTimeout
   robots_status: allowed
   tls_status: unknown
   redirect_chain: []
@@ -1107,13 +1145,15 @@ sources:
   agency_name: 上海市公积金管理中心
   notes: 市政府住房公积金专题与中心政策栏目交叉确认。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-22T10:42:03.945586+00:00'
+  updated_at: '2026-07-31T17:11:52.577212+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
   verification_evidence_urls:
   - https://www.shanghai.gov.cn/qyzfgjj/index.html
   - https://www.shgjj.com/html/newxxgk/zcwj/gfxwj/
+  original_agency_type: housing_department
+  role_assignment_evidence: organization name contains 公积金
 - source_id: SRC_8504E4A97FE341AD
   source_name: 石家庄市人民政府
   domain: sjz.gov.cn
@@ -1131,9 +1171,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 100.0
-  recommended_enabled: true
-  last_health_at: '2026-07-30T08:47:16.379045+00:00'
+  source_health_score: 45.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T16:04:48.761293Z'
+  last_error: TlsError
   city_ids:
   - CITY_130100
   province_codes:
@@ -1148,9 +1189,10 @@ sources:
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
   official_domain_verified: false
-  health_status: healthy
+  health_status: unhealthy
+  health_reason: TlsError
   robots_status: allowed
-  tls_status: ok
+  tls_status: unknown
   redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
@@ -1179,13 +1221,13 @@ sources:
   rate_limit: 0.2
   source_health_score: 100.0
   recommended_enabled: true
-  last_health_at: '2026-07-30T08:47:16.968454+00:00'
+  last_health_at: '2026-07-31T16:04:51.514570Z'
   city_ids:
   - CITY_130100
   province_codes:
   - '13'
   scope_type: municipal
-  agency_type: housing_department
+  agency_type: provident_fund_center
   required_level: required
   coverage_start_date: '2018-01-01'
   expected_frequency: daily
@@ -1203,12 +1245,14 @@ sources:
   agency_name: 石家庄住房公积金管理中心
   notes: 市政府持续发布该中心政策，但独立域名的官方身份和可遍历政策列表需本地体检，禁止启用。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-22T10:42:03.945586+00:00'
+  updated_at: '2026-07-31T17:11:52.577212+00:00'
   valid_from: '2018-01-01'
   verification_status: needs_review
   verified_by: official-site-research-2026-07-21
   verification_evidence_urls:
   - https://www.sjz.gov.cn/
+  original_agency_type: housing_department
+  role_assignment_evidence: organization name contains 公积金
 - source_id: SRC_0D7E71CAC951FFA9
   source_name: 沈阳住房公积金管理中心
   domain: sygjj.shenyang.gov.cn
@@ -1225,15 +1269,16 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 100.0
-  recommended_enabled: true
-  last_health_at: '2026-07-30T08:47:17.303787+00:00'
+  source_health_score: 45.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T16:05:12.711841Z'
+  last_error: TlsError
   city_ids:
   - CITY_210100
   province_codes:
   - '21'
   scope_type: municipal
-  agency_type: housing_department
+  agency_type: provident_fund_center
   required_level: required
   coverage_start_date: '2018-01-01'
   expected_frequency: daily
@@ -1242,21 +1287,24 @@ sources:
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
   official_domain_verified: false
-  health_status: healthy
+  health_status: unhealthy
+  health_reason: TlsError
   robots_status: allowed
-  tls_status: ok
+  tls_status: unknown
   redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
   agency_name: 沈阳住房公积金管理中心
   notes: 中心文件与法律法规入口已确认。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   created_at: '2026-07-17T02:21:18.747307+00:00'
-  updated_at: '2026-07-22T10:42:03.945586+00:00'
+  updated_at: '2026-07-31T17:11:52.577212+00:00'
   valid_from: '2018-01-01'
   verification_status: verified
   verified_by: official-site-research-2026-07-21
   verification_evidence_urls:
   - https://sygjj.shenyang.gov.cn/
+  original_agency_type: housing_department
+  role_assignment_evidence: organization name contains 公积金
 - source_id: SRC_F8F7649AE7D291F0
   source_name: 武汉市人民政府
   domain: wuhan.gov.cn
@@ -1276,9 +1324,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 100.0
-  recommended_enabled: true
-  last_health_at: '2026-07-30T08:47:17.705805+00:00'
+  source_health_score: 45.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T16:05:39.551291Z'
+  last_error: TlsError
   city_ids:
   - CITY_420100
   province_codes:
@@ -1294,9 +1343,10 @@ sources:
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
   official_domain_verified: false
-  health_status: healthy
+  health_status: unhealthy
+  health_reason: TlsError
   robots_status: allowed
-  tls_status: ok
+  tls_status: unknown
   redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
@@ -1323,9 +1373,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 85.0
+  source_health_score: 45.0
   recommended_enabled: false
-  last_health_at: '2026-07-30T08:47:17.967225+00:00'
+  last_health_at: '2026-07-31T16:06:03.100526Z'
+  last_error: TlsError
   city_ids:
   - CITY_330100
   province_codes:
@@ -1341,9 +1392,10 @@ sources:
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
   official_domain_verified: false
-  health_status: review
+  health_status: unhealthy
+  health_reason: TlsError
   robots_status: allowed
-  tls_status: ok
+  tls_status: unknown
   redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
@@ -1373,9 +1425,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 100.0
-  recommended_enabled: true
-  last_health_at: '2026-07-30T08:47:19.850728+00:00'
+  source_health_score: 45.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T16:06:25.395223Z'
+  last_error: TlsError
   city_ids:
   - CITY_450100
   province_codes:
@@ -1390,9 +1443,10 @@ sources:
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
   official_domain_verified: false
-  health_status: healthy
+  health_status: unhealthy
+  health_reason: TlsError
   robots_status: allowed
-  tls_status: ok
+  tls_status: unknown
   redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
@@ -1421,9 +1475,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 100.0
-  recommended_enabled: true
-  last_health_at: '2026-07-30T08:47:20.578568+00:00'
+  source_health_score: 45.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T16:06:47.130381Z'
+  last_error: TlsError
   city_ids:
   - CITY_130100
   province_codes:
@@ -1438,9 +1493,10 @@ sources:
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
   official_domain_verified: false
-  health_status: healthy
+  health_status: unhealthy
+  health_reason: TlsError
   robots_status: allowed
-  tls_status: ok
+  tls_status: unknown
   redirect_chain: []
   consecutive_failures: 0
   jurisdiction_level: city
@@ -1486,8 +1542,8 @@ sources:
   rate_limit: 0.2
   source_health_score: 45.0
   recommended_enabled: false
-  last_health_at: '2026-07-30T08:47:24.427043+00:00'
-  last_error: Http404
+  last_health_at: '2026-07-31T16:07:15.536547Z'
+  last_error: TlsError
   city_ids:
   - CITY_110000
   province_codes:
@@ -1503,7 +1559,7 @@ sources:
   parser_version: '1'
   official_domain_verified: false
   health_status: unhealthy
-  health_reason: Http404
+  health_reason: TlsError
   robots_status: allowed
   tls_status: unknown
   redirect_chain: []
@@ -1531,9 +1587,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 100.0
-  recommended_enabled: true
-  last_health_at: '2026-07-30T08:47:24.699756+00:00'
+  source_health_score: 45.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T16:07:39.100653Z'
+  last_error: TlsError
   city_ids:
   - CITY_110000
   province_codes:
@@ -1548,9 +1605,10 @@ sources:
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
   official_domain_verified: false
-  health_status: healthy
+  health_status: unhealthy
+  health_reason: TlsError
   robots_status: allowed
-  tls_status: ok
+  tls_status: unknown
   redirect_chain: []
   consecutive_failures: 0
   created_at: '2026-07-21T18:00:00+08:00'
@@ -1576,9 +1634,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 100.0
-  recommended_enabled: true
-  last_health_at: '2026-07-30T08:47:24.965303+00:00'
+  source_health_score: 45.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T16:08:05.725130Z'
+  last_error: TlsError
   city_ids:
   - CITY_310000
   province_codes:
@@ -1593,9 +1652,10 @@ sources:
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
   official_domain_verified: false
-  health_status: healthy
+  health_status: unhealthy
+  health_reason: TlsError
   robots_status: allowed
-  tls_status: ok
+  tls_status: unknown
   redirect_chain: []
   consecutive_failures: 0
   created_at: '2026-07-21T18:00:00+08:00'
@@ -1624,9 +1684,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 85.0
+  source_health_score: 45.0
   recommended_enabled: false
-  last_health_at: '2026-07-30T08:47:25.565297+00:00'
+  last_health_at: '2026-07-31T16:08:30.578205Z'
+  last_error: TlsError
   city_ids:
   - CITY_420100
   province_codes:
@@ -1641,9 +1702,10 @@ sources:
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
   official_domain_verified: false
-  health_status: review
+  health_status: unhealthy
+  health_reason: TlsError
   robots_status: allowed
-  tls_status: ok
+  tls_status: unknown
   redirect_chain: []
   consecutive_failures: 0
   created_at: '2026-07-21T18:00:00+08:00'
@@ -1669,9 +1731,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 85.0
+  source_health_score: 45.0
   recommended_enabled: false
-  last_health_at: '2026-07-30T08:47:25.770232+00:00'
+  last_health_at: '2026-07-31T16:08:54.894581Z'
+  last_error: TlsError
   city_ids:
   - CITY_420100
   province_codes:
@@ -1686,9 +1749,10 @@ sources:
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
   official_domain_verified: false
-  health_status: review
+  health_status: unhealthy
+  health_reason: TlsError
   robots_status: allowed
-  tls_status: ok
+  tls_status: unknown
   redirect_chain: []
   consecutive_failures: 0
   created_at: '2026-07-21T18:00:00+08:00'
@@ -1716,8 +1780,8 @@ sources:
   rate_limit: 0.2
   source_health_score: 45.0
   recommended_enabled: false
-  last_health_at: '2026-07-30T08:47:29.660459+00:00'
-  last_error: ConnectError
+  last_health_at: '2026-07-31T16:09:21.167567Z'
+  last_error: TlsError
   city_ids:
   - CITY_510100
   province_codes:
@@ -1733,7 +1797,7 @@ sources:
   parser_version: '1'
   official_domain_verified: false
   health_status: unhealthy
-  health_reason: ConnectError
+  health_reason: TlsError
   robots_status: allowed
   tls_status: unknown
   redirect_chain: []
@@ -1761,9 +1825,10 @@ sources:
   crawl_enabled: true
   priority: 1
   rate_limit: 0.2
-  source_health_score: 85.0
+  source_health_score: 45.0
   recommended_enabled: false
-  last_health_at: '2026-07-30T08:47:29.854700+00:00'
+  last_health_at: '2026-07-31T16:09:41.852720Z'
+  last_error: TlsError
   city_ids:
   - CITY_330100
   province_codes:
@@ -1778,9 +1843,10 @@ sources:
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
   official_domain_verified: false
-  health_status: review
+  health_status: unhealthy
+  health_reason: TlsError
   robots_status: allowed
-  tls_status: ok
+  tls_status: unknown
   redirect_chain: []
   consecutive_failures: 0
   created_at: '2026-07-21T18:00:00+08:00'
@@ -1807,9 +1873,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 100.0
-  recommended_enabled: true
-  last_health_at: '2026-07-30T08:47:30.322730+00:00'
+  source_health_score: 45.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T16:10:05.867082Z'
+  last_error: TlsError
   city_ids:
   - CITY_210100
   province_codes:
@@ -1824,9 +1891,10 @@ sources:
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
   official_domain_verified: false
-  health_status: healthy
+  health_status: unhealthy
+  health_reason: TlsError
   robots_status: allowed
-  tls_status: ok
+  tls_status: unknown
   redirect_chain: []
   consecutive_failures: 0
   created_at: '2026-07-21T18:00:00+08:00'
@@ -1854,8 +1922,8 @@ sources:
   rate_limit: 0.2
   source_health_score: 45.0
   recommended_enabled: false
-  last_health_at: '2026-07-30T08:47:42.225891+00:00'
-  last_error: ConnectError
+  last_health_at: '2026-07-31T16:10:25.618263Z'
+  last_error: TlsError
   city_ids:
   - CITY_230100
   province_codes:
@@ -1871,7 +1939,7 @@ sources:
   parser_version: '1'
   official_domain_verified: false
   health_status: unhealthy
-  health_reason: ConnectError
+  health_reason: TlsError
   robots_status: allowed
   tls_status: unknown
   redirect_chain: []
@@ -1901,14 +1969,14 @@ sources:
   rate_limit: 0.2
   source_health_score: 45.0
   recommended_enabled: false
-  last_health_at: '2026-07-30T08:47:55.184728+00:00'
-  last_error: ConnectError
+  last_health_at: '2026-07-31T16:12:28.708338Z'
+  last_error: ReadTimeout
   city_ids:
   - CITY_230100
   province_codes:
   - '23'
   scope_type: municipal
-  agency_type: housing_department
+  agency_type: provident_fund_center
   required_level: required
   coverage_start_date: '2018-01-01'
   expected_frequency: daily
@@ -1918,7 +1986,7 @@ sources:
   parser_version: '1'
   official_domain_verified: false
   health_status: unhealthy
-  health_reason: ConnectError
+  health_reason: ReadTimeout
   robots_status: allowed
   tls_status: unknown
   redirect_chain: []
@@ -1932,7 +2000,9 @@ sources:
   notes: 黑龙江省政府曾明确该门户地址；当前站点、栏目和HTTPS状态尚需本地体检，禁止启用。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   verification_evidence_urls:
   - https://www.hlj.gov.cn/hlj/c107858/202009/c00_30591122.shtml
-  updated_at: '2026-07-22T10:42:03.945586+00:00'
+  updated_at: '2026-07-31T17:11:52.577212+00:00'
+  original_agency_type: housing_department
+  role_assignment_evidence: organization name contains 公积金
 - source_id: SRC_F3FAA115C4A34B82
   source_name: 哈尔滨市自然资源和规划局（市政府集中公开）
   domain: harbin.gov.cn
@@ -1948,8 +2018,8 @@ sources:
   rate_limit: 0.2
   source_health_score: 45.0
   recommended_enabled: false
-  last_health_at: '2026-07-30T08:47:58.939231+00:00'
-  last_error: Http404
+  last_health_at: '2026-07-31T16:12:52.919822Z'
+  last_error: TlsError
   city_ids:
   - CITY_230100
   province_codes:
@@ -1965,7 +2035,7 @@ sources:
   parser_version: '1'
   official_domain_verified: false
   health_status: unhealthy
-  health_reason: Http404
+  health_reason: TlsError
   robots_status: allowed
   tls_status: unknown
   redirect_chain: []
@@ -1993,15 +2063,16 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 100.0
-  recommended_enabled: true
-  last_health_at: '2026-07-30T08:47:59.619498+00:00'
+  source_health_score: 45.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T16:13:14.179938Z'
+  last_error: TlsError
   city_ids:
   - CITY_450100
   province_codes:
   - '45'
   scope_type: municipal
-  agency_type: housing_department
+  agency_type: provident_fund_center
   required_level: required
   coverage_start_date: '2018-01-01'
   expected_frequency: daily
@@ -2010,9 +2081,10 @@ sources:
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
   official_domain_verified: false
-  health_status: healthy
+  health_status: unhealthy
+  health_reason: TlsError
   robots_status: allowed
-  tls_status: ok
+  tls_status: unknown
   redirect_chain: []
   consecutive_failures: 0
   created_at: '2026-07-21T18:00:00+08:00'
@@ -2024,7 +2096,9 @@ sources:
   notes: 现行政府域名作为主来源；旧nngjj.org.cn保留历史血缘并标记替代。 本记录只证明官方身份/入口核验，不证明2018年以来已完整扫描；须先运行注册表校验和来源体检，成功后方可启用。
   verification_evidence_urls:
   - https://gjj.nanning.gov.cn/
-  updated_at: '2026-07-22T10:42:03.945586+00:00'
+  updated_at: '2026-07-31T17:11:52.577212+00:00'
+  original_agency_type: housing_department
+  role_assignment_evidence: organization name contains 公积金
 - source_id: SRC_AD31E0BE1DC6C6AF
   source_name: 南宁市自然资源局
   domain: zrzyj.nanning.gov.cn
@@ -2038,9 +2112,10 @@ sources:
   crawl_enabled: true
   priority: 0
   rate_limit: 0.2
-  source_health_score: 100.0
-  recommended_enabled: true
-  last_health_at: '2026-07-30T08:48:00.346587+00:00'
+  source_health_score: 45.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T16:13:39.406908Z'
+  last_error: TlsError
   city_ids:
   - CITY_450100
   province_codes:
@@ -2055,9 +2130,10 @@ sources:
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
   official_domain_verified: false
-  health_status: healthy
+  health_status: unhealthy
+  health_reason: TlsError
   robots_status: allowed
-  tls_status: ok
+  tls_status: unknown
   redirect_chain: []
   consecutive_failures: 0
   created_at: '2026-07-21T18:00:00+08:00'
@@ -2083,9 +2159,10 @@ sources:
   crawl_enabled: true
   priority: 1
   rate_limit: 0.2
-  source_health_score: 100.0
-  recommended_enabled: true
-  last_health_at: '2026-07-30T08:48:00.679240+00:00'
+  source_health_score: 45.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T16:14:01.148076Z'
+  last_error: TlsError
   city_ids:
   - CITY_130100
   province_codes:
@@ -2100,9 +2177,10 @@ sources:
   verified_at: '2026-07-21T18:00:00+08:00'
   parser_version: '1'
   official_domain_verified: false
-  health_status: healthy
+  health_status: unhealthy
+  health_reason: TlsError
   robots_status: allowed
-  tls_status: ok
+  tls_status: unknown
   redirect_chain: []
   consecutive_failures: 0
   created_at: '2026-07-21T18:00:00+08:00'
@@ -2115,3 +2193,588 @@ sources:
   verification_evidence_urls:
   - https://www.sjz.gov.cn/zfxxgk/columns/0ab431ec-688d-4a91-8e3b-76d8549dd050/202601/27/764b60ed-f7ca-4691-a1c1-53dcd2c14cd0.html
   updated_at: '2026-07-22T10:42:03.945586+00:00'
+- source_id: SRC_F0A3C4B6D0C61FD8
+  source_name: 政府公报
+  domain: shanghai.gov.cn
+  source_type: government
+  source_role: canonical_candidate
+  official_status: official
+  seed_urls:
+  - https://www.shanghai.gov.cn/nw2404/index.html
+  list_page_urls: []
+  parser_adapter: generic_government
+  crawl_enabled: false
+  priority: 3
+  rate_limit: 0.5
+  source_health_score: 35.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T16:14:21.189282Z'
+  last_error: TlsError
+  city_ids:
+  - CITY_310000
+  province_codes: []
+  scope_type: municipal
+  agency_type: government_gazette
+  required_level: required
+  expected_frequency: unknown
+  homepage_url: https://www.shanghai.gov.cn/nw2404/index.html
+  is_valid: true
+  parser_version: '1'
+  discovery_method: web_search
+  discovery_provider: None
+  official_domain_verified: true
+  organization_name_standardized: 政府公报
+  health_status: unhealthy
+  health_reason: TlsError
+  robots_status: allowed
+  tls_status: unknown
+  redirect_chain: []
+  consecutive_failures: 0
+  created_at: '2026-07-31T15:47:39.460968Z'
+  updated_at: '2026-07-31T15:47:39.460968Z'
+- source_id: SRC_B5C80EAC01EDC3A9
+  source_name: 中央人民政府
+  domain: gov.cn
+  source_type: government
+  source_role: canonical_candidate
+  official_status: official
+  seed_urls:
+  - http://www.gov.cn/
+  list_page_urls: []
+  parser_adapter: generic_government
+  crawl_enabled: false
+  priority: 3
+  rate_limit: 0.5
+  source_health_score: 35.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T16:14:38.055688Z'
+  last_error: ConnectError
+  city_ids:
+  - CITY_310000
+  province_codes: []
+  scope_type: municipal
+  agency_type: municipal_government
+  required_level: required
+  expected_frequency: unknown
+  homepage_url: http://www.gov.cn/
+  is_valid: true
+  parser_version: '1'
+  discovery_method: web_search
+  discovery_provider: None
+  official_domain_verified: true
+  organization_name_standardized: 中央人民政府
+  health_status: unhealthy
+  health_reason: ConnectError
+  robots_status: allowed
+  tls_status: unknown
+  redirect_chain: []
+  consecutive_failures: 0
+  created_at: '2026-07-31T15:47:39.460968Z'
+  updated_at: '2026-07-31T15:47:39.460968Z'
+- source_id: SRC_EDD372F8E92E9F62
+  source_name: 上海市人民政府关于将部分行政执法事项交由街道办事处乡镇人民政府行使的决定
+  domain: shanghai.gov.cn
+  source_type: government
+  source_role: canonical_candidate
+  official_status: official
+  seed_urls:
+  - https://www.shanghai.gov.cn/nw12344/20260731/b5fd9151df4542108ef6365903458c5c.html
+  list_page_urls: []
+  parser_adapter: generic_government
+  crawl_enabled: false
+  priority: 3
+  rate_limit: 0.5
+  source_health_score: 35.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T16:14:57.131825Z'
+  last_error: TlsError
+  city_ids:
+  - CITY_310000
+  province_codes: []
+  scope_type: municipal
+  agency_type: municipal_government
+  required_level: required
+  expected_frequency: unknown
+  homepage_url: https://www.shanghai.gov.cn/nw12344/20260731/b5fd9151df4542108ef6365903458c5c.html
+  is_valid: true
+  parser_version: '1'
+  discovery_method: web_search
+  discovery_provider: None
+  official_domain_verified: true
+  organization_name_standardized: 上海市人民政府关于将部分行政执法事项交由街道办事处乡镇人民政府行使的决定
+  health_status: unhealthy
+  health_reason: TlsError
+  robots_status: allowed
+  tls_status: unknown
+  redirect_chain: []
+  consecutive_failures: 0
+  created_at: '2026-07-31T15:47:39.460968Z'
+  updated_at: '2026-07-31T15:47:39.460968Z'
+- source_id: SRC_9EF3857B07B0EF7B
+  source_name: 政府公报
+  domain: beijing.gov.cn
+  source_type: government
+  source_role: canonical_candidate
+  official_status: official
+  seed_urls:
+  - https://www.beijing.gov.cn/zhengce/gongbao
+  list_page_urls: []
+  parser_adapter: generic_government
+  crawl_enabled: false
+  priority: 3
+  rate_limit: 0.5
+  source_health_score: 35.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T16:15:23.954019Z'
+  last_error: TlsError
+  city_ids:
+  - CITY_110000
+  province_codes: []
+  scope_type: municipal
+  agency_type: government_gazette
+  required_level: required
+  expected_frequency: unknown
+  homepage_url: https://www.beijing.gov.cn/zhengce/gongbao
+  is_valid: true
+  parser_version: '1'
+  discovery_method: web_search
+  discovery_provider: None
+  official_domain_verified: true
+  organization_name_standardized: 政府公报
+  health_status: unhealthy
+  health_reason: TlsError
+  robots_status: allowed
+  tls_status: unknown
+  redirect_chain: []
+  consecutive_failures: 0
+  created_at: '2026-07-31T15:47:49.205556Z'
+  updated_at: '2026-07-31T15:47:49.205556Z'
+- source_id: SRC_D70A07FEC0C60555
+  source_name: 北京市人民政府关于印发《“十五五”时期美丽北京建设规划》的通知
+  domain: beijing.gov.cn
+  source_type: government
+  source_role: canonical_candidate
+  official_status: official
+  seed_urls:
+  - https://www.beijing.gov.cn/zhengce/zhengcefagui/202607/t20260731_4802868.html
+  list_page_urls: []
+  parser_adapter: generic_government
+  crawl_enabled: false
+  priority: 3
+  rate_limit: 0.5
+  source_health_score: 35.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T16:15:45.175365Z'
+  last_error: TlsError
+  city_ids:
+  - CITY_110000
+  province_codes: []
+  scope_type: municipal
+  agency_type: municipal_government
+  required_level: required
+  expected_frequency: unknown
+  homepage_url: https://www.beijing.gov.cn/zhengce/zhengcefagui/202607/t20260731_4802868.html
+  is_valid: true
+  parser_version: '1'
+  discovery_method: web_search
+  discovery_provider: None
+  official_domain_verified: true
+  organization_name_standardized: 北京市人民政府关于印发《“十五五”时期美丽北京建设规划》的通知
+  health_status: unhealthy
+  health_reason: TlsError
+  robots_status: allowed
+  tls_status: unknown
+  redirect_chain: []
+  consecutive_failures: 0
+  created_at: '2026-07-31T15:47:49.205556Z'
+  updated_at: '2026-07-31T15:47:49.205556Z'
+- source_id: SRC_F4C72DEBD71153D9
+  source_name: 北京住房公积金管理中心关于对受2025年汛情影响的缴存职工给予阶段性支持的通知
+  domain: beijing.gov.cn
+  source_type: government
+  source_role: canonical_candidate
+  official_status: official
+  seed_urls:
+  - https://www.beijing.gov.cn/zhengce/zhengcefagui/202508/t20250819_4175939.html
+  list_page_urls: []
+  parser_adapter: generic_government
+  crawl_enabled: false
+  priority: 3
+  rate_limit: 0.5
+  source_health_score: 35.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T16:16:00.237410Z'
+  last_error: TlsError
+  city_ids:
+  - CITY_110000
+  province_codes: []
+  scope_type: municipal
+  agency_type: provident_fund_center
+  required_level: required
+  expected_frequency: unknown
+  homepage_url: https://www.beijing.gov.cn/zhengce/zhengcefagui/202508/t20250819_4175939.html
+  is_valid: true
+  parser_version: '1'
+  discovery_method: web_search
+  discovery_provider: None
+  official_domain_verified: true
+  organization_name_standardized: 北京住房公积金管理中心关于对受2025年汛情影响的缴存职工给予阶段性支持的通知
+  health_status: unhealthy
+  health_reason: TlsError
+  robots_status: allowed
+  tls_status: unknown
+  redirect_chain: []
+  consecutive_failures: 0
+  created_at: '2026-07-31T15:47:49.205556Z'
+  updated_at: '2026-07-31T15:47:49.205556Z'
+- source_id: SRC_4103D8EDB19210CB
+  source_name: 武汉公积金中心
+  domain: gjj.wuhan.gov.cn
+  source_type: government
+  source_role: canonical_candidate
+  official_status: official
+  seed_urls:
+  - https://gjj.wuhan.gov.cn
+  list_page_urls: []
+  parser_adapter: generic_government
+  crawl_enabled: false
+  priority: 3
+  rate_limit: 0.5
+  source_health_score: 35.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T16:16:21.393999Z'
+  last_error: TlsError
+  city_ids:
+  - CITY_420100
+  province_codes: []
+  scope_type: municipal
+  agency_type: provident_fund_center
+  required_level: required
+  expected_frequency: unknown
+  homepage_url: https://gjj.wuhan.gov.cn
+  is_valid: true
+  parser_version: '1'
+  discovery_method: web_search
+  discovery_provider: None
+  official_domain_verified: true
+  organization_name_standardized: 武汉公积金中心
+  health_status: unhealthy
+  health_reason: TlsError
+  robots_status: allowed
+  tls_status: unknown
+  redirect_chain: []
+  consecutive_failures: 0
+  created_at: '2026-07-31T15:48:31.419502Z'
+  updated_at: '2026-07-31T15:48:31.419502Z'
+- source_id: SRC_C631F2E7BF0DED48
+  source_name: 武政规〔2023〕18号—市人民政府印发关于增强发展内生动力推动经济恢复向好若干政策措施的通知.pdf
+  domain: wuhan.gov.cn
+  source_type: government
+  source_role: canonical_candidate
+  official_status: official
+  seed_urls:
+  - https://www.wuhan.gov.cn/zwgk/xxgk/zfwj/gfxwj/202312/P020231201315372430597.pdf
+  list_page_urls: []
+  parser_adapter: generic_government
+  crawl_enabled: false
+  priority: 3
+  rate_limit: 0.5
+  source_health_score: 35.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T16:16:42.571231Z'
+  last_error: TlsError
+  city_ids:
+  - CITY_420100
+  province_codes: []
+  scope_type: municipal
+  agency_type: municipal_government
+  required_level: required
+  expected_frequency: unknown
+  homepage_url: https://www.wuhan.gov.cn/zwgk/xxgk/zfwj/gfxwj/202312/P020231201315372430597.pdf
+  is_valid: true
+  parser_version: '1'
+  discovery_method: web_search
+  discovery_provider: None
+  official_domain_verified: true
+  organization_name_standardized: 武政规〔2023〕18号—市人民政府印发关于增强发展内生动力推动经济恢复向好若干政策措施的通知.pdf
+  health_status: unhealthy
+  health_reason: TlsError
+  robots_status: allowed
+  tls_status: unknown
+  redirect_chain: []
+  consecutive_failures: 0
+  created_at: '2026-07-31T15:48:31.419502Z'
+  updated_at: '2026-07-31T15:48:31.419502Z'
+- source_id: SRC_8E3DBC10BDA8003A
+  source_name: 南京市人民政府关于调整第六届南京仲裁委员会主任的通知
+  domain: nanjing.gov.cn
+  source_type: government
+  source_role: canonical_candidate
+  official_status: official
+  seed_urls:
+  - https://www.nanjing.gov.cn/zdgk/202607/t20260702_5869778.html
+  list_page_urls: []
+  parser_adapter: generic_government
+  crawl_enabled: false
+  priority: 3
+  rate_limit: 0.5
+  source_health_score: 35.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T16:17:02.877976Z'
+  last_error: TlsError
+  city_ids:
+  - CITY_320100
+  province_codes: []
+  scope_type: municipal
+  agency_type: municipal_government
+  required_level: required
+  expected_frequency: unknown
+  homepage_url: https://www.nanjing.gov.cn/zdgk/202607/t20260702_5869778.html
+  is_valid: true
+  parser_version: '1'
+  discovery_method: web_search
+  discovery_provider: None
+  official_domain_verified: true
+  organization_name_standardized: 南京市人民政府关于调整第六届南京仲裁委员会主任的通知
+  health_status: unhealthy
+  health_reason: TlsError
+  robots_status: allowed
+  tls_status: unknown
+  redirect_chain: []
+  consecutive_failures: 0
+  created_at: '2026-07-31T15:48:51.278250Z'
+  updated_at: '2026-07-31T15:48:51.278250Z'
+- source_id: SRC_E2583F5D9A5EF578
+  source_name: 政府公报
+  domain: shenyang.gov.cn
+  source_type: government
+  source_role: canonical_candidate
+  official_status: official
+  seed_urls:
+  - https://www.shenyang.gov.cn/zwgk/zcwj/xzfgb/
+  list_page_urls: []
+  parser_adapter: generic_government
+  crawl_enabled: false
+  priority: 3
+  rate_limit: 0.5
+  source_health_score: 35.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T16:17:26.173520Z'
+  last_error: TlsError
+  city_ids:
+  - CITY_210100
+  province_codes: []
+  scope_type: municipal
+  agency_type: government_gazette
+  required_level: required
+  expected_frequency: unknown
+  homepage_url: https://www.shenyang.gov.cn/zwgk/zcwj/xzfgb/
+  is_valid: true
+  parser_version: '1'
+  discovery_method: web_search
+  discovery_provider: None
+  official_domain_verified: true
+  organization_name_standardized: 政府公报
+  health_status: unhealthy
+  health_reason: TlsError
+  robots_status: allowed
+  tls_status: unknown
+  redirect_chain: []
+  consecutive_failures: 0
+  created_at: '2026-07-31T15:49:03.477021Z'
+  updated_at: '2026-07-31T15:49:03.477021Z'
+- source_id: SRC_47DD4397D1E521E8
+  source_name: 沈阳市人民政府办公厅关于公布沈阳市人民政府2026年度重大行政决...
+  domain: shenyang.gov.cn
+  source_type: government
+  source_role: canonical_candidate
+  official_status: official
+  seed_urls:
+  - https://www.shenyang.gov.cn/zwgk/zcwj/zfwj/szfbgtwj1/202607/t20260729_5064386.html
+  list_page_urls: []
+  parser_adapter: generic_government
+  crawl_enabled: false
+  priority: 3
+  rate_limit: 0.5
+  source_health_score: 35.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T16:17:47.420981Z'
+  last_error: TlsError
+  city_ids:
+  - CITY_210100
+  province_codes: []
+  scope_type: municipal
+  agency_type: municipal_government
+  required_level: required
+  expected_frequency: unknown
+  homepage_url: https://www.shenyang.gov.cn/zwgk/zcwj/zfwj/szfbgtwj1/202607/t20260729_5064386.html
+  is_valid: true
+  parser_version: '1'
+  discovery_method: web_search
+  discovery_provider: None
+  official_domain_verified: true
+  organization_name_standardized: 沈阳市人民政府办公厅关于公布沈阳市人民政府2026年度重大行政决...
+  health_status: unhealthy
+  health_reason: TlsError
+  robots_status: allowed
+  tls_status: unknown
+  redirect_chain: []
+  consecutive_failures: 0
+  created_at: '2026-07-31T15:49:03.477021Z'
+  updated_at: '2026-07-31T15:49:03.477021Z'
+- source_id: SRC_80E5CB667261AFF0
+  source_name: 哈尔滨市人民政府关于于大海等任免职的通知
+  domain: harbin.gov.cn
+  source_type: government
+  source_role: canonical_candidate
+  official_status: official
+  seed_urls:
+  - https://www.harbin.gov.cn/haerbin/c104541/202607/c01_1136808.shtml
+  list_page_urls: []
+  parser_adapter: generic_government
+  crawl_enabled: false
+  priority: 3
+  rate_limit: 0.5
+  source_health_score: 35.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T16:18:20.406803Z'
+  last_error: TlsError
+  city_ids:
+  - CITY_230100
+  province_codes: []
+  scope_type: municipal
+  agency_type: municipal_government
+  required_level: required
+  expected_frequency: unknown
+  homepage_url: https://www.harbin.gov.cn/haerbin/c104541/202607/c01_1136808.shtml
+  is_valid: true
+  parser_version: '1'
+  discovery_method: web_search
+  discovery_provider: None
+  official_domain_verified: true
+  organization_name_standardized: 哈尔滨市人民政府关于于大海等任免职的通知
+  health_status: unhealthy
+  health_reason: TlsError
+  robots_status: allowed
+  tls_status: unknown
+  redirect_chain: []
+  consecutive_failures: 0
+  created_at: '2026-07-31T15:49:43.809992Z'
+  updated_at: '2026-07-31T15:49:43.809992Z'
+- source_id: SRC_21FE1A3F32BC83D5
+  source_name: 自然资源和规划局
+  domain: harbin.gov.cn
+  source_type: government
+  source_role: canonical_candidate
+  official_status: official
+  seed_urls:
+  - https://www.harbin.gov.cn/haerbin/c107249/bmzfxxgk_zn.shtml
+  list_page_urls: []
+  parser_adapter: generic_government
+  crawl_enabled: false
+  priority: 3
+  rate_limit: 0.5
+  source_health_score: 35.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T16:18:40.414693Z'
+  last_error: TlsError
+  city_ids:
+  - CITY_230100
+  province_codes: []
+  scope_type: municipal
+  agency_type: natural_resources_department
+  required_level: required
+  expected_frequency: unknown
+  homepage_url: https://www.harbin.gov.cn/haerbin/c107249/bmzfxxgk_zn.shtml
+  is_valid: true
+  parser_version: '1'
+  discovery_method: web_search
+  discovery_provider: None
+  official_domain_verified: true
+  organization_name_standardized: 自然资源和规划局
+  health_status: unhealthy
+  health_reason: TlsError
+  robots_status: allowed
+  tls_status: unknown
+  redirect_chain: []
+  consecutive_failures: 0
+  created_at: '2026-07-31T15:49:43.809992Z'
+  updated_at: '2026-07-31T15:49:43.809992Z'
+- source_id: SRC_18B9F5902EA1064C
+  source_name: 住房和城乡建设局
+  domain: harbin.gov.cn
+  source_type: government
+  source_role: canonical_candidate
+  official_status: official
+  seed_urls:
+  - https://www.harbin.gov.cn/haerbin/c107373/bmzfxxgk_zn.shtml
+  list_page_urls: []
+  parser_adapter: generic_government
+  crawl_enabled: false
+  priority: 3
+  rate_limit: 0.5
+  source_health_score: 35.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T16:19:03.454553Z'
+  last_error: TlsError
+  city_ids:
+  - CITY_230100
+  province_codes: []
+  scope_type: municipal
+  agency_type: housing_department
+  required_level: required
+  expected_frequency: unknown
+  homepage_url: https://www.harbin.gov.cn/haerbin/c107373/bmzfxxgk_zn.shtml
+  is_valid: true
+  parser_version: '1'
+  discovery_method: web_search
+  discovery_provider: None
+  official_domain_verified: true
+  organization_name_standardized: 住房和城乡建设局
+  health_status: unhealthy
+  health_reason: TlsError
+  robots_status: allowed
+  tls_status: unknown
+  redirect_chain: []
+  consecutive_failures: 0
+  created_at: '2026-07-31T15:49:43.809992Z'
+  updated_at: '2026-07-31T15:49:43.809992Z'
+- source_id: SRC_103952F9FB3B2A0F
+  source_name: 住房公积金管理中心
+  domain: harbin.gov.cn
+  source_type: government
+  source_role: canonical_candidate
+  official_status: official
+  seed_urls:
+  - https://www.harbin.gov.cn/haerbin/c108861/bmzfxxgk_zn.shtml
+  list_page_urls: []
+  parser_adapter: generic_government
+  crawl_enabled: false
+  priority: 3
+  rate_limit: 0.5
+  source_health_score: 35.0
+  recommended_enabled: false
+  last_health_at: '2026-07-31T16:19:39.932293Z'
+  last_error: TlsError
+  city_ids:
+  - CITY_230100
+  province_codes: []
+  scope_type: municipal
+  agency_type: provident_fund_center
+  required_level: required
+  expected_frequency: unknown
+  homepage_url: https://www.harbin.gov.cn/haerbin/c108861/bmzfxxgk_zn.shtml
+  is_valid: true
+  parser_version: '1'
+  discovery_method: web_search
+  discovery_provider: None
+  official_domain_verified: true
+  organization_name_standardized: 住房公积金管理中心
+  health_status: unhealthy
+  health_reason: TlsError
+  robots_status: allowed
+  tls_status: unknown
+  redirect_chain: []
+  consecutive_failures: 0
+  created_at: '2026-07-31T15:49:43.809992Z'
+  updated_at: '2026-07-31T15:49:43.809992Z'

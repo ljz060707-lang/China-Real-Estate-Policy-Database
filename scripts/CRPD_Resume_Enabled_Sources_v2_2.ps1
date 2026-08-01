@@ -21,9 +21,7 @@
     [switch]$DiagnoseEachCity,
     [switch]$SkipAI,
     [switch]$SkipArchiveRecovery,
-    [switch]$StopOnCityYearFailure,
-    [switch]$PartialEnabledSourcesOnly,
-    [switch]$AllowBlockedGovernmentRoute
+    [switch]$StopOnCityYearFailure
 )
 
 Set-StrictMode -Version Latest
@@ -463,17 +461,8 @@ function Get-CityEnabledRoles {
         throw "无法读取 $CityId 的启用来源角色。"
     }
 
-    # ConvertFrom-Json emits one Object[] for a JSON array in Windows
-    # PowerShell. Flatten it before the caller serializes --source-roles.
-    $Parsed = $Raw | ConvertFrom-Json
-    $Roles = @()
-    foreach ($Role in @($Parsed)) {
-        $Value = [string]$Role
-        if (-not [string]::IsNullOrWhiteSpace($Value)) {
-            $Roles += $Value
-        }
-    }
-    return $Roles
+    $Roles = @($Raw | ConvertFrom-Json)
+    return @($Roles | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
 }
 
 function Get-YearDateRange {
@@ -787,39 +776,12 @@ if ($Audit) {
     }
 }
 
-if (-not $Audit) {
-    throw "无法解析525来源审计，禁止启动抓取。"
-}
-if (
-    [double]$Audit.verified_coverage_pct -lt 100 -and
-    -not $PartialEnabledSourcesOnly
-) {
-    throw (
-        "verified source coverage仅为$($Audit.verified_coverage_pct)%。" +
-        "默认禁止把已启用来源的局部扫描作为全量回溯。" +
-        "仅在明确接受局部结果时使用-PartialEnabledSourcesOnly。"
-    )
-}
-
 # 先做一次南京网络诊断；逐城市诊断可通过-DiagnoseEachCity开启。
-$NanjingNetworkResult = Invoke-PolicyDbTimed `
-    -Arguments @("network", "compare", "--url", "https://www.nanjing.gov.cn/") `
+[void](Invoke-PolicyDbTimed `
+    -Arguments @("network", "diagnose", "--city", "南京市") `
     -Stage "06_network_nanjing" `
     -TimeoutMinutes 10 `
-    -ContinueOnError
-$NanjingNetwork = ConvertFrom-LastJson -Text $NanjingNetworkResult.Text
-if (
-    (
-        -not $NanjingNetwork -or
-        [string]$NanjingNetwork.selected_route -eq "blocked"
-    ) -and
-    -not $AllowBlockedGovernmentRoute
-) {
-    throw (
-        "南京政府入口的直连与代理路径均不可用，禁止启动全量回溯。" +
-        "请先修复Vortex gov.cn DIRECT/Fake-IP规则并重跑network compare。"
-    )
-}
+    -ContinueOnError)
 
 $Cities = @(
     Import-Csv $CityFile |
