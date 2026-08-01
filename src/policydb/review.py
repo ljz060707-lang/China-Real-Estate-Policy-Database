@@ -402,6 +402,11 @@ def generate_review_tasks(settings: Settings | None = None) -> dict:
     }
 
 
+def _review_columns(settings: Settings) -> set[str]:
+    with duckdb.connect(str(settings.database), read_only=True) as con:
+        return {row[0] for row in con.execute("DESCRIBE manual_review_tasks").fetchall()}
+
+
 def review_stats(settings: Settings | None = None) -> dict:
     settings = ensure_review_schema(settings)
     with duckdb.connect(str(settings.database), read_only=True) as con:
@@ -442,6 +447,7 @@ def list_review_tasks(
 ) -> pl.DataFrame:
     settings = ensure_review_schema(settings)
     clauses, params = ["1=1"], []
+    columns = _review_columns(settings)
     if review_type and review_type != "all":
         clauses.append("t.review_type=?")
         params.append(review_type)
@@ -451,8 +457,11 @@ def list_review_tasks(
         clauses.append("t.status=?")
         params.append(status)
     if automation_status and automation_status != "all":
-        clauses.append("COALESCE(t.automation_status,'pending_diagnosis')=?")
-        params.append(automation_status)
+        if "automation_status" in columns:
+            clauses.append("COALESCE(t.automation_status,'pending_diagnosis')=?")
+            params.append(automation_status)
+        elif automation_status != "pending_diagnosis":
+            return 0
     sql = f"""SELECT t.*,r.title,r.record_date,r.summary,r.primary_source_url
               FROM manual_review_tasks t LEFT JOIN records r ON t.record_id=r.record_id
               WHERE {' AND '.join(clauses)}
@@ -480,6 +489,7 @@ def review_task_count(
 ) -> int:
     settings = ensure_review_schema(settings)
     clauses, params = ["1=1"], []
+    columns = _review_columns(settings)
     if review_type and review_type != "all":
         clauses.append("review_type=?")
         params.append(review_type)
@@ -489,8 +499,11 @@ def review_task_count(
         clauses.append("status=?")
         params.append(status)
     if automation_status and automation_status != "all":
-        clauses.append("COALESCE(automation_status,'pending_diagnosis')=?")
-        params.append(automation_status)
+        if "automation_status" in columns:
+            clauses.append("COALESCE(automation_status,'pending_diagnosis')=?")
+            params.append(automation_status)
+        elif automation_status != "pending_diagnosis":
+            return 0
     with duckdb.connect(str(settings.database), read_only=True) as con:
         return int(
             con.execute(
