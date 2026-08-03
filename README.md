@@ -1,285 +1,75 @@
-<div align="center">
+# 中国房地产与城市政策研究数据库（CRPD）
 
-# 中国房地产与城市政策研究数据库
+> 当前交付标准：系统先保证真实可运行、扩大城市和政策文本覆盖、展示可审计缺口；“算法上的严格完整”是后续 Silver 深度补全目标，不是本轮覆盖门槛。
 
-## China Real Estate & Urban Policy Database · CRPD 3.0
+## 当前运行模式
 
-**面向中国城市房地产政策研究的可追溯、可补全、可持续更新数据基础设施**
+Bronze 快速原始覆盖和 Silver 清洗/验证已启用；Gold 政策强度只保留禁用占位，不产生任何政策强度 API 调用。首轮使用 `FAST_BULK_INGEST` 广度优先、城市轮转、来源时间/页数/文档/附件预算和 checkpoint/resume。所有状态、来源、缺口和运行历史都保留在本地审计目录中。
 
-`Python 3.12+`　`DuckDB`　`Parquet`　`Streamlit`　`AI-assisted`　`Windows`
+Dashboard 默认只监听 `127.0.0.1`，读取真实 Parquet、checkpoint、来源注册表、gap 和 automation 状态；操作通过经过校验的 JSON job queue 进入正式业务层，不接受任意 shell 命令。当前覆盖数字是观测值，不代表 105 城或 525 槽位已严格完成。
 
-</div>
+CRPD 是面向中国房地产与城市政策研究的可追溯数据库。系统统一保存政策实体、正式版本、
+不同网站发布副本、政策动作、原文证据、AI 分类、去重关系和城市—时间覆盖状态。
 
----
+本项目坚持四条边界：
 
-## 项目简介
-
-CRPD 针对传统券商政策库偏重大城市、下沉城市覆盖不足，以及政策原文、附件、版本和采集过程难以追溯等问题，在既有中金政策数据基础上，搭建了一套覆盖以下环节的政策数据系统：
-
-```text
-政策来源发现
-→ 官方来源验证
-→ HTML / PDF 原文归档
-→ 结构化解析
-→ AI 辅助复核
-→ 去重与版本治理
-→ 完整性审计
-→ 持续更新与研究导出
-```
-
-项目当前覆盖 **105个城市、5类必需官方来源角色和2018年以来政策文本**，并为城市—月份、城市—年份、多期双重差分及政策工具异质性研究预留标准化数据接口。
-
-> **当前阶段说明**
->
-> CRPD 3.0 已基本完成系统架构、抓取管线、Dashboard、PDF处理和运行控制建设，正由“工程开发”转入“规模化数据生产”。
-> 当前较低的 verified、enabled 比例主要反映525个来源槽位尚未全面执行大规模搜索与验证，并不表示相应功能尚未实现。
-
----
-
-## 当前数据快照
-
-> 以下指标为当前运行快照，反映最低覆盖和生产进度，不代表所有城市、年份和来源已经穷尽。
-
-| 指标                 |          当前结果 | 说明                  |
-| ------------------ | ------------: | ------------------- |
-| 政策文档               |     **3,568** | 当前进入正式或兼容数据视图的政策记录  |
-| 有政策文档城市            | **102 / 105** | 城市最低文本覆盖率为97.1%     |
-| 必需来源槽位             | **525 / 525** | 105城 × 5类来源角色已全部登记  |
-| 已解析来源槽位            | **254 / 525** | 已发现候选或进入非未解析状态      |
-| 严格验证槽位             |  **21 / 525** | 已通过官方性、机构角色和可抓取性验证  |
-| 正式启用槽位             |  **21 / 525** | 已纳入自动更新与历史回溯流程      |
-| 进入回溯状态来源           |   **19 / 22** | 当前实际试运行来源中的回溯进度     |
-| PARTIAL_BUT_USABLE |    **4 / 22** | 已有可用文本，但尚未证明历史或附件完整 |
-| 2018年以来 city-year  | **925 / 925** | 每个城市—年份至少有一篇文档      |
-| Open gaps          |     **3,971** | 待补来源、年份、字段、附件和运行缺口  |
-| Critical gaps      |       **506** | 需要优先补全或复核的关键缺口      |
-
-### 如何理解这些比例
-
-* **525/525 必需来源槽位**：表示来源任务框架已经完整建立，不代表525个官方网址均已找到。
-* **21/525 verified**：表示21个槽位完成严格验证；当前尚未全面运行525槽位的搜索和验证任务。
-* **21/525 enabled**：表示已验证的21个来源均已纳入正式抓取。
-* **19/22 回溯状态**：分母是当前参与试运行的22个来源，而非全部525个槽位。
-* **925/925 city-year**：表示每个城市—年份至少有一篇政策，不等于该年份政策已经穷尽。
-* **PARTIAL_BUT_USABLE**：表示数据可用，但分页、历史年份或附件仍需继续补全。
-
----
-
-## 系统架构
-
-```mermaid
-flowchart LR
-    A[搜索 API / 官方来源矩阵] --> B[候选来源发现]
-    B --> C[官方域名与机构角色验证]
-    C --> D[Bronze 原始采集]
-    D --> E[HTML / PDF / 附件不可变归档]
-    E --> F[Silver 解析与标准化]
-    F --> G[去重 / 版本治理 / 缺口审计]
-    G --> H[研究快照与面板数据]
-    H -. 指标体系确定后启用 .-> I[Gold 政策强度测度]
-
-    E --> J[PDF内容寻址归档]
-    J --> K[逐页文本解析]
-    K --> F
-```
-
-### 分层数据体系
-
-| 数据层        | 当前状态 | 主要职责                      |
-| ---------- | ---- | ------------------------- |
-| **Bronze** | 已启用  | 快速覆盖、原始HTML/PDF/附件和抓取证据归档 |
-| **Silver** | 已启用  | 解析、清洗、验证、去重、版本管理和缺口补全     |
-| **Gold**   | 禁用占位 | 政策强度、政策工具和研究指标测度          |
-
-Gold 当前不会调用政策强度模型，也不会生成虚构的强度值。未测度字段保持为空或显式标记为未启用。
-
----
+- Raw 原文、PDF、HTML、附件和原始 URL 永不覆盖；
+- 多网站转载只计一个政策实体，但所有发布主体和 URL 均保留；
+- 未扫描、部分扫描和失败不能记为零政策；
+- “任务运行完成”不等于“覆盖完整”，只有证据完备的窗口才可确认有政策或零政策。
 
 ## 核心能力
 
-### 1. 105城官方来源矩阵
+- Excel、网页、PDF、附件的增量导入和内容寻址归档；
+- 105 城市政府来源矩阵、健康监测、搜索 API 补漏和历史分片扫描；
+- SiliconFlow 两轮结构化抽取、动作拆分、证据校验和置信度路由；
+- URL、二进制哈希、正文哈希、文号、标题、机构、日期和语义联合去重；
+- DuckDB 查询、Parquet 主数据、Streamlit Dashboard 和多格式研究导出；
+- Windows 每日、周度、月度任务计划，支持幂等、互斥、断点续跑和运行报告。
 
-每个城市设置五类必需来源角色：
+## 数据范围与五类政策体系
 
-| 来源角色     | 主要内容               |
-| -------- | ------------------ |
-| 市政府      | 政府政策文件、规范性文件和政策发布  |
-| 政府公报     | 正式公报、政策汇编和历史文件     |
-| 住房城乡建设部门 | 房地产、住房、城市更新和建筑管理政策 |
-| 住房公积金中心  | 公积金贷款、提取和缴存政策      |
-| 自然资源部门   | 土地供应、规划和用途管制政策     |
+默认历史扫描范围为 105 个大城市、2018-01-01 至今，并纳入相关中央、省、市政策。
+最小分类单位是 `policy_action`，综合文件会拆成多个动作。
 
-来源发现采用：
+| 代码 | 一级分类 |
+|---|---|
+| D | 需求侧政策 |
+| S | 供给侧政策 |
+| F | 房地产金融与风险 |
+| H | 住房保障与城市更新 |
+| G | 市场监管与制度治理 |
 
-```text
-搜索 API / AI 候选发现
-→ 官方域名校验
-→ 城市归属校验
-→ 机构与来源角色识别
-→ HTTP及页面类型检测
-→ 正文解析能力验证
-→ 正式启用
-```
+中金 Excel 原始 topic、工作表和行号继续作为血缘字段保留，不再作为唯一主分类。
 
-没有证据的来源保持 `unresolved`，系统不会使用推测网址填补槽位。
-
-### 2. 广度优先全量抓取
-
-`FAST_BULK_INGEST` 采用城市轮转和来源预算机制：
-
-* 单来源时间预算；
-* 列表页数量预算；
-* 文档数量预算；
-* PDF和附件预算；
-* checkpoint / resume；
-* 失败来源让出执行权；
-* 不允许单个复杂网站阻塞105城任务。
-
-全量生产划分为六轮：
+## 数据架构
 
 ```text
-ROUND 1  城市快速覆盖
-ROUND 2  来源角色补齐
-ROUND 3  缺失年份补齐
-ROUND 4  深度分页与历史回溯
-ROUND 5  PDF与附件补全
-ROUND 6  人工审核与长期失败处理
+搜索 API / 官方来源矩阵
+          ↓
+候选 URL → 官方域名与来源主体校验
+          ↓
+HTML / PDF / 附件不可变归档
+          ↓
+正文解析 → 政策动作拆分 → 五类分类
+          ↓
+二次独立复核 → 确定性置信度路由
+          ↓
+正式存量池 / 自动恢复队列 / 少量人工审核
+          ↓
+DuckDB 研究视图与覆盖统计
 ```
 
-### 3. AI辅助解析与自动复核
+四个对象不能混用：
 
-AI用于：
+- `policy_entity`：政策本身；
+- `document_version`：正式修订版本；
+- `publication_copy`：不同部门或网站的发布/转载副本；
+- `policy_action`：文件中的具体政策动作。
 
-* 政策标题、日期、文号和发布机关提取；
-* 政策对象和政策工具识别；
-* 综合文件的政策动作拆分；
-* 分类建议和证据定位；
-* 第二轮独立复核；
-* 置信度路由。
+## 快速安装
 
-AI不得生成原文中不存在的标题、日期、机关、文号、URL或政策内容。
-
-### 4. 政策对象与版本治理
-
-系统区分四类核心对象：
-
-| 对象                 | 含义              |
-| ------------------ | --------------- |
-| `policy_entity`    | 政策本体            |
-| `document_version` | 正式发布或修订版本       |
-| `publication_copy` | 不同网站和部门的发布、转载副本 |
-| `policy_action`    | 文件内部的具体政策动作     |
-
-同一政策的多个转载页面只形成一个政策实体，但所有来源URL、发布主体和原始证据均被保留。
-
-### 5. 多证据联合去重
-
-系统综合使用：
-
-* 规范化URL；
-* PDF二进制SHA-256；
-* HTML和正文哈希；
-* 文号；
-* 标题；
-* 发布机关；
-* 发布日期；
-* 语义相似度。
-
-不同版本不会被直接覆盖，而是形成可追溯的版本关系。
-
-### 6. HTML与PDF双轨原文
-
-PDF已经被纳入正式数据管线：
-
-```text
-已有PDF盘点
-→ SHA-256内容寻址归档
-→ 网页PDF发现
-→ 下载与文件校验
-→ PyMuPDF逐页解析
-→ 政策关联
-→ Dashboard查看
-```
-
-系统遵循：
-
-* HTML与PDF分别保存；
-* PDF附件不覆盖网页正文；
-* 没有PDF时继续使用HTML原文；
-* 扫描型PDF标记为 `OCR_PENDING`；
-* OCR当前默认关闭；
-* 原始PDF不进入Git仓库。
-
----
-
-## 五类政策体系
-
-政策以 `policy_action` 为最小分类单位，综合文件可以拆分为多个政策动作。
-
-| 代码  | 一级政策类型    |
-| --- | --------- |
-| `D` | 需求侧政策     |
-| `S` | 供给侧政策     |
-| `F` | 房地产金融与风险  |
-| `H` | 住房保障与城市更新 |
-| `G` | 市场监管与制度治理 |
-
-中金原始Excel的工作表、topic和行号继续作为数据血缘字段保留，但不再作为唯一分类标准。
-
----
-
-## Dashboard
-
-Dashboard 默认只监听本机地址：
-
-```text
-http://127.0.0.1:8501/
-```
-
-主要页面包括：
-
-* 数据总览；
-* 政策中心与政策详情；
-* 城市—来源角色覆盖矩阵；
-* city-year覆盖；
-* 自动更新与完整性；
-* PDF发现、下载和解析；
-* 数据质量与缺口审计；
-* 人工审核；
-* 系统架构；
-* Gold政策强度占位。
-
-Dashboard读取真实DuckDB、Parquet、来源注册表、checkpoint、gap和automation状态，不使用模拟数据。
-
-所有操作通过经过校验的JSON任务队列进入正式业务层，不接受任意Shell命令。
-
-### Dashboard截图
-
-#### 数据总览
-
-![数据总览](docs/assets/dashboard/overview.png)
-
-#### 城市覆盖矩阵
-
-![城市覆盖矩阵](docs/assets/dashboard/city_matrix.png)
-
-#### 来源与缺口审计
-
-![来源与缺口](docs/assets/dashboard/source_gaps.png)
-
----
-
-## 快速开始
-
-### 环境要求
-
-* Windows 10 / 11；
-* PowerShell；
-* Python 3.12+；
-* Git；
-* 推荐使用项目自带虚拟环境或 `uv`。
-
-### 普通用户
+要求 Windows 10/11、PowerShell 和 Python 3.12+。普通用户可双击：
 
 ```text
 首次安装.bat
@@ -287,7 +77,7 @@ Dashboard读取真实DuckDB、Parquet、来源注册表、checkpoint、gap和aut
 关闭房地产政策数据库.bat
 ```
 
-### 开发者
+开发者命令：
 
 ```powershell
 uv sync --all-extras
@@ -295,122 +85,9 @@ uv run policydb validate
 uv run policydb dashboard
 ```
 
-或使用项目虚拟环境：
+## D 盘正式存储
 
-```powershell
-.\.venv\Scripts\policydb.exe validate
-.\scripts\start_dashboard.ps1 -NoBrowser
-.\scripts\check_dashboard.ps1
-```
-
-停止Dashboard：
-
-```powershell
-.\scripts\stop_dashboard.ps1
-```
-
----
-
-## 开始小批量抓取
-
-建议先执行有界测试，不要首次运行即启动105城无限任务。
-
-```powershell
-$env:CRPD_DATA_ROOT = "D:\Data Set\CRPD"
-
-.\.venv\Scripts\python.exe `
-  -m policydb.autopilot_cli fast-bulk-ingest `
-  --config .\config\continuous_sync.yaml `
-  --dry-run
-```
-
-运行5个城市：
-
-```powershell
-.\.venv\Scripts\python.exe `
-  -m policydb.autopilot_cli fast-bulk-ingest `
-  --max-cities 5 `
-  --apply `
-  --resume
-```
-
-建议按以下顺序扩大范围：
-
-```text
-本地fixture
-→ 单一真实来源
-→ 单一城市
-→ 5个城市
-→ 10个低覆盖城市
-→ 105城第一轮快速覆盖
-```
-
----
-
-## PDF处理
-
-### 盘点D盘已有PDF
-
-```powershell
-.\.venv\Scripts\python.exe `
-  -m policydb.autopilot_cli pdf inventory `
-  --root "D:\Data Set\CRPD"
-```
-
-### 小批量归档、发现和解析
-
-```powershell
-.\.venv\Scripts\python.exe `
-  -m policydb.autopilot_cli pdf archive `
-  --root "D:\Data Set\CRPD" `
-  --limit 20 `
-  --apply
-
-.\.venv\Scripts\python.exe `
-  -m policydb.autopilot_cli pdf discover `
-  --limit 20 `
-  --apply
-
-.\.venv\Scripts\python.exe `
-  -m policydb.autopilot_cli pdf download `
-  --limit 10 `
-  --workers 4 `
-  --apply
-
-.\.venv\Scripts\python.exe `
-  -m policydb.autopilot_cli pdf parse `
-  --limit 10 `
-  --workers 2 `
-  --apply
-```
-
-详细说明参见 [PDF处理管线](docs/PDF_PIPELINE.md)。
-
----
-
-## D盘数据存储
-
-推荐数据根目录：
-
-```text
-D:\Data Set\CRPD
-├─ archive
-├─ raw
-│  └─ pdf
-├─ derived
-├─ curated
-├─ research
-├─ database
-├─ manifests
-├─ logs
-├─ outputs
-├─ jobs
-├─ control
-├─ quarantine
-└─ backups
-```
-
-推荐环境变量：
+推荐配置：
 
 ```text
 CRPD_DATA_ROOT=D:\Data Set\CRPD
@@ -422,215 +99,260 @@ POLICYDB_LOG_ROOT=D:\Data Set\CRPD\logs
 POLICYDB_OUTPUT_ROOT=D:\Data Set\CRPD\outputs
 ```
 
-正式存储迁移采用：
+目录结构：
 
 ```text
-复制
-→ SHA-256校验
-→ 写入非敏感配置
-→ 完整性验证
+D:\Data Set\CRPD
+├─ archive\pdf|html|text|attachments
+├─ curated
+├─ research
+├─ database
+├─ manifests
+├─ logs
+├─ outputs
+├─ jobs
+├─ quarantine
+└─ backups
 ```
 
-系统不会删除源文件；D盘不可用时也不会静默回写C盘。
+先预览，再确认迁移：
 
----
+```powershell
+uv run policydb storage plan-migration --target "D:\Data Set\CRPD"
+uv run policydb storage migrate --target "D:\Data Set\CRPD" --confirm
+uv run policydb storage verify --target "D:\Data Set\CRPD"
+```
 
-## 搜索与AI配置
+迁移采用“复制 → SHA-256 校验 → 写入非敏感偏好 → 验证”，不会删除源文件。D 盘不可用时
+正式写入失败，不会静默回写 C 盘。
 
-支持的搜索服务包括：
+## 配置 SiliconFlow 与搜索 API
 
-* Serper；
-* Tavily；
-* Bing。
-
-搜索结果只作为候选，普通媒体和非官方转载不会直接成为canonical source。
-
-AI和搜索密钥应保存在Windows Keyring或本机环境变量中，不得写入：
+本地 Dashboard 的“个人设置”页把密钥写入 Windows Keyring；密钥不会进入 README、JSON、
+DuckDB、Parquet、任务参数或 Git。也可以通过本机环境注入：
 
 ```text
-Git
-README
-DuckDB
-Parquet
-JSON任务
-日志
-命令行参数
+AI_PROVIDER=siliconflow
+SILICONFLOW_API_KEY=<仅保存在本机>
+SILICONFLOW_BASE_URL=https://api.siliconflow.cn/v1
+SILICONFLOW_CHAT_MODEL=<从 /v1/models 选择>
+SILICONFLOW_VERIFY_MODEL=<建议与首轮不同>
+SILICONFLOW_EMBEDDING_MODEL=BAAI/bge-m3
+SILICONFLOW_RERANK_MODEL=BAAI/bge-reranker-v2-m3
 ```
 
-测试AI连接：
+测试连接和读取模型：
 
 ```powershell
 uv run policydb ai test
 uv run policydb ai models
 ```
 
----
+模型名不写死，以 SiliconFlow `GET /v1/models` 的实际结果为准。
 
-## 数据完整性
+搜索服务支持 Serper、Tavily、Bing。可按顺序配置多个 Provider，主 Provider 超时或失败时自动
+切换；搜索结果只作为候选，普通媒体不能直接成为 canonical source。
 
-CRPD分别报告：
+```text
+SEARCH_PROVIDERS=Serper,Tavily,Bing
+```
 
-| 完整性维度 | 定义                                |
-| ----- | --------------------------------- |
-| 城市覆盖  | 有政策文本城市数 / 注册城市数                  |
-| 来源覆盖  | resolved、verified、enabled槽位 / 525 |
-| 时间覆盖  | 有文本的city-year / 配置期内city-year     |
-| 字段完整  | 标题、日期、正文、URL、哈希和来源字段              |
-| 历史回溯  | 已形成回溯状态的来源                        |
-| PDF完整 | PDF发现、下载、解析、关联和OCR状态              |
-| 数据新鲜度 | 最近一次成功抓取或来源更新时间                   |
+每个 Provider 的 Key 应保存在 Keyring；未配置搜索 API 时，官方列表页抓取和原链接回溯仍可运行。
 
-### 状态语义
+## 105 城市来源矩阵
 
-| 状态                   | 含义             |
-| -------------------- | -------------- |
-| `SUCCESS`            | 当前有界任务成功完成     |
-| `COMPLETE_WITH_GAPS` | 主范围完成，但存在少量缺口  |
-| `PARTIAL_BUT_USABLE` | 已有可用文本，但尚未证明完整 |
-| `PARTIAL_EMPTY`      | 当前批次未取得有效文档    |
-| `RETRY_WAIT`         | 等待后续网络或来源重试    |
-| `HUMAN_REVIEW`       | 需要人工确认         |
-| `FAILED_TERMINAL`    | 当前自动流程无法继续     |
-| `OCR_PENDING`        | PDF疑似扫描件，等待OCR |
+每个城市至少要求：市政府、政府公报、住建部门、公积金中心和自然资源部门。运行：
 
-“任务运行完成”不等于“政策覆盖完整”。未扫描、失败和未知状态不会被转换为零政策。
+```powershell
+uv run policydb sources complete-matrix
+uv run policydb sources discover-city --city 南京市
+uv run policydb sources discover-all --city-limit 5
+uv run policydb sources discover-all --apply
+uv run policydb sources health-all
+uv run policydb sources enable-recommended --limit 20
+uv run policydb sources complete-matrix
+uv run policydb sources repair
+uv run policydb sources validate-registry
+```
 
----
+自动发现只登记经过官方域名校验的候选，默认保持禁用；来源健康分达到 90、robots 允许、入口可
+访问、能发现详情页且正文可解析后，才可推荐启用。
 
-## 研究数据与导出
+当前网络不可访问政府站点时，先保留完整的 105 城市 × 5 必需角色槽位，不得填造网址。更换网络并配置搜索 API 后，依次执行 discover-all --apply、health-all 和 complete-matrix；直到矩阵 CSV 中 525 个槽位均有已验证来源，才可称来源 URL 完整。缺口明细输出到 D:\Data Set\CRPD\outputs\coverage\city_source_requirement_matrix.csv。
 
-系统面向以下研究单元输出数据：
+## 历史全量扫描
 
-* 政策动作；
-* 城市—月份；
-* 城市—年份；
-* 城市—政策类型—年份；
-* 来源角色覆盖；
-* city-year完整性；
-* 文档和PDF归档覆盖；
-* 缺口约束研究面板。
+首次运行不要直接启动 105 城市全时段付费 AI。按以下顺序验收：
+
+```text
+本地 fixture → 一个真实来源 → 南京最近30天 → 南京一年
+→ 一个省份一年 → 10个城市 → 105城市分年度执行
+```
 
 常用命令：
 
 ```powershell
-uv run policydb search `
-  --keyword "城市更新" `
-  --region "武汉市"
-
-uv run policydb stats `
-  --group-by year,province,topic
-
-uv run policydb export `
-  --view city_month_panel `
-  --format xlsx `
-  --output outputs/city_month_panel.xlsx
+uv run policydb crawl historical --from 2018-01-01 --to 2018-12-31 --cities 南京市
+uv run policydb crawl official-update
+uv run policydb crawl web-discovery
+uv run policydb crawl seed-backtrack
+uv run policydb crawl recover-missing
 ```
 
-研究快照为不可变目录，后台持续抓取不会直接修改既有快照。
+历史任务按“城市 × 来源角色 × 年份”分片。达到安全上限只能记为 `partial`；只有分页与搜索结果
+耗尽、详情页处理完成、错误已处理且相关性已判断，才能写入完整状态。
 
-当前Gold政策强度状态：
+## AI 分类、正式池与人工池
 
-```text
-policy_intensity_enabled = false
-policy_intensity_rows = 0
+```powershell
+uv run policydb ai classify --run-id <RUN_ID>
+uv run policydb ai verify --run-id <RUN_ID>
+uv run policydb ai deduplicate
+uv run policydb ai route-pools
 ```
 
----
+自动进入正式存量池要求官方来源、正文完整、Schema 合法、证据可定位、分类合法、地区无冲突、
+去重关系确定且综合置信度不低于 0.90。其余先进入自动抽取、来源恢复或第二轮自动复核；只有明确
+冲突和多次自动恢复失败才进入人工审核。
+
+AI 不得生成原文不存在的标题、日期、机关、文号、URL 或政策内容。
+
+## Windows 自动更新
+
+配置文件默认启用分层计划，但修改 YAML 不等于任务已经安装。预览并由本机管理员确认：
+
+```powershell
+uv run policydb schedule status
+uv run policydb schedule install --confirm
+uv run policydb schedule run-daily
+uv run policydb schedule run-weekly
+uv run policydb schedule run-monthly
+uv run policydb schedule uninstall --confirm
+```
+
+- 每日 03:00：7 日重叠增量、搜索补漏、归档、AI、去重、重建和验证；
+- 每周：回扫 30 天、重试失败、补抓 PDF 和替代来源；
+- 每月：完整扫描上月核心来源，只有证据完整时确认零政策月份。
+
+## Dashboard
+
+```powershell
+uv run policydb dashboard
+```
+
+主要页面：数据总览、政策中心、自动更新与完整性、数据质量、人工审核、个人设置。Dashboard
+读取稳定 DuckDB；抓取、解析、AI 和重建均在独立后台进程运行。
+
+## 覆盖度解释
+
+系统分别报告：
+
+- 来源覆盖率；
+- 时间窗口覆盖率；
+- 官方正文覆盖率；
+- PDF 归档率；
+- 分类完成率；
+- 去重完成率。
+
+覆盖状态：`not_scanned`、`partial`、`failed`、`complete_policy_found`、
+`complete_confirmed_zero`。只有最后两种属于完整窗口。
+
+## 研究数据与导出
+
+```powershell
+uv run policydb search --keyword "城市更新" --region "武汉市"
+uv run policydb stats --group-by year,province,topic
+uv run policydb export --view city_month_panel --format xlsx --output outputs/city_month_panel.xlsx
+uv run policydb release --version 0.1.0
+```
+
+核心视图包括政策动作中心、城市月度/年度面板、省份月度/年度覆盖、来源角色覆盖、文档归档覆盖
+和覆盖约束研究面板。未完整扫描的政策数保持 null，不伪造为 0。
 
 ## 质量控制
 
 ```powershell
 uv run ruff check .
 uv run pytest --basetemp .test-tmp-local
-uv run policydb validate
 uv run policydb migrate-v2 verify
+uv run policydb validate
 uv run policydb sources validate-registry
 ```
 
-系统质量边界包括：
+## 项目状态与限制
 
-* Raw原文永不覆盖；
-* 多网站转载保留全部发布证据；
-* 去重不删除版本关系；
-* AI结果必须能够定位到原文证据；
-* 未知和未扫描状态保持为空；
-* 抓取、解析和Dashboard相互解耦；
-* 原始PDF、数据库和API密钥不进入Git。
+代码、配置、任务安装、真实抓取、覆盖验证和研究就绪是六个不同状态。来源矩阵文件存在不代表
+五类部门已全部找到；创建 run_id 或 validate 通过也不代表抓取成功。真实抓取成功至少应同时看到
+`source_count > 0`、`item_count > 0`、`fetched > 0` 和 `document_versions > 0`。
 
----
+政府网站会改版、下线、启用验证码或调整 robots；系统提供持续监测、重试、替代入口和失败报告，
+但不能承诺所有来源永久可用。付费搜索和 AI 结果必须以实际 API 配置与运行日志为准。
 
-## 文档导航
+## 可审计逐城全量搜索（V2）
 
-| 文档                                         | 内容                       |
-| ------------------------------------------ | ------------------------ |
-| [系统架构](docs/ARCHITECTURE.md)               | Bronze、Silver、Gold及运行数据流 |
-| [Dashboard指南](docs/DASHBOARD_GUIDE.md)     | 页面、指标、操作队列和安全边界          |
-| [运行手册](docs/OPERATIONS.md)                 | 启动、暂停、恢复和故障处理            |
-| [数据完整性](docs/DATA_COMPLETENESS.md)         | 指标、分母和状态解释               |
-| [全量抓取流程](docs/FULL_CRAWL_WORKFLOW.md)      | 六轮全量生产流程                 |
-| [逐市补齐流程](docs/CITY_COMPLETION_WORKFLOW.md) | 城市和来源角色补全                |
-| [PDF处理管线](docs/PDF_PIPELINE.md)            | 归档、下载、解析和预览              |
-| [状态模型](docs/STATUS_MODEL.md)               | 任务、来源和文档状态语义             |
+实际运行统一使用控制台入口：
 
----
+```powershell
+.\.venv\Scripts\policydb.exe storage verify --target "D:\Data Set\CRPD"
+.\.venv\Scripts\policydb.exe network diagnose --city "南京市"
+.\.venv\Scripts\policydb.exe sources discover-all
+.\.venv\Scripts\policydb.exe sources verify-candidates
+.\.venv\Scripts\policydb.exe sources audit-525
+.\.venv\Scripts\policydb.exe sources seed-record-candidates
+.\.venv\Scripts\policydb.exe sources export-candidate-audit
+.\.venv\Scripts\policydb.exe crawl exhaustive-city --city "南京市" --from "2018-01-01" --to "today" --no-run-ai
+.\.venv\Scripts\policydb.exe crawl exhaustive-all --from "2018-01-01" --to "today" --no-run-ai
+.\.venv\Scripts\policydb.exe progress watch
+.\.venv\Scripts\policydb.exe coverage build
+.\.venv\Scripts\policydb.exe dashboard
+```
 
-## 当前阶段与路线图
+政府网页抓取固定完全直连且不读取环境代理；AI和搜索API使用独立代理会话。525个槽位中没有
+证据的项保持 `unresolved`，不会用推测URL补齐。城市—年度只有在来源、时间、分页、错误、
+归档、正文、AI和去重全部闭环后才会标为 `certified_complete`。
+## Current continuous-sync standard
 
-### 已完成
+CRPD currently prioritizes real operability, breadth of city/policy-text coverage, auditable source gaps, and an actionable local Dashboard. The active layers are Bronze (fast raw coverage) and Silver (cleaning, verification, deduplication); Gold policy-intensity is a disabled placeholder and makes no model/API calls.
 
-* [x] Bronze原始采集层；
-* [x] Silver清洗与验证层；
-* [x] 105城×5来源角色注册矩阵；
-* [x] FAST_BULK_INGEST；
-* [x] checkpoint / resume；
-* [x] Streamlit Dashboard；
-* [x] HTML原文归档；
-* [x] PDF盘点、归档、下载、解析和预览；
-* [x] 数据质量与缺口审计；
-* [x] 研究快照；
-* [x] GitHub Actions测试。
+The bounded breadth-first command is:
 
-### 正在推进
+```powershell
+$env:CRPD_DATA_ROOT = "D:\Data Set\CRPD"
+\.venv\Scripts\python.exe -m policydb.autopilot_cli fast-bulk-ingest --config .\config\continuous_sync.yaml --dry-run
+\.venv\Scripts\python.exe -m policydb.autopilot_cli fast-bulk-ingest --max-cities 5 --apply --resume
+```
 
-* [ ] 525个槽位大规模来源发现和严格验证；
-* [ ] 3个无文本城市补齐；
-* [ ] 2018年以来逐市历史回溯；
-* [ ] 深层分页与复杂政府网站适配；
-* [ ] PDF附件和政府公报补全；
-* [ ] critical gaps持续压降。
+It rotates cities across the five required roles, limits each source to 10 minutes/30 list pages/300 documents/one attachment attempt by default, and persists checkpointed `PARTIAL_BUT_USABLE` or `PARTIAL_EMPTY` states. It does not claim strict historical completeness.
 
-### 后续计划
+PDFs are now integrated into the same auditable workflow. Existing files are
+inventoried read-only, copied by SHA-256 to `raw/pdf/objects`, linked through
+`document_attachments`, parsed with PyMuPDF into `pdf_text_versions`, and
+shown in Dashboard completeness metrics. OCR is disabled; scanned candidates
+remain `OCR_PENDING`. The bounded CLI is:
 
-* [ ] 中文扫描PDF OCR；
-* [ ] 政府公报自动拆分；
-* [ ] 政策工具和政策强度指标体系；
-* [ ] 多期DID研究面板；
-* [ ] 数据版本发布和引用规范。
+```powershell
+\.venv\Scripts\python.exe -m policydb.autopilot_cli pdf inventory --root "D:\Data Set\CRPD"
+\.venv\Scripts\python.exe -m policydb.autopilot_cli pdf archive --limit 20 --apply
+\.venv\Scripts\python.exe -m policydb.autopilot_cli pdf discover --limit 20 --apply
+\.venv\Scripts\python.exe -m policydb.autopilot_cli pdf download --limit 10 --workers 4 --apply
+\.venv\Scripts\python.exe -m policydb.autopilot_cli pdf parse --limit 10 --workers 2 --apply
+\.venv\Scripts\python.exe -m policydb.autopilot_cli pdf report
+```
 
----
+See [docs/PDF_PIPELINE.md](docs/PDF_PIPELINE.md) for storage, association,
+safe viewing, retry and audit semantics. PDF stages are bounded and do not
+enable Gold policy-intensity measurement.
 
-## 项目边界
+Start and inspect the local Dashboard with:
 
-CRPD是一套政策数据基础设施，而不是对政府网站永久可用性的承诺。
+```powershell
+.\scripts\start_dashboard.ps1 -NoBrowser
+.\scripts\check_dashboard.ps1
+.\scripts\stop_dashboard.ps1
+```
 
-政府网站可能发生：
+Dashboard operations write validated JSON jobs under `D:\Data Set\CRPD\control\dashboard_jobs`; no arbitrary shell command is accepted. The Dashboard reads curated Parquet, checkpoints, source registries, gap records, and run status rather than simulated values. It exposes overview KPIs, the 525-slot funnel, city/role matrix, year coverage, document quality, source health, gaps, architecture, and the disabled Gold placeholder.
 
-* 页面改版；
-* 域名迁移；
-* TLS异常；
-* 验证码或访问限制；
-* robots规则变化；
-* 历史页面下线；
-* 附件失效。
+Research snapshots are immutable run directories containing curated summaries and a manifest with `policy_intensity_enabled=false` and `policy_intensity_rows=0`.
 
-系统通过来源健康检查、失败重试、替代入口、缺口登记和人工审核降低上述风险，但不会将未完成扫描错误标记为完整。
-
----
-
-<div align="center">
-
-**CRPD 3.0**
-
-从静态政策表，走向可追溯、可补全、可持续更新的城市政策研究基础设施。
-
-</div>
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/DASHBOARD_GUIDE.md](docs/DASHBOARD_GUIDE.md), [docs/OPERATIONS.md](docs/OPERATIONS.md), [docs/DATA_COMPLETENESS.md](docs/DATA_COMPLETENESS.md), [docs/FULL_CRAWL_WORKFLOW.md](docs/FULL_CRAWL_WORKFLOW.md), [docs/CITY_COMPLETION_WORKFLOW.md](docs/CITY_COMPLETION_WORKFLOW.md), and [docs/STATUS_MODEL.md](docs/STATUS_MODEL.md).
