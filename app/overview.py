@@ -15,6 +15,10 @@ from policydb.dashboard_metrics import (
     document_quality,
     gap_register,
     overview_metrics,
+    pdf_city_coverage,
+    pdf_completeness,
+    pdf_processing_funnel,
+    pdf_summary,
     source_health,
 )
 from policydb.settings import Settings
@@ -64,7 +68,8 @@ def render_overview(db) -> None:
     health_columns[4].metric("最新文档日期", data.get("latest_document_date") or "不可用")
     health_columns[5].metric("最近进展", data.get("last_progress_at") or "不可用")
 
-    tabs = st.tabs(["抓取进展", "城市×来源角色", "年份覆盖", "来源与缺口", "系统架构", "政策强度占位"])
+    pdf_data = pdf_summary(settings)
+    tabs = st.tabs(["抓取进展", "城市×来源角色", "年份覆盖", "来源与缺口", "系统架构", "政策强度占位", "PDF 完整性"])
     with tabs[0]:
         runtime = data.get("runtime") or {}
         st.json({key: runtime.get(key) for key in ("automation_id", "run_id", "mode", "round", "status", "current_city", "current_source", "current_step", "documents_added", "last_heartbeat_at") if key in runtime})
@@ -112,3 +117,16 @@ def render_overview(db) -> None:
         st.write(f"已有可测度文档：{quality.get('total', 0)}（仅表示文档存在，不表示已测度）")
         st.write("已测度文档：0")
         st.write("下一步：配置指标体系、提示词版本和测度模型后启用")
+    with tabs[6]:
+        st.subheader("PDF 发现与完整性")
+        st.caption("PDF 统计来自 curated Parquet 与 manifests；原始文件不会由 Dashboard 刷新时扫描或改写。")
+        pdf_columns = st.columns(5)
+        for column, (label, key) in zip(pdf_columns, [("库存", "inventory_files"), ("有效资产", "valid_pdf_assets"), ("已关联", "linked_policy_pdf"), ("已下载", "downloaded"), ("已解析", "parsed")], strict=True):
+            column.metric(label, _display(pdf_data.get(key)))
+        st.json(pdf_completeness(settings))
+        st.markdown("#### PDF 处理漏斗")
+        st.dataframe(safe_pandas(pdf_processing_funnel(settings)), hide_index=True, width="stretch")
+        city_pdf = pdf_city_coverage(settings)
+        if not city_pdf.is_empty():
+            st.markdown("#### 城市关联覆盖")
+            st.dataframe(safe_pandas(city_pdf), hide_index=True, width="stretch")

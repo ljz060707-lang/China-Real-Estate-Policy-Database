@@ -21,6 +21,7 @@ from policydb.dashboard_queries import (
     policy_metrics,
     policy_trend,
 )
+from policydb.pdf_pipeline import pdf_attachments_for_record, pdf_text_json, safe_pdf_asset_path
 from policydb.settings import Settings
 from policydb.taxonomy_v2 import load_taxonomy
 
@@ -208,7 +209,7 @@ def _policy_table(db, filters: dict, primary_labels: dict[str, str], secondary_l
     st.caption(f"共 {total:,} 个政策文件 · 第 {page}/{pages} 页")
 
 
-def _detail_panel(db, root: Path, primary_labels: dict[str, str], secondary_labels: dict[str, str]) -> None:
+def _detail_panel(db, settings: Settings, primary_labels: dict[str, str], secondary_labels: dict[str, str]) -> None:
     st.markdown("#### 政策详情")
     record_id = st.session_state.get("pc_detail_record")
     if not record_id:
@@ -231,10 +232,31 @@ def _detail_panel(db, root: Path, primary_labels: dict[str, str], secondary_labe
     with tabs[0]:
         st.caption(first.get("evidence_excerpt") or "暂无关键证据语句。")
         st.text_area("清洗后的政策正文", value=policy.get("full_text") or "暂无正文", height=300, disabled=True, key=f"pc_text_{record_id}")
+        pdf_attachments = pdf_attachments_for_record(settings, record_id)
+        if not pdf_attachments.is_empty():
+            st.markdown("#### PDF 附件")
+            for attachment in pdf_attachments.head(5).iter_rows(named=True):
+                asset_id = str(attachment.get("pdf_asset_id") or "")
+                path = safe_pdf_asset_path(settings, asset_id) if asset_id else None
+                st.caption(f"{attachment.get('filename') or asset_id} · {attachment.get('attachment_role') or 'UNKNOWN'} · {attachment.get('download_status') or 'UNKNOWN'} · {attachment.get('parse_status') or 'UNKNOWN'}")
+                if path is not None:
+                    st.download_button("下载 PDF", path.read_bytes(), path.name, key=f"pc_pdf_{asset_id}", width="stretch")
+                    with st.expander("安全预览", expanded=False):
+                        st.pdf(path.read_bytes())
+                    parsed = pdf_text_json(settings, asset_id)
+                    if parsed and parsed.get("full_text"):
+                        st.text_area("PDF 提取文本", value=str(parsed["full_text"]), height=220, disabled=True, key=f"pc_pdf_text_{asset_id}")
+                else:
+                    st.info("PDF 资产尚未落到受控归档对象，当前仅保留关联与审计记录。")
         for file in files.iter_rows(named=True):
-            path = root / str(file.get("archive_relative_path") or "")
-            if file.get("content_type", "").lower().find("pdf") >= 0 and path.exists():
-                st.download_button("下载 PDF/附件", path.read_bytes(), path.name, key=f"pc_file_{file['archive_relative_path']}", width="stretch")
+            relative = str(file.get("archive_relative_path") or "")
+            path = (settings.policy_archive_root / relative).resolve()
+            if file.get("content_type", "").lower().find("pdf") >= 0 and path.is_file():
+                try:
+                    path.relative_to(settings.policy_archive_root.resolve())
+                except ValueError:
+                    continue
+                st.download_button("下载历史 PDF/附件", path.read_bytes(), path.name, key=f"pc_file_{relative}", width="stretch")
     with tabs[1]:
         for action in actions.iter_rows(named=True):
             st.markdown(f"**{action.get('clause_text') or '待抽取动作'}**")
@@ -273,9 +295,4 @@ def render_policy_center(db, root: str | Path | None = None) -> None:
         _charts(db, filters, primary_labels)
         _policy_table(db, filters, primary_labels, secondary_labels)
     with detail_column:
-        _detail_panel(
-            db,
-            Settings.discover(root).policy_archive_root,
-            primary_labels,
-            secondary_labels,
-        )
+        _detail_panel(db, Settings.discover(root), primary_labels, secondary_labels)

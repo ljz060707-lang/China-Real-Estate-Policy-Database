@@ -18,11 +18,13 @@ from typing import Any
 from policydb.fast_bulk_ingest import FastBulkConfig, FastBulkIngestController
 from policydb.full_sync import FullSyncConfig, FullSyncController
 from policydb.parquet_store import read_parquet_snapshot
+from policydb.pdf_pipeline import PDFPipeline
 from policydb.settings import Settings
 from policydb.source_discovery import REQUIRED_ROLES
 
-ALLOWED_ACTIONS = {"fast_bulk_ingest", "city_fast_ingest", "city_complete", "source_resume", "refresh_metrics", "research_snapshot"}
+ALLOWED_ACTIONS = {"fast_bulk_ingest", "city_fast_ingest", "city_complete", "source_resume", "refresh_metrics", "research_snapshot", "pdf_inventory", "pdf_archive", "pdf_discover", "pdf_download", "pdf_parse", "pdf_match", "pdf_run"}
 ACTIVE_STATUSES = {"QUEUED", "RUNNING"}
+PDF_WRITE_ACTIONS = {"pdf_archive", "pdf_discover", "pdf_download", "pdf_parse", "pdf_match", "pdf_run"}
 
 
 def _now() -> str:
@@ -54,7 +56,7 @@ def validate_job_request(settings: Settings, action: str, scope: Mapping[str, An
     scope = dict(scope or {})
     cities = [str(value) for value in (scope.get("cities") or []) if value]
     roles = [str(value) for value in (scope.get("source_roles") or []) if value]
-    if action in {"fast_bulk_ingest", "city_fast_ingest", "city_complete"} and not confirmed:
+    if action in {"fast_bulk_ingest", "city_fast_ingest", "city_complete", *PDF_WRITE_ACTIONS} and not confirmed:
         raise ValueError("confirmation is required for a crawl operation")
     if action in {"city_fast_ingest", "city_complete"} and len(cities) != 1:
         raise ValueError("city operation requires exactly one registered city")
@@ -66,7 +68,13 @@ def validate_job_request(settings: Settings, action: str, scope: Mapping[str, An
     invalid_roles = sorted(set(roles) - set(REQUIRED_ROLES))
     if invalid_roles:
         raise ValueError(f"unknown source role(s): {invalid_roles}")
-    return {"action": action, "scope": {"cities": cities, "source_roles": roles, "source_id": scope.get("source_id"), "max_cities": scope.get("max_cities")}, "confirmed": bool(confirmed)}
+    limit = scope.get("limit")
+    if limit is not None and (not isinstance(limit, int) or limit < 1 or limit > 1000):
+        raise ValueError("PDF job limit must be an integer between 1 and 1000")
+    workers = scope.get("workers")
+    if workers is not None and (not isinstance(workers, int) or workers < 1 or workers > 8):
+        raise ValueError("PDF workers must be an integer between 1 and 8")
+    return {"action": action, "scope": {"cities": cities, "source_roles": roles, "source_id": scope.get("source_id"), "max_cities": scope.get("max_cities"), "limit": limit, "workers": workers}, "confirmed": bool(confirmed)}
 
 
 def _job_dir(settings: Settings) -> Path:
@@ -135,6 +143,26 @@ def run_next_job(settings: Settings | None = None) -> dict[str, Any] | None:
         elif action == "research_snapshot":
             from policydb.research_snapshot import create_research_snapshot
             result = create_research_snapshot(settings)
+        elif action.startswith("pdf_"):
+            pipeline = PDFPipeline(settings)
+            scope = job.get("scope", {})
+            city_id = (scope.get("cities") or [None])[0]
+            source_id = scope.get("source_id")
+            limit = scope.get("limit")
+            if action == "pdf_inventory":
+                result = pipeline.inventory(limit=limit)
+            elif action == "pdf_archive":
+                result = pipeline.archive(limit=limit)
+            elif action == "pdf_discover":
+                result = pipeline.discover(limit=limit, city_id=city_id, source_id=source_id)
+            elif action == "pdf_download":
+                result = pipeline.download(limit=limit, city_id=city_id, source_id=source_id)
+            elif action == "pdf_parse":
+                result = pipeline.parse(limit=limit, city_id=city_id, source_id=source_id)
+            elif action == "pdf_match":
+                result = pipeline.match(limit=limit)
+            else:
+                result = pipeline.run(limit=limit, city_id=city_id, source_id=source_id)
         else:
             result = {"status": "REFRESH_REQUESTED"}
         return _update_job(path, {"status": "COMPLETED", "finished_at": _now(), "result": result})

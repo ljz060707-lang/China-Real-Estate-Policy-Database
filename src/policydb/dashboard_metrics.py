@@ -15,6 +15,7 @@ from typing import Any
 import polars as pl
 
 from policydb.parquet_store import read_parquet_snapshot
+from policydb.pdf_pipeline import PDF_ATTACHMENT_SCHEMA, PDFPipeline
 from policydb.settings import Settings
 from policydb.source_discovery import REQUIRED_ROLES
 
@@ -212,4 +213,71 @@ def gold_placeholder(settings: Settings | None = None) -> dict[str, Any]:
     return {"enabled": False, "status": "DISABLED_PLACEHOLDER", "reason": "政策强度指标体系仍在设计", "measurable_documents": 0, "policy_intensity_calls": 0, "next_step": "配置指标体系、提示词版本和测度模型后启用", "updated_at": datetime.now(UTC).isoformat()}
 
 
-__all__ = ["city_role_matrix", "city_year_coverage", "cycle_history", "document_quality", "gap_register", "gold_placeholder", "overview_metrics", "source_health"]
+def pdf_summary(settings: Settings | None = None) -> dict[str, Any]:
+    """Return PDF metrics from curated/manifest snapshots without raw scans."""
+    settings = settings or Settings.discover()
+    return PDFPipeline(settings, initialize_storage=False).summary()
+
+
+def pdf_city_coverage(settings: Settings | None = None) -> pl.DataFrame:
+    settings = settings or Settings.discover()
+    attachments = _read(settings, "document_attachments")
+    if attachments.is_empty():
+        return pl.DataFrame(schema={"city_id": pl.String, "attachments": pl.Int64, "linked": pl.Int64, "downloaded": pl.Int64, "parsed": pl.Int64, "human_review": pl.Int64})
+    return attachments.with_columns(
+        pl.col("document_id").is_not_null().alias("is_linked"),
+        pl.col("download_status").eq("DOWNLOADED").alias("is_downloaded"),
+        pl.col("parse_status").eq("PARSED").alias("is_parsed"),
+        pl.col("review_status").eq("HUMAN_REVIEW").alias("is_human_review"),
+    ).group_by("city_id").agg(
+        pl.len().alias("attachments"),
+        pl.col("is_linked").sum().alias("linked"),
+        pl.col("is_downloaded").sum().alias("downloaded"),
+        pl.col("is_parsed").sum().alias("parsed"),
+        pl.col("is_human_review").sum().alias("human_review"),
+    ).sort("city_id")
+
+
+def pdf_processing_funnel(settings: Settings | None = None) -> pl.DataFrame:
+    summary = pdf_summary(settings)
+    return pl.DataFrame(
+        [
+            {"stage": "inventory", "count": summary.get("inventory_files", 0)},
+            {"stage": "valid_assets", "count": summary.get("valid_pdf_assets", 0)},
+            {"stage": "linked", "count": summary.get("linked_policy_pdf", 0)},
+            {"stage": "downloaded", "count": summary.get("downloaded", 0)},
+            {"stage": "parsed", "count": summary.get("parsed", 0)},
+            {"stage": "ocr_pending", "count": summary.get("ocr_pending", 0)},
+            {"stage": "human_review_or_unmatched", "count": summary.get("unmatched_existing_pdf", 0)},
+        ],
+        schema={"stage": pl.String, "count": pl.Int64},
+    )
+
+
+def pdf_failures(settings: Settings | None = None) -> pl.DataFrame:
+    settings = settings or Settings.discover()
+    frame = _read(settings, "document_attachments", list(PDF_ATTACHMENT_SCHEMA))
+    if frame.is_empty():
+        return pl.DataFrame(schema={"failure": pl.String, "count": pl.Int64})
+    failure = pl.concat_str(
+        [pl.col("download_status").fill_null(""), pl.col("parse_status").fill_null(""), pl.col("last_error").fill_null("")],
+        separator=" | ",
+    ).alias("failure")
+    return frame.with_columns(failure).filter(pl.col("failure").str.contains("RETRY|FAILED|QUARANTINE|OCR_PENDING|UNMATCHED|PARSE_FAILED")).group_by("failure").len(name="count").sort("count", descending=True)
+
+
+def pdf_completeness(settings: Settings | None = None) -> dict[str, Any]:
+    summary = pdf_summary(settings)
+    return {
+        "asset_inventory": summary.get("inventory_files", 0),
+        "linked_policy_pdf": summary.get("linked_policy_pdf", 0),
+        "download_rate": summary.get("pdf_download_rate"),
+        "parse_rate": summary.get("pdf_parse_rate"),
+        "html_pdf_both": summary.get("html_pdf_both", 0),
+        "unmatched_existing_pdf": summary.get("unmatched_existing_pdf", 0),
+        "ocr_enabled": False,
+        "updated_at": summary.get("updated_at"),
+    }
+
+
+__all__ = ["city_role_matrix", "city_year_coverage", "cycle_history", "document_quality", "gap_register", "gold_placeholder", "overview_metrics", "pdf_city_coverage", "pdf_completeness", "pdf_failures", "pdf_processing_funnel", "pdf_summary", "source_health"]

@@ -13,7 +13,7 @@ import hashlib
 import json
 import os
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
@@ -28,6 +28,7 @@ from policydb.full_sync import (
     source_is_crawl_ready,
 )
 from policydb.parquet_store import read_parquet_snapshot
+from policydb.pdf_pipeline import PDFPipeline, load_pdf_config
 from policydb.settings import Settings
 from policydb.source_discovery import REQUIRED_ROLES
 
@@ -132,6 +133,12 @@ class FastBulkConfig:
     gold_enabled: bool = False
     output: Path | None = None
     city_ids: tuple[str, ...] = ()
+    pdf_enabled: bool = True
+    pdf_discover: bool = True
+    pdf_download: bool = True
+    pdf_parse: bool = True
+    pdf_max_downloads_per_source: int = 20
+    pdf_max_downloads_per_job: int = 30
 
     def validate(self) -> None:
         if self.mode != FAST_BULK_INGEST:
@@ -145,6 +152,8 @@ class FastBulkConfig:
             "source_concurrency",
             "document_concurrency",
             "max_http_calls",
+            "pdf_max_downloads_per_source",
+            "pdf_max_downloads_per_job",
         ):
             if int(getattr(self, name)) < 1:
                 raise ValueError(f"{name} must be positive")
@@ -434,6 +443,34 @@ class FastBulkIngestController:
                 result.add(str(row["task_id"]))
         return result
 
+    def _run_pdf_for_task(self, task: Mapping[str, Any]) -> dict[str, Any]:
+        if not self.config.pdf_enabled:
+            return {"status": "DISABLED", "ocr_enabled": False}
+        try:
+            config = replace(
+                load_pdf_config(self.settings),
+                max_downloads_per_source=self.config.pdf_max_downloads_per_source,
+                max_downloads_per_job=self.config.pdf_max_downloads_per_job,
+            )
+            pdf = PDFPipeline(self.settings, config=config)
+            result: dict[str, Any] = {"status": "COMPLETED", "ocr_enabled": False}
+            if self.config.pdf_discover:
+                self._transition("pdf_discovery_started", task=task, reason_code="html_first_attachment_scan")
+                result["discover"] = pdf.discover(limit=self.config.pdf_max_downloads_per_job, city_id=task["city_id"], source_id=task["source_id"], run_id=self.run_id)
+                self._transition("pdf_discovery_completed", task=task, reason_code="pdf_evidence_persisted")
+            if self.config.pdf_download:
+                self._transition("pdf_download_started", task=task, reason_code="bounded_pdf_download")
+                result["download"] = pdf.download(limit=self.config.pdf_max_downloads_per_job, city_id=task["city_id"], source_id=task["source_id"], run_id=self.run_id)
+                self._transition("pdf_download_completed", task=task, reason_code="pdf_asset_archive_updated")
+            if self.config.pdf_parse:
+                self._transition("pdf_parse_started", task=task, reason_code="pymupdf_without_ocr")
+                result["parse"] = pdf.parse(limit=self.config.pdf_max_downloads_per_job, city_id=task["city_id"], source_id=task["source_id"], run_id=self.run_id)
+                self._transition("pdf_parse_completed", task=task, reason_code="pdf_text_version_updated")
+            result["summary"] = pdf.summary()
+            return result
+        except Exception as exc:
+            return {"status": "PDF_FAILED_NON_BLOCKING", "error_type": type(exc).__name__, "error": str(exc)[:500], "ocr_enabled": False}
+
     def run(self, *, city_ids: Sequence[str] | None = None) -> dict[str, Any]:
         if self.config.dry_run or not self.config.apply:
             queue = select_city_source_queue(self.settings, self.config, city_ids=city_ids)
@@ -485,7 +522,8 @@ class FastBulkIngestController:
                 try:
                     summary = FullSyncController(self.settings, config=full_config, output=task_dir, run_id=task["task_id"]).run(command="run")
                     status = _status_from_summary(summary)
-                    source_result = {"task_id": task["task_id"], "city_id": task["city_id"], "city_name": task["city_name"], "source_id": task["source_id"], "source_role": task["source_role"], "status": status, "fetched": int(sum(int(item.get("fetched") or 0) for item in (summary.get("source_results") or []))), "exit_code": summary.get("exit_code"), "run_dir": str(task_dir), "reason": (summary.get("source_results") or [{}])[0].get("reason_code"), "error": (summary.get("source_results") or [{}])[0].get("error_message")}
+                    pdf_result = self._run_pdf_for_task(task)
+                    source_result = {"task_id": task["task_id"], "city_id": task["city_id"], "city_name": task["city_name"], "source_id": task["source_id"], "source_role": task["source_role"], "status": status, "fetched": int(sum(int(item.get("fetched") or 0) for item in (summary.get("source_results") or []))), "exit_code": summary.get("exit_code"), "run_dir": str(task_dir), "reason": (summary.get("source_results") or [{}])[0].get("reason_code"), "error": (summary.get("source_results") or [{}])[0].get("error_message"), "pdf": pdf_result}
                 except Exception as exc:
                     source_result = {**task, "status": "FAILED_TERMINAL", "fetched": 0, "error": f"{type(exc).__name__}: {str(exc)[:500]}", "run_dir": str(task_dir)}
                 results.append(source_result)
@@ -495,7 +533,7 @@ class FastBulkIngestController:
                 checkpoint["checkpoint_id"] = hashlib.sha256(f"{self.run_id}|{task['task_id']}|{checkpoint_type}|{source_result['status']}".encode()).hexdigest()
                 _append_jsonl(self.checkpoint_path, checkpoint, unique_key="checkpoint_id")
                 self._transition("source_run_completed", task=task, reason_code=source_result["status"])
-                self._write_state({"source_results": results, "processed_sources": len(results), "processed_cities": len({str(item.get('city_id')) for item in results}), "documents_added": docs_added, "current_step": "checkpointed"})
+                self._write_state({"source_results": results, "processed_sources": len(results), "processed_cities": len({str(item.get('city_id')) for item in results}), "documents_added": docs_added, "pdf": source_result.get("pdf") or {}, "current_step": "checkpointed"})
             final_status = "PAUSED_BUDGET" if self._stop_requested() else "COMPLETED"
             self._transition("batch_completed", reason_code="stop_file" if final_status == "PAUSED_BUDGET" else "bounded_round_finished")
             state = self._write_state({"status": final_status, "source_results": results, "processed_sources": len(results), "processed_cities": len({str(item.get('city_id')) for item in results}), "documents_added": docs_added, "current_city": None, "current_source": None, "current_step": "batch_completed", "completed_at": _now()})

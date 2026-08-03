@@ -1,0 +1,20 @@
+pdf_pipeline:
+  # Non-sensitive runtime configuration.  Raw and curated data stay outside Git.
+  inventory_root: "D:/Data Set/CRPD"
+  archive_root: "D:/Data Set/CRPD/raw/pdf"
+  enabled: true
+  discover_during_html_crawl: true
+  download_during_fast_ingest: true
+  parse_after_download: true
+  ocr_enabled: false
+  max_downloads_per_source: 20
+  max_downloads_per_job: 30
+  download_workers: 4
+  parse_workers: 2
+  connect_timeout_seconds: 20
+  read_timeout_seconds: 90
+  total_timeout_seconds: 120
+  retry_count: 2
+  max_file_size_mb: 100
+  scan_text_threshold_per_page: 30
+  max_discovery_documents: 1000

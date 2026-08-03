@@ -17,6 +17,7 @@ from policydb.fast_bulk_ingest import (
     load_fast_bulk_config,
 )
 from policydb.full_sync import FullSyncConfig, FullSyncController
+from policydb.pdf_pipeline import PDFPipeline, load_pdf_config
 from policydb.settings import Settings
 from policydb.source_discovery import REQUIRED_ROLES
 from policydb.source_slots import rebuild_verification_audit
@@ -69,6 +70,35 @@ def _add_full_sync_args(command: argparse.ArgumentParser) -> None:
     command.add_argument("--output", type=Path)
     command.add_argument("--run-id")
     command.add_argument("--format", dest="report_formats", default="json,xlsx,parquet")
+    command.add_argument("--pdf-enabled", action="store_true", help="integrate bounded PDF discovery/download/parse after HTML crawl")
+    command.add_argument("--no-pdf-discover", action="store_false", dest="pdf_discover", default=True)
+    command.add_argument("--no-pdf-download", action="store_false", dest="pdf_download", default=True)
+    command.add_argument("--no-pdf-parse", action="store_false", dest="pdf_parse", default=True)
+    command.add_argument("--pdf-max-downloads-per-source", type=int, default=20)
+    command.add_argument("--pdf-max-downloads-per-job", type=int, default=30)
+
+
+def _add_pdf_scope_args(command: argparse.ArgumentParser, *, apply: bool = True) -> None:
+    command.add_argument("--root", type=Path, help="PDF inventory/data root; defaults to CRPD_DATA_ROOT")
+    command.add_argument("--limit", type=int)
+    command.add_argument("--city-id")
+    command.add_argument("--source-id")
+    if apply:
+        command.add_argument("--apply", action="store_true")
+    command.add_argument("--run-id")
+
+
+def _pdf_pipeline_for_args(settings: Settings, args: argparse.Namespace) -> PDFPipeline:
+    config = load_pdf_config(settings)
+    if args.root:
+        root = Path(args.root).resolve()
+        config = replace(config, inventory_root=root, archive_root=root / "raw" / "pdf")
+    if getattr(args, "workers", None) is not None:
+        if args.pdf_command == "download":
+            config = replace(config, download_workers=max(1, int(args.workers)))
+        elif args.pdf_command == "parse":
+            config = replace(config, parse_workers=max(1, int(args.workers)))
+    return PDFPipeline(settings, config=config)
 
 
 def main() -> None:
@@ -114,6 +144,29 @@ def main() -> None:
     fast.add_argument("--resume", action="store_true", default=True)
     fast.add_argument("--no-resume", action="store_false", dest="resume")
     fast.add_argument("--output", type=Path)
+    pdf = sub.add_parser("pdf", help="bounded PDF inventory/archive/discovery/download/parse workflow")
+    pdf_sub = pdf.add_subparsers(dest="pdf_command", required=True)
+    inventory = pdf_sub.add_parser("inventory", help="read-only recursive PDF inventory")
+    _add_pdf_scope_args(inventory, apply=False)
+    archive = pdf_sub.add_parser("archive", help="content-addressed copy of existing PDFs")
+    _add_pdf_scope_args(archive)
+    discover = pdf_sub.add_parser("discover", help="discover PDF links from existing policy pages")
+    _add_pdf_scope_args(discover)
+    download = pdf_sub.add_parser("download", help="bounded direct-government PDF downloads")
+    _add_pdf_scope_args(download)
+    download.add_argument("--workers", type=int)
+    parse = pdf_sub.add_parser("parse", help="bounded PyMuPDF text extraction; OCR remains disabled")
+    _add_pdf_scope_args(parse)
+    parse.add_argument("--workers", type=int)
+    match = pdf_sub.add_parser("match", help="deterministically match existing PDF assets")
+    _add_pdf_scope_args(match)
+    status = pdf_sub.add_parser("status", help="show current PDF metrics")
+    _add_pdf_scope_args(status, apply=False)
+    report = pdf_sub.add_parser("report", help="write a PDF integrity report")
+    _add_pdf_scope_args(report, apply=False)
+    report.add_argument("--output", type=Path)
+    run = pdf_sub.add_parser("run", help="run one bounded PDF inventory/archive/discover/download/parse cycle")
+    _add_pdf_scope_args(run)
     city = sub.add_parser("city", help="validated city-scoped operations")
     city_sub = city.add_subparsers(dest="city_command", required=True)
     for name in ("status", "fast-ingest", "complete", "report"):
@@ -168,6 +221,32 @@ def main() -> None:
         result = FastBulkIngestController(settings, config=config, output=args.output).run(city_ids=args.city_id)
         print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
         raise SystemExit(int(result.get("exit_code", 0)))
+    if args.command == "pdf":
+        write_commands = {"archive", "discover", "download", "parse", "match", "run"}
+        if args.pdf_command in write_commands and not args.apply:
+            raise SystemExit(f"pdf {args.pdf_command} requires --apply; inventory/status/report are read-only")
+        pipeline = _pdf_pipeline_for_args(settings, args)
+        run_id = args.run_id
+        if args.pdf_command == "inventory":
+            result = pipeline.inventory(limit=args.limit, run_id=run_id)
+        elif args.pdf_command == "archive":
+            result = pipeline.archive(limit=args.limit, run_id=run_id)
+        elif args.pdf_command == "discover":
+            result = pipeline.discover(limit=args.limit, city_id=args.city_id, source_id=args.source_id, run_id=run_id)
+        elif args.pdf_command == "download":
+            result = pipeline.download(limit=args.limit, city_id=args.city_id, source_id=args.source_id, run_id=run_id)
+        elif args.pdf_command == "parse":
+            result = pipeline.parse(limit=args.limit, city_id=args.city_id, source_id=args.source_id, run_id=run_id)
+        elif args.pdf_command == "match":
+            result = pipeline.match(limit=args.limit, run_id=run_id)
+        elif args.pdf_command == "status":
+            result = pipeline.summary()
+        elif args.pdf_command == "report":
+            result = pipeline.report(output=args.output)
+        else:
+            result = pipeline.run(limit=args.limit, city_id=args.city_id, source_id=args.source_id, run_id=run_id)
+        print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+        raise SystemExit(0)
     if args.command == "city":
         matrix = city_role_matrix(settings)
         selected = matrix.filter(pl.col("city_id").cast(pl.String) == args.city_id) if not matrix.is_empty() else matrix

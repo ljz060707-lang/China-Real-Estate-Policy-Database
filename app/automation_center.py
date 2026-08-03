@@ -6,7 +6,14 @@ import streamlit as st
 
 from app.ui import safe_pandas
 from policydb.dashboard_jobs import ALLOWED_ACTIONS, enqueue_job, list_jobs
-from policydb.dashboard_metrics import city_role_matrix, overview_metrics
+from policydb.dashboard_metrics import (
+    city_role_matrix,
+    overview_metrics,
+    pdf_city_coverage,
+    pdf_failures,
+    pdf_processing_funnel,
+    pdf_summary,
+)
 from policydb.settings import Settings
 from policydb.source_discovery import REQUIRED_ROLES
 
@@ -32,7 +39,7 @@ def render_automation_center(root: str | Path) -> None:
     data = overview_metrics(settings)
     st.subheader("抓取与补齐操作中心")
     st.caption("Dashboard 只写结构化 job request；正式 CLI/业务层由独立 worker 执行，不接受任意 shell 命令。")
-    tabs = st.tabs(["当前运行", "FAST_BULK_INGEST", "逐市补齐", "运行历史", "参数与阶段", "覆盖完整性"])
+    tabs = st.tabs(["当前运行", "FAST_BULK_INGEST", "逐市补齐", "运行历史", "参数与阶段", "覆盖完整性", "PDF Pipeline"])
     with tabs[0]:
         runtime = data.get("runtime") or {}
         st.json(runtime if runtime else {"status": "NO_ACTIVE_RUN"})
@@ -84,3 +91,28 @@ def render_automation_center(root: str | Path) -> None:
             suffix = f" ({percent:.1%})" if isinstance(percent, (int, float)) else ""
             st.write(f"{item.get('label', key)}：{numerator}/{denominator}{suffix}")
             st.caption(item.get("definition", ""))
+    with tabs[6]:
+        st.subheader("PDF 发现、归档、解析与完整性")
+        summary = pdf_summary(settings)
+        columns = st.columns(5)
+        for column, (label, key) in zip(columns, [("库存 PDF", "inventory_files"), ("有效资产", "valid_pdf_assets"), ("已关联", "linked_policy_pdf"), ("已下载", "downloaded"), ("已解析", "parsed")], strict=True):
+            column.metric(label, int(summary.get(key) or 0))
+        st.caption("PDF 作为 HTML 的补充或明确的 PDF 主文档保存；OCR 当前关闭，扫描件进入 OCR_PENDING，不会伪装成已解析。")
+        limit = st.number_input("本次最多处理 PDF 记录数", min_value=1, max_value=100, value=20, step=1, key="pdf_job_limit")
+        action = st.selectbox("PDF 操作", ["pdf_inventory", "pdf_archive", "pdf_discover", "pdf_download", "pdf_parse", "pdf_match", "pdf_run"], format_func=lambda value: {"pdf_inventory": "只读清单扫描", "pdf_archive": "归档现有 PDF", "pdf_discover": "从已抓取页面发现 PDF", "pdf_download": "有界直连下载", "pdf_parse": "PyMuPDF 解析", "pdf_match": "确定性关联/人工队列", "pdf_run": "执行一轮有界 PDF 流程"}[value], key="pdf_action")
+        confirm_pdf = st.checkbox("我确认这是有界 PDF 操作", key="pdf_confirm")
+        needs_confirmation = action != "pdf_inventory"
+        if st.button("生成 PDF 任务", disabled=settings.read_only or (needs_confirmation and not confirm_pdf), type="primary", key="pdf_enqueue"):
+            _enqueue(settings, action, {"cities": [], "limit": int(limit)}, confirm_pdf if needs_confirmation else True)
+        st.markdown("#### 处理漏斗")
+        st.dataframe(safe_pandas(pdf_processing_funnel(settings)), hide_index=True, width="stretch")
+        st.markdown("#### 城市 PDF 关联")
+        city_pdf = pdf_city_coverage(settings)
+        if city_pdf.is_empty():
+            st.info("暂未形成 PDF attachment 记录。")
+        else:
+            st.dataframe(safe_pandas(city_pdf), hide_index=True, width="stretch")
+        failures = pdf_failures(settings)
+        if not failures.is_empty():
+            st.markdown("#### PDF 失败/待人工原因")
+            st.dataframe(safe_pandas(failures), hide_index=True, width="stretch")

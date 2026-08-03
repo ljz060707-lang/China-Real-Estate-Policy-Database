@@ -20,4 +20,10 @@ The existing `FullSyncController` and `CrawlPipeline` remain the write path. `Fa
 
 The Dashboard is Streamlit and reads lightweight curated columns and status JSON. Its operation center writes a validated JSON request; a local operations worker calls the same controllers as the CLI.
 
+PDF handling is a first-class Silver-adjacent evidence path: HTML/list-page
+discovery -> deterministic attachment association -> content-addressed raw
+archive -> PyMuPDF text versions -> completeness metrics. The formal tables
+are documented in [PDF_PIPELINE.md](PDF_PIPELINE.md); raw PDF bytes are never
+stored in Git or overwritten in place.
+
 Gold is intentionally not imported by the fast runner. Its tables and Dashboard placeholder may exist, but no intensity model, prompt or API call is run.

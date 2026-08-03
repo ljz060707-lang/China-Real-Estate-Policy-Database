@@ -324,6 +324,25 @@ $env:CRPD_DATA_ROOT = "D:\Data Set\CRPD"
 
 It rotates cities across the five required roles, limits each source to 10 minutes/30 list pages/300 documents/one attachment attempt by default, and persists checkpointed `PARTIAL_BUT_USABLE` or `PARTIAL_EMPTY` states. It does not claim strict historical completeness.
 
+PDFs are now integrated into the same auditable workflow. Existing files are
+inventoried read-only, copied by SHA-256 to `raw/pdf/objects`, linked through
+`document_attachments`, parsed with PyMuPDF into `pdf_text_versions`, and
+shown in Dashboard completeness metrics. OCR is disabled; scanned candidates
+remain `OCR_PENDING`. The bounded CLI is:
+
+```powershell
+\.venv\Scripts\python.exe -m policydb.autopilot_cli pdf inventory --root "D:\Data Set\CRPD"
+\.venv\Scripts\python.exe -m policydb.autopilot_cli pdf archive --limit 20 --apply
+\.venv\Scripts\python.exe -m policydb.autopilot_cli pdf discover --limit 20 --apply
+\.venv\Scripts\python.exe -m policydb.autopilot_cli pdf download --limit 10 --workers 4 --apply
+\.venv\Scripts\python.exe -m policydb.autopilot_cli pdf parse --limit 10 --workers 2 --apply
+\.venv\Scripts\python.exe -m policydb.autopilot_cli pdf report
+```
+
+See [docs/PDF_PIPELINE.md](docs/PDF_PIPELINE.md) for storage, association,
+safe viewing, retry and audit semantics. PDF stages are bounded and do not
+enable Gold policy-intensity measurement.
+
 Start and inspect the local Dashboard with:
 
 ```powershell

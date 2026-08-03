@@ -1,5 +1,13 @@
 # Dashboard guide
 
+The overview includes a PDF completeness tab with inventory, valid assets,
+linked policy PDFs, downloads, parsed text, OCR-pending records and city-level
+coverage. The automation center's PDF Pipeline tab submits bounded validated
+jobs (`pdf_inventory`, `pdf_archive`, `pdf_discover`, `pdf_download`,
+`pdf_parse`, `pdf_match`, `pdf_run`) to the local operations worker. It never
+accepts a shell command or arbitrary path. Policy detail previews use the
+content-addressed asset id and a path-under-root check.
+
 Start locally:
 
 ```powershell

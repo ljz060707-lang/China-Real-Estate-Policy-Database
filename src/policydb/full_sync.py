@@ -34,6 +34,7 @@ from policydb.parquet_store import (
     merge_and_replace_parquet,
     read_parquet_snapshot,
 )
+from policydb.pdf_pipeline import PDFPipeline, load_pdf_config
 from policydb.settings import Settings
 from policydb.source_completion import build_slot_work_queue
 from policydb.source_discovery import REQUIRED_ROLES, is_reusable_source_entry
@@ -849,6 +850,12 @@ class FullSyncConfig:
     output: Path | None = None
     run_id: str | None = None
     report_formats: str = "json,xlsx,parquet"
+    pdf_enabled: bool = False
+    pdf_discover: bool = True
+    pdf_download: bool = True
+    pdf_parse: bool = True
+    pdf_max_downloads_per_source: int = 20
+    pdf_max_downloads_per_job: int = 30
 
     def validate(self, *, command: str = "run") -> None:
         if self.scope not in {"all", "city", "slot", "source"}:
@@ -861,7 +868,7 @@ class FullSyncConfig:
             raise ValueError("--source-id is required for --scope source")
         if self.discovery_mode.upper() not in {"AUTO", "DISABLED", "SEARCH_ONLY", "AI_ONLY", "SEARCH_AND_AI"}:
             raise ValueError("discovery-mode must be AUTO, DISABLED, SEARCH_ONLY, AI_ONLY, or SEARCH_AND_AI")
-        positive = {"max_slots": self.max_slots, "max_sources": self.max_sources, "max_documents": self.max_documents, "top_k": self.top_k, "concurrency": self.concurrency, "discovery_concurrency": self.discovery_concurrency, "crawl_concurrency": self.crawl_concurrency, "rate_limit_per_minute": self.rate_limit_per_minute, "lookback_days": self.lookback_days, "checkpoint_every": self.checkpoint_every, "max_consecutive_failures": self.max_consecutive_failures, "max_list_pages_per_source": self.max_list_pages_per_source, "max_document_retries": self.max_document_retries, "max_attachment_attempts": self.max_attachment_attempts}
+        positive = {"max_slots": self.max_slots, "max_sources": self.max_sources, "max_documents": self.max_documents, "top_k": self.top_k, "concurrency": self.concurrency, "discovery_concurrency": self.discovery_concurrency, "crawl_concurrency": self.crawl_concurrency, "rate_limit_per_minute": self.rate_limit_per_minute, "lookback_days": self.lookback_days, "checkpoint_every": self.checkpoint_every, "max_consecutive_failures": self.max_consecutive_failures, "max_list_pages_per_source": self.max_list_pages_per_source, "max_document_retries": self.max_document_retries, "max_attachment_attempts": self.max_attachment_attempts, "pdf_max_downloads_per_source": self.pdf_max_downloads_per_source, "pdf_max_downloads_per_job": self.pdf_max_downloads_per_job}
         if any(int(value) < 1 for value in positive.values()):
             raise ValueError("all execution limits must be positive")
         if self.max_minutes_per_source is not None and int(self.max_minutes_per_source) < 1:
@@ -2473,6 +2480,30 @@ class FullSyncController:
             "results": results,
         }
 
+    def _run_pdf_for_source(self, source: Mapping[str, Any]) -> dict[str, Any]:
+        """Run bounded PDF stages without changing HTML source admission."""
+        if not self.config.pdf_enabled:
+            return {"status": "DISABLED", "ocr_enabled": False}
+        try:
+            config = replace(
+                load_pdf_config(self.settings),
+                max_downloads_per_source=self.config.pdf_max_downloads_per_source,
+                max_downloads_per_job=self.config.pdf_max_downloads_per_job,
+            )
+            pipeline = PDFPipeline(self.settings, config=config)
+            source_id = str(source.get("source_id") or "")
+            result: dict[str, Any] = {"status": "COMPLETED", "ocr_enabled": False}
+            if self.config.pdf_discover:
+                result["discover"] = pipeline.discover(limit=self.config.pdf_max_downloads_per_job, source_id=source_id, run_id=self.run_id)
+            if self.config.pdf_download:
+                result["download"] = pipeline.download(limit=self.config.pdf_max_downloads_per_job, source_id=source_id, run_id=self.run_id)
+            if self.config.pdf_parse:
+                result["parse"] = pipeline.parse(limit=self.config.pdf_max_downloads_per_job, source_id=source_id, run_id=self.run_id)
+            result["summary"] = pipeline.summary()
+            return result
+        except Exception as exc:
+            return {"status": "PDF_FAILED_NON_BLOCKING", "error_type": type(exc).__name__, "error": str(exc)[:500], "ocr_enabled": False}
+
     def _run_source_v2(self, source: Mapping[str, Any], *, mode: str, max_fetches: int) -> dict[str, Any]:
         source_id = str(source.get("source_id"))
         result: dict[str, Any] = {"source_id": source_id, "mode": mode, "status": "planned", "status_category": "PARTIAL", "stage_result": "NOT_RUN", "fetched": 0, "failed": 0, "article_failures": 0, "incremental_skipped_dependency": False}
@@ -2573,6 +2604,8 @@ class FullSyncController:
                 )
                 result.update(fetched)
                 result["article_failures"] = int(fetched.get("failed") or fetched.get("persisted_failed") or 0)
+                if self.config.pdf_enabled:
+                    result["pdf"] = self._run_pdf_for_source(source)
                 if fetched.get("cancelled"):
                     reason_code = "stop_requested" if self.stop_requested() else "source_time_budget"
                     usable = int(fetched.get("fetched") or fetched.get("persisted_fetched") or 0) > 0

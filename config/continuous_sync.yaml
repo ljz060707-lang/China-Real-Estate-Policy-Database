@@ -25,6 +25,12 @@ fast_bulk_ingest:
   apply: false
   resume: true
   gold_enabled: false
+  pdf_enabled: true
+  pdf_discover: true
+  pdf_download: true
+  pdf_parse: true
+  pdf_max_downloads_per_source: 20
+  pdf_max_downloads_per_job: 30
 
 completeness_score:
   city_role_coverage: 0.30

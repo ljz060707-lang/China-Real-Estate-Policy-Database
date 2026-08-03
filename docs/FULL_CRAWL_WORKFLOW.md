@@ -12,3 +12,14 @@ The continuous workflow is staged and resumable:
 The current deliverable formally implements the first round and its checkpoint/status contract. Later rounds reuse the same source state and pipeline; they are not silently started by the Dashboard.
 
 Normal interruptions are `PAUSED_BUDGET`, `RETRY_WAIT`, or `PARTIAL_BUT_USABLE`. Database write errors, checkpoint conflicts and consistency errors stop the worker for repair.
+# Full crawl workflow
+
+The breadth-first workflow remains HTML-first and checkpointed. When enabled,
+each bounded source round runs PDF discovery and a small download/parse budget
+after its HTML stage. A PDF failure yields a visible PDF audit status and does
+not prevent another city from rotating into the runner. Deeper PDF backfill is
+an explicit later job, not an unbounded side effect of a Dashboard refresh.
+
+Gold policy-intensity measurement is not part of any current full-crawl
+command and remains disabled until its metric and prompt contracts are
+approved.

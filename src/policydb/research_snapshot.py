@@ -15,6 +15,7 @@ from policydb.dashboard_metrics import (
     city_year_coverage,
     document_quality,
     gap_register,
+    pdf_summary,
 )
 from policydb.parquet_store import atomic_write_parquet, read_parquet_snapshot
 from policydb.settings import Settings
@@ -56,10 +57,25 @@ def create_research_snapshot(settings: Settings | None = None, *, output: Path |
     gap_path = target / "gap_register.parquet"
     _write(gap_register(settings), gap_path)
     files[gap_path.name] = hashlib.sha256(gap_path.read_bytes()).hexdigest()
+    pdf_summary_payload = pdf_summary(settings)
+    pdf_files = {
+        "pdf_assets": "pdf_assets_snapshot.parquet",
+        "document_attachments": "document_attachments_snapshot.parquet",
+        "pdf_text_versions": "pdf_text_versions_snapshot.parquet",
+    }
+    for table_name, filename in pdf_files.items():
+        source = settings.curated / f"{table_name}.parquet"
+        frame = read_parquet_snapshot(source) if source.exists() else pl.DataFrame()
+        destination = target / filename
+        _write(frame, destination)
+        files[filename] = hashlib.sha256(destination.read_bytes()).hexdigest()
+    pdf_completeness_path = target / "pdf_completeness.json"
+    pdf_completeness_path.write_text(json.dumps(pdf_summary_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    files[pdf_completeness_path.name] = hashlib.sha256(pdf_completeness_path.read_bytes()).hexdigest()
     intensity_path = target / "policy_intensity_snapshot.parquet"
     _write(pl.DataFrame(schema={"record_id": pl.String, "intensity": pl.Float64}), intensity_path)
     files[intensity_path.name] = hashlib.sha256(intensity_path.read_bytes()).hexdigest()
-    manifest = {"snapshot_id": target.name, "created_at": datetime.now(UTC).isoformat(), "source": "curated", "policy_intensity_enabled": False, "policy_intensity_rows": 0, "files": files}
+    manifest = {"snapshot_id": target.name, "created_at": datetime.now(UTC).isoformat(), "source": "curated", "policy_intensity_enabled": False, "policy_intensity_rows": 0, "pdf_completeness": pdf_summary_payload, "files": files}
     (target / "snapshot_manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return {"snapshot_id": target.name, "output": str(target), "documents": documents.height, "policy_intensity_enabled": False, "policy_intensity_rows": 0, "manifest": str(target / "snapshot_manifest.json")}
 
