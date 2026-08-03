@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import io
 import json
 import os
 from collections import deque
@@ -10,6 +9,7 @@ from pathlib import Path
 import polars as pl
 import yaml
 
+from policydb.budget import HttpBudgetExceeded
 from policydb.coverage import record_source_window
 from policydb.crawl.checkpoint import append_unique, ensure_crawl_storage
 from policydb.crawl.dedup import (
@@ -28,6 +28,7 @@ from policydb.crawl.fetcher import PermissionErrorLocal, RespectfulFetcher
 from policydb.crawl.models import DiscoveryRequest
 from policydb.crawl.parser import extract_pdf_embedded, parse_document
 from policydb.crawl.registry import load_registry
+from policydb.parquet_store import atomic_write_parquet, read_parquet_snapshot
 from policydb.scope import load_cities_105
 from policydb.settings import Settings
 from policydb.transform.normalization import stable_id
@@ -218,6 +219,11 @@ class CrawlPipeline:
         source_buckets: list[deque[dict]] = []
         discovery_errors: list[dict] = []
         discovery_scans: list[dict] = []
+        previous_scans = (
+            read_parquet_snapshot(self._path("crawl_discovery_scans"))
+            if resume and self._path("crawl_discovery_scans").exists()
+            else pl.DataFrame()
+        )
         for source in sources:
             source_items: list[dict] = []
             scoped_ids = selected_city_ids & set(source.city_ids)
@@ -239,6 +245,14 @@ class CrawlPipeline:
             if source.list_page_urls and run_type != "seed_backtrack":
                 try:
                     discovery = ListPageDiscovery(self.fetcher)
+                    resume_scan = None
+                    if previous_scans.height and "source_id" in previous_scans.columns:
+                        candidates = previous_scans.filter(
+                            (pl.col("source_id").cast(pl.String) == source.source_id)
+                            & (~pl.col("pagination_exhausted").fill_null(False))
+                        )
+                        if candidates.height:
+                            resume_scan = candidates.sort("created_at").row(-1, named=True)
                     candidates = discovery.discover(
                         DiscoveryRequest(
                             run_id=run_id,
@@ -249,6 +263,7 @@ class CrawlPipeline:
                             max_pages=max_pages_per_source,
                         ),
                         source,
+                        resume_from=resume_scan,
                     )
                     now_text = now.isoformat()
                     source_items.extend(
@@ -299,9 +314,17 @@ class CrawlPipeline:
                             "max_candidates": discovery.last_scan[
                                 "max_candidates"
                             ],
+                            "last_page": discovery.last_scan.get("last_page"),
+                            "next_page": discovery.last_scan.get("next_page"),
+                            "last_seen_date": discovery.last_scan.get("last_seen_date"),
+                            "cursor": discovery.last_scan.get("cursor"),
+                            "visited_urls": json.dumps(discovery.last_scan.get("visited_urls") or [], ensure_ascii=False),
+                            "resumed_from": discovery.last_scan.get("resumed_from"),
                             "created_at": now.isoformat(),
                         }
                     )
+                except HttpBudgetExceeded:
+                    raise
                 except Exception as exc:
                     discovery_errors.append(
                         {"source_id": source.source_id, "error_type": type(exc).__name__}
@@ -335,7 +358,7 @@ class CrawlPipeline:
         completed_windows: set[tuple[str, str | None]] = set()
         windows_path = self._path("crawl_source_windows")
         if resume and windows_path.exists():
-            windows = pl.read_parquet(windows_path).filter(
+            windows = read_parquet_snapshot(windows_path).filter(
                 (pl.col("period_start").cast(pl.String) == start_date.isoformat())
                 & (pl.col("period_end").cast(pl.String) == end_date.isoformat())
                 & pl.col("coverage_status").cast(pl.String).str.starts_with("complete_")
@@ -367,7 +390,7 @@ class CrawlPipeline:
             prepared[task_key] = item
         items = list(prepared.values())
         if items and self._path("crawl_items").exists():
-            existing_rows = pl.read_parquet(self._path("crawl_items")).iter_rows(named=True)
+            existing_rows = read_parquet_snapshot(self._path("crawl_items")).iter_rows(named=True)
             existing = {row["canonical_url"]: row for row in existing_rows}
             for item in items:
                 previous = existing.get(item["canonical_url"])
@@ -376,6 +399,17 @@ class CrawlPipeline:
                     item["retry_count"] = previous["retry_count"]
                     item["etag"] = previous.get("etag")
                     item["last_modified"] = previous.get("last_modified")
+                    item["resume_from_item_id"] = previous.get("item_id")
+                    item["resume_previous_run_id"] = previous.get("run_id")
+                    if str(previous.get("status") or "") in {"fetched", "unchanged"}:
+                        # Preserve a fresh pending row so a resumed/repeated
+                        # crawl records a new deterministic dedup decision.
+                        # The append-only version store prevents duplicate
+                        # inserts; avoiding the request here would erase the
+                        # evidence that the source was checked again.
+                        item["resume_skipped_http"] = False
+                    else:
+                        item["resume_skipped_http"] = False
         if items:
             append_unique(self._path("crawl_items"), items, "item_id")
         if discovery_scans:
@@ -427,29 +461,148 @@ class CrawlPipeline:
 
     @classmethod
     def _atomic_parquet(cls, path: Path, frame: pl.DataFrame) -> None:
-        buffer = io.BytesIO()
-        frame.write_parquet(buffer, compression="zstd")
-        cls._atomic_write(path, buffer.getvalue())
+        atomic_write_parquet(frame, path, {"module": "crawl.pipeline"})
+
+    def _finalize_run(
+        self,
+        run_id: str,
+        *,
+        cancelled: bool = False,
+        fallback_fetched: int = 0,
+        fallback_failed: int = 0,
+        last_item_id: str | None = None,
+        processed_count: int = 0,
+        budget_paused: bool = False,
+    ) -> dict:
+        """Recompute run/checkpoint counts from this run's persisted items.
+
+        The finalizer is deliberately idempotent and refuses to turn a blocked
+        plan into a completed run.  Local loop counters are retained only for
+        the CLI result; persisted counts always come from crawl_items.
+        """
+        runs_path = self._path("crawl_runs")
+        items_path = self._path("crawl_items")
+        checkpoints_path = self._path("crawl_checkpoints")
+        if not runs_path.exists():
+            result = {"run_id": run_id, "fetched": fallback_fetched, "failed": fallback_failed}
+            if cancelled:
+                result["cancelled"] = True
+            return result
+        runs = read_parquet_snapshot(runs_path)
+        match = runs.filter(pl.col("run_id") == run_id)
+        if match.height != 1:
+            result = {"run_id": run_id, "fetched": fallback_fetched, "failed": fallback_failed}
+            if cancelled:
+                result["cancelled"] = True
+            return result
+        run_row = match.row(0, named=True)
+        if str(run_row.get("status") or "") == "blocked_no_enabled_sources":
+            return {"run_id": run_id, "status": "blocked_no_enabled_sources", "fetched": 0, "failed": 0}
+        items = (
+            read_parquet_snapshot(items_path).filter(pl.col("run_id") == run_id)
+            if items_path.exists()
+            else pl.DataFrame()
+        )
+        item_count = items.height
+        fetched_count = (
+            items.filter(pl.col("status").is_in(["fetched", "unchanged"])).height
+            if item_count
+            else 0
+        )
+        failed_count = (
+            items.filter(pl.col("status") == "failed").height if item_count else 0
+        )
+        pending_count = (
+            items.filter(pl.col("status") == "pending").height if item_count else 0
+        )
+        if budget_paused:
+            status = "paused_budget"
+        elif cancelled:
+            status = "cancelled"
+        elif pending_count:
+            status = "partial"
+        elif str(run_row.get("status") or "") in {"cancelled", "failed"}:
+            status = str(run_row["status"])
+        elif failed_count:
+            status = "partial"
+        else:
+            status = "complete"
+        now = datetime.now(UTC).isoformat()
+        checkpoints = (
+            read_parquet_snapshot(checkpoints_path)
+            if checkpoints_path.exists()
+            else pl.DataFrame()
+        )
+        checkpoint_id = stable_id(run_id, prefix="CHECKPOINT")
+        old_checkpoint = (
+            checkpoints.filter(pl.col("checkpoint_id") == checkpoint_id)
+            if checkpoints.height
+            else pl.DataFrame()
+        )
+        checkpoint_created = (
+            old_checkpoint[0, "created_at"]
+            if old_checkpoint.height and "created_at" in old_checkpoint.columns
+            else now
+        )
+        terminal_ids = (
+            items.filter(pl.col("status").is_in(["fetched", "unchanged", "failed"]))
+            .select("item_id")["item_id"].to_list()
+            if item_count
+            else []
+        )
+        checkpoint = {
+            "checkpoint_id": checkpoint_id,
+            "run_id": run_id,
+            "last_item_id": last_item_id or (terminal_ids[-1] if terminal_ids else None),
+            "status": status,
+            "processed_count": max(processed_count, len(terminal_ids)),
+            "created_at": checkpoint_created,
+            "updated_at": now,
+        }
+        append_unique(checkpoints_path, [checkpoint], "checkpoint_id")
+        run_update = dict(run_row)
+        run_update.update(
+            {
+                "status": status,
+                "item_count": item_count,
+                "fetched_count": fetched_count,
+                "failed_count": failed_count,
+                "finished_at": now if status in {"complete", "cancelled"} else run_row.get("finished_at"),
+                "updated_at": now,
+            }
+        )
+        append_unique(runs_path, [run_update], "run_id")
+        result = {
+            "run_id": run_id,
+            "fetched": fallback_fetched,
+            "failed": max(fallback_failed, failed_count),
+        }
+        if budget_paused:
+            result["budget_paused"] = True
+        if cancelled:
+            result["cancelled"] = True
+        return result
 
     def run(
         self,
         run_id: str,
         *,
         max_fetches: int | None = None,
+        max_attachment_attempts: int | None = None,
         cancel_check=None,
         progress=None,
     ) -> dict:
         items_path = self._path("crawl_items")
         if not items_path.exists():
-            return {"run_id": run_id, "fetched": 0, "failed": 0}
-        items = pl.read_parquet(items_path)
+            return {"run_id": run_id, "status": "missing_items", "fetched": 0, "failed": 0}
+        items = read_parquet_snapshot(items_path)
         pending = items.filter((pl.col("run_id") == run_id) & (pl.col("status") == "pending"))
         if max_fetches is not None:
             pending = pending.head(max_fetches)
         source_index = {source.source_id: source for source in load_registry(self.settings)}
         versions_path = self._path("policy_document_versions")
         existing_versions = (
-            pl.read_parquet(versions_path)
+            read_parquet_snapshot(versions_path)
             if versions_path.exists()
             else None
         )
@@ -461,8 +614,10 @@ class CrawlPipeline:
         versions: list[dict] = []
         dedup_decisions: list[dict] = []
         errors: list[dict] = []
+        attachment_records: dict[str, dict] = {}
         fetched = 0
         cancelled = False
+        budget_paused = False
         processed_count = 0
         last_item_id: str | None = None
         for item in pending.iter_rows(named=True):
@@ -658,6 +813,20 @@ class CrawlPipeline:
                                     self._atomic_write(embedded_path, embedded)
                         continue
                     attachment_item_id = stable_id(item["item_id"], attachment_url, prefix="ATTACH")
+                    attachment_records[attachment_item_id] = {
+                        "attachment_id": attachment_item_id,
+                        "run_id": run_id,
+                        "parent_item_id": item["item_id"],
+                        "url": attachment_url,
+                        "local_path": None,
+                        "content_sha256": None,
+                        "status": "PENDING_ATTACHMENT",
+                    }
+                    if max_attachment_attempts is not None and sum(
+                        row["status"] != "PENDING_ATTACHMENT"
+                        for row in attachment_records.values()
+                    ) >= max_attachment_attempts:
+                        continue
                     try:
                         attachment_result = self.fetcher.fetch(attachment_url)
                         attachment_parsed = parse_document(
@@ -682,6 +851,13 @@ class CrawlPipeline:
                         )
                         if not attachment_path.exists():
                             self._atomic_write(attachment_path, attachment_result.body)
+                        attachment_records[attachment_item_id].update(
+                            {
+                                "local_path": self._stored_path(attachment_path),
+                                "content_sha256": attachment_result.response_sha256,
+                                "status": "FETCHED",
+                            }
+                        )
                         attachment_version_id = stable_id(
                             attachment_url,
                             attachment_result.response_sha256,
@@ -715,7 +891,10 @@ class CrawlPipeline:
                                 }
                             )
                             existing_version_ids.add(attachment_version_id)
+                    except HttpBudgetExceeded:
+                        raise
                     except Exception as attachment_error:
+                        attachment_records[attachment_item_id]["status"] = "FAILED"
                         errors.append(
                             {
                                 "error_id": stable_id(
@@ -754,6 +933,9 @@ class CrawlPipeline:
                     .then(pl.lit(now.isoformat())).otherwise(pl.col("last_checked_at")).alias("last_checked_at"),
                 )
                 fetched += 1
+            except HttpBudgetExceeded:
+                budget_paused = True
+                break
             except Exception as exc:  # failure is persisted; prior data remains untouched
                 errors.append(
                     {
@@ -786,23 +968,52 @@ class CrawlPipeline:
                     .alias("status")
                 )
         self._atomic_parquet(items_path, items)
-        if existing_versions is not None:
-            self._atomic_parquet(versions_path, existing_versions)
-        if versions:
-            append_unique(self._path("policy_document_versions"), versions, "document_version_id")
+        version_rows = existing_versions.to_dicts() if existing_versions is not None else []
+        version_rows.extend(versions)
+        if version_rows:
+            append_unique(
+                self._path("policy_document_versions"),
+                version_rows,
+                "document_version_id",
+            )
         if errors:
             append_unique(self._path("fetch_errors"), errors, "error_id")
         if dedup_decisions:
             append_unique(self._path("dedup_decisions"), dedup_decisions, "decision_id")
-        run_rows = pl.read_parquet(self._path("crawl_runs")).filter(pl.col("run_id") == run_id)
+        if attachment_records:
+            append_unique(self._path("attachments"), list(attachment_records.values()), "attachment_id")
+        final_result = self._finalize_run(
+            run_id,
+            cancelled=cancelled,
+            fallback_fetched=fetched,
+            fallback_failed=len(errors),
+            last_item_id=last_item_id,
+            processed_count=processed_count,
+            budget_paused=budget_paused,
+        )
+        # Read the finalized run row.  Reading it before _finalize_run leaves
+        # status=planned here and incorrectly marks a fully terminal window as
+        # transaction_uncommitted.
+        run_rows = read_parquet_snapshot(self._path("crawl_runs")).filter(pl.col("run_id") == run_id)
         if run_rows.height:
             run_row = run_rows.row(0, named=True)
             scans_path = self._path("crawl_discovery_scans")
             scans = (
-                pl.read_parquet(scans_path).filter(pl.col("run_id") == run_id)
+                read_parquet_snapshot(scans_path).filter(pl.col("run_id") == run_id)
                 if scans_path.exists()
                 else pl.DataFrame()
             )
+            termination_map = {
+                "pagination_exhausted": "END_OF_PAGINATION",
+                "stable_before_start_date": "DATE_BOUNDARY_REACHED",
+                "next_page_absent": "END_OF_PAGINATION",
+                "explicit_last_page_reached": "OFFICIAL_EXPLICIT_LAST_PAGE",
+                "archive_start_reached": "DATE_BOUNDARY_REACHED",
+                "configured_start_date_reached": "DATE_BOUNDARY_REACHED",
+                "source_declared_end_reached": "OFFICIAL_EXPLICIT_LAST_PAGE",
+                "consecutive_duplicate_pages_threshold": "COMPLETE_WITH_GAPS",
+                "empty_terminal_page": "EMPTY_TERMINAL_PAGE",
+            }
             for source_id in pending["source_id"].unique().to_list():
                 source_items = items.filter(
                     (pl.col("run_id") == run_id) & (pl.col("source_id") == source_id)
@@ -827,6 +1038,44 @@ class CrawlPipeline:
                     if source_scans.height
                     else []
                 )
+                mapped_reasons = [
+                    termination_map.get(str(reason))
+                    for reason in stop_reasons
+                    if termination_map.get(str(reason))
+                ]
+                termination_reason = mapped_reasons[0] if len(set(mapped_reasons)) == 1 else None
+                termination_evidence_ids = [
+                    str(value)
+                    for value in source_scans.get_column("scan_id").to_list()
+                    if value
+                ] if source_scans.height and "scan_id" in source_scans.columns else []
+                finalized_status = str(run_row.get("status") or "")
+                pagination_complete = bool(
+                    source_scans.height
+                    and source_scans["pagination_exhausted"].fill_null(False).all()
+                )
+                if termination_reason and source_errors and pagination_complete:
+                    termination_reason = "COMPLETE_WITH_GAPS"
+                transaction_committed = bool(
+                    finalized_status in {"complete", "partial", "complete_with_gaps"}
+                    and not final_result.get("budget_paused")
+                )
+                checkpoint_persisted = False
+                checkpoints_path = self._path("crawl_checkpoints")
+                if checkpoints_path.exists():
+                    checkpoint_rows = read_parquet_snapshot(checkpoints_path)
+                    checkpoint_persisted = bool(
+                        checkpoint_rows.height
+                        and checkpoint_rows.filter(pl.col("run_id") == run_id).height
+                    )
+                completion_invariants_passed = bool(
+                    pagination_complete
+                    and termination_reason
+                    and termination_evidence_ids
+                    and transaction_committed
+                    and checkpoint_persisted
+                    and not source_items.filter(pl.col("status") == "pending").height
+                )
                 record_source_window(
                     run_id=run_id,
                     source_id=source_id,
@@ -835,43 +1084,38 @@ class CrawlPipeline:
                     scan_method=str(run_row["run_type"]),
                     candidate_count=source_items.height,
                     fetched_count=source_items.filter(pl.col("status").is_in(["fetched", "unchanged"])).height,
-                    policy_count=0,
+                    policy_count=source_items.filter(
+                        pl.col("status").is_in(["fetched", "unchanged"])
+                    ).height,
                     error_count=source_errors,
                     page_count=pages_scanned,
                     completion_evidence={
+                        "strict_completion": True,
                         "pagination_exhausted": pagination_exhausted,
+                        "pagination_complete": pagination_complete,
+                        "termination_reason": termination_reason,
+                        "termination_evidence_ids": termination_evidence_ids,
                         "stop_reasons": stop_reasons,
-                        "exhaustive": False,
+                        "transaction_committed": transaction_committed,
+                        "checkpoint_persisted": checkpoint_persisted,
+                        "completion_invariants_passed": completion_invariants_passed,
+                        "completion_status": "COMPLETE_WITH_GAPS" if source_errors and completion_invariants_passed else "COMPLETE" if completion_invariants_passed else "PARTIAL",
+                        "allow_article_gaps": bool(source_errors and completion_invariants_passed),
+                        "exhaustive": completion_invariants_passed,
                         "reason": (
-                            "pagination evidence retained; policy relevance "
-                            "verification is still required"
+                            "strict pagination and transaction evidence persisted"
+                            if completion_invariants_passed
+                            else "pagination completion evidence is incomplete"
                         ),
                     },
                     settings=self.settings,
                 )
-        checkpoint = {
-            "checkpoint_id": stable_id(run_id, prefix="CHECKPOINT"),
-            "run_id": run_id,
-            "last_item_id": last_item_id,
-            "status": "cancelled" if cancelled else "complete",
-            "processed_count": processed_count,
-            "created_at": datetime.now(UTC).isoformat(),
-            "updated_at": datetime.now(UTC).isoformat(),
-        }
-        append_unique(self._path("crawl_checkpoints"), [checkpoint], "checkpoint_id")
-        result = {
-            "run_id": run_id,
-            "fetched": fetched,
-            "failed": len(errors),
-        }
-        if cancelled:
-            result["cancelled"] = True
-        return result
+        return final_result
 
     def audit(self) -> dict:
         def count(name: str) -> int:
             path = self._path(name)
-            return pl.read_parquet(path).height if path.exists() else 0
+            return read_parquet_snapshot(path).height if path.exists() else 0
 
         return {
             "registered_sources": len(load_registry(self.settings)),

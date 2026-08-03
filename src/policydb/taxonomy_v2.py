@@ -8,6 +8,7 @@ import polars as pl
 import yaml
 
 from policydb.intensity.storage import atomic_write_parquet
+from policydb.parquet_store import read_parquet_snapshot
 from policydb.settings import Settings
 from policydb.transform.normalization import stable_id
 
@@ -73,7 +74,7 @@ def materialize_action_classifications(settings: Settings | None = None) -> dict
         return {"actions": 0, "classified": 0, "coverage": 0.0}
     rows = []
     now = datetime.now(UTC).isoformat()
-    for action in pl.read_parquet(actions_path).iter_rows(named=True):
+    for action in read_parquet_snapshot(actions_path).iter_rows(named=True):
         primary, secondary, mechanism, confidence, method = classify_action(
             str(action.get("instrument") or ""), str(action.get("clause_text") or "")
         )
@@ -145,7 +146,7 @@ def _topic_rule(topic: str) -> tuple[str, str, str, bool]:
 
 def build_cicc_mapping(settings: Settings | None = None) -> dict:
     settings = settings or Settings.discover()
-    records = pl.read_parquet(settings.curated / "records.parquet")
+    records = read_parquet_snapshot(settings.curated / "records.parquet")
     counts = (
         records.filter(pl.col("legacy_category").is_not_null())
         .group_by(["source_sheet", "legacy_category"])

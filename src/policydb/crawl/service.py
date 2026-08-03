@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import time
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -22,6 +21,7 @@ from policydb.crawl.registry import (
 )
 from policydb.enrich.glm import GLMEnricher
 from policydb.jobs.models import CrawlJobRequest
+from policydb.parquet_store import atomic_write_parquet, read_parquet_snapshot
 from policydb.settings import Settings
 from policydb.transform.normalization import stable_id
 
@@ -237,17 +237,17 @@ class CrawlService:
 
     def _parquet_rows(self, name: str) -> list[dict]:
         path = self.work_settings.curated / f"{name}.parquet"
-        return pl.read_parquet(path).to_dicts() if path.exists() else []
+        return read_parquet_snapshot(path).to_dicts() if path.exists() else []
 
     def _table_summary(self, name: str, predicate=None) -> tuple[int, list[dict]]:
         path = self.work_settings.curated / f"{name}.parquet"
         if not path.exists():
             return 0, []
-        query = pl.scan_parquet(path)
+        query = read_parquet_snapshot(path)
         if predicate is not None:
             query = query.filter(predicate)
-        count = query.select(pl.len()).collect().item()
-        preview = query.head(20).collect().to_dicts()
+        count = query.height
+        preview = query.head(20).to_dicts()
         return int(count), preview
 
     def _result_paths(self) -> dict[str, str]:
@@ -394,26 +394,22 @@ CURATED_MERGE_KEYS = {
 
 def commit_crawl_workspace(settings: Settings, workspace: Path, job_id: str) -> dict:
     """Validate all deltas first, then atomically replace individual stable tables."""
-    prepared: list[tuple[Path, Path, int]] = []
+    prepared: list[tuple[pl.DataFrame, Path, int]] = []
     for name, key in CURATED_MERGE_KEYS.items():
         delta_path = workspace / f"{name}.parquet"
         if not delta_path.exists():
             continue
-        delta = pl.read_parquet(delta_path)
+        delta = read_parquet_snapshot(delta_path)
         if delta.is_empty():
             continue
         target = settings.curated / f"{name}.parquet"
-        current = pl.read_parquet(target) if target.exists() else pl.DataFrame()
+        current = read_parquet_snapshot(target) if target.exists() else pl.DataFrame()
         merged = pl.concat([current, delta], how="diagonal_relaxed").unique(
             subset=[key], keep="last", maintain_order=True
         )
         if merged.select(pl.col(key).n_unique()).item() != merged.height:
             raise ValueError(f"{name} 主键校验失败")
-        temp = target.with_suffix(f".{job_id}.tmp.parquet")
-        target.parent.mkdir(parents=True, exist_ok=True)
-        merged.write_parquet(temp, compression="zstd")
-        pl.read_parquet(temp, n_rows=1)
-        prepared.append((temp, target, delta.height))
+        prepared.append((merged, target, delta.height))
     manifest = {
         "job_id": job_id,
         "status": "prepared",
@@ -422,8 +418,13 @@ def commit_crawl_workspace(settings: Settings, workspace: Path, job_id: str) -> 
     }
     manifest_path = workspace / "merge_manifest.json"
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-    for temp, target, _ in prepared:
-        os.replace(temp, target)
+    for merged, target, _ in prepared:
+        atomic_write_parquet(
+            merged,
+            target,
+            {"module": "crawl.service", "job_id": job_id},
+            key_columns=(CURATED_MERGE_KEYS[target.stem],),
+        )
     manifest["status"] = "committed"
     manifest["committed_at"] = datetime.now(UTC).isoformat()
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")

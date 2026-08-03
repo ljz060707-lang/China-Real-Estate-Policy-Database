@@ -1,0 +1,26 @@
+# Bounded defaults.  Increase limits only by an explicit user-controlled run.
+provider: siliconflow
+model: ""
+max_slots_per_batch: 20
+max_ai_calls_per_batch: 40
+max_total_ai_calls: 1000
+max_tokens_per_batch: 0
+max_cost_per_batch: 0.0
+concurrency: 4
+per_domain_concurrency: 1
+request_timeout: 30
+probe_rounds: 2
+max_candidates_per_slot: 3
+max_search_queries_per_slot: 10
+max_retry_attempts: 3
+retry_backoff_seconds: [60, 300, 1800]
+# Development default is safe: a source-to-full run stops at the GO gate.
+auto_transition_to_full_crawl: false
+require_525_slots: true
+stop_on_test_failure: true
+full_crawl:
+  start_date: "2018-01-01"
+  end_date: today
+  max_pages_per_source: 50
+  max_candidates_per_shard: 500
+  max_fetches_per_shard: 500

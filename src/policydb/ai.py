@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 from dataclasses import dataclass
@@ -21,6 +22,25 @@ class AITrace:
     prompt_tokens: int | None
     completion_tokens: int | None
     latency_seconds: float
+    raw_response_hash: str | None = None
+    raw_fields: tuple[str, ...] = ()
+
+
+class AIStructuredOutputError(ValueError):
+    """Safe structured-output error carrying only non-sensitive diagnostics."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        parse_status: str,
+        raw_response_hash: str | None,
+        raw_fields: tuple[str, ...] = (),
+    ) -> None:
+        super().__init__(message)
+        self.parse_status = parse_status
+        self.raw_response_hash = raw_response_hash
+        self.raw_fields = raw_fields
 
 
 class SiliconFlowProvider:
@@ -106,7 +126,25 @@ class SiliconFlowProvider:
         content = response.choices[0].message.content
         if not content:
             raise ValueError("AI returned empty structured content")
-        value = schema.model_validate(json.loads(content))
+        raw_response_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        try:
+            payload = json.loads(content)
+        except Exception as exc:
+            raise AIStructuredOutputError(
+                "AI returned invalid JSON",
+                parse_status="parse_failed",
+                raw_response_hash=raw_response_hash,
+            ) from exc
+        raw_fields = tuple(sorted(payload)) if isinstance(payload, dict) else ()
+        try:
+            value = schema.model_validate(payload)
+        except Exception as exc:
+            raise AIStructuredOutputError(
+                "AI structured output failed schema validation",
+                parse_status="validation_failed",
+                raw_response_hash=raw_response_hash,
+                raw_fields=raw_fields,
+            ) from exc
         usage = getattr(response, "usage", None)
         return value, AITrace(
             provider="siliconflow",
@@ -115,6 +153,8 @@ class SiliconFlowProvider:
             prompt_tokens=getattr(usage, "prompt_tokens", None),
             completion_tokens=getattr(usage, "completion_tokens", None),
             latency_seconds=time.perf_counter() - started,
+            raw_response_hash=raw_response_hash,
+            raw_fields=raw_fields,
         )
 
     def embeddings(self, texts: list[str]) -> list[list[float]]:

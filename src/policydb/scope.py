@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 
 import polars as pl
 
+from policydb.parquet_store import atomic_write_parquet, read_parquet_snapshot
 from policydb.settings import Settings
 from policydb.transform.normalization import clean_text, stable_id
 
@@ -99,8 +100,8 @@ def match_scope_cities(value: object, cities: pl.DataFrame) -> list[dict]:
 def materialize_city_scope(settings: Settings | None = None) -> dict:
     settings = settings or Settings.discover()
     cities = load_cities_105(settings)
-    cities.write_parquet(settings.curated / "cities_105.parquet", compression="zstd")
-    records = pl.read_parquet(settings.curated / "records.parquet").select(
+    atomic_write_parquet(cities, settings.curated / "cities_105.parquet", {"module": "scope"})
+    records = read_parquet_snapshot(settings.curated / "records.parquet").select(
         "record_id", "geography_original"
     )
     now = datetime.now(UTC).isoformat()
@@ -146,8 +147,11 @@ def materialize_city_scope(settings: Settings | None = None) -> dict:
     relations = pl.DataFrame(rows, schema=schema).unique(
         subset=["policy_applicable_city_id"], keep="first"
     )
-    relations.write_parquet(
-        settings.curated / "policy_applicable_cities.parquet", compression="zstd"
+    atomic_write_parquet(
+        relations,
+        settings.curated / "policy_applicable_cities.parquet",
+        {"module": "scope"},
+        key_columns=("policy_applicable_city_id",),
     )
     return {
         "city_count": cities.height,

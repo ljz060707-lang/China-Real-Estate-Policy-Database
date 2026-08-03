@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
@@ -17,6 +16,7 @@ from policydb.crawl.registry import (
     materialize_registry_parquet,
     save_registry_atomic,
 )
+from policydb.parquet_store import atomic_write_parquet, read_parquet_snapshot
 from policydb.settings import Settings
 
 SCHEMA_VERSION = 2
@@ -65,7 +65,7 @@ def _backup(settings: Settings) -> Path:
 
 def _align_parquet(path: Path, schema: dict[str, pl.DataType]) -> bool:
     if path.exists():
-        frame = pl.read_parquet(path)
+        frame = read_parquet_snapshot(path)
     else:
         frame = pl.DataFrame(schema=schema)
     changed = False
@@ -76,10 +76,7 @@ def _align_parquet(path: Path, schema: dict[str, pl.DataType]) -> bool:
     if not path.exists():
         changed = True
     if changed:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = path.with_suffix(".parquet.v2.tmp")
-        frame.write_parquet(temporary, compression="zstd")
-        os.replace(temporary, path)
+        atomic_write_parquet(frame, path, {"job_id": "migration-v2", "worker_id": "migration"})
     return changed
 
 
@@ -157,14 +154,14 @@ def verify_migration(settings: Settings | None = None) -> dict:
     missing_columns: dict[str, list[str]] = {}
     for name in (*CORE_FACTS, *EXTENDED_FACTS):
         path = settings.curated / f"{name}.parquet"
-        columns = set(pl.read_parquet_schema(path)) if path.exists() else set()
+        columns = set(read_parquet_snapshot(path, n_rows=0).columns) if path.exists() else set()
         missing = sorted(set(CRAWL_SCHEMAS[name]) - columns)
         if missing:
             missing_columns[name] = missing
-    records = pl.scan_parquet(settings.curated / "records.parquet")
+    records = read_parquet_snapshot(settings.curated / "records.parquet")
     t1 = records.filter(pl.col("source_sheet") == "T1 房地产政策目录").select(
         pl.len().alias("count"), pl.col("record_date").min().alias("min_date"), pl.col("record_date").max().alias("max_date")
-    ).collect().row(0, named=True)
+    ).row(0, named=True)
     registry_path = settings.root / "data" / "reference" / "source_registry.yaml"
     registry_version = int((yaml.safe_load(registry_path.read_text(encoding="utf-8")) or {}).get("version", 0))
     passed = not missing_columns and registry_version == SCHEMA_VERSION and t1["count"] == 3011

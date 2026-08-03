@@ -4,6 +4,8 @@ from pathlib import Path
 
 import polars as pl
 
+from policydb.parquet_store import append_unique_parquet, atomic_write_parquet
+
 CRAWL_SCHEMAS = {
     "discovery_candidates": {
         "candidate_id": pl.String,
@@ -216,17 +218,18 @@ def ensure_crawl_storage(curated: Path) -> None:
     for name, schema in CRAWL_SCHEMAS.items():
         path = curated / f"{name}.parquet"
         if not path.exists():
-            pl.DataFrame(schema=schema).write_parquet(path, compression="zstd")
+            atomic_write_parquet(
+                pl.DataFrame(schema=schema),
+                path,
+                {"module": "crawl.checkpoint", "job_id": f"ensure-{name}"},
+                expected_schema=schema,
+            )
 
 
 def append_unique(path: Path, rows: list[dict], key: str) -> pl.DataFrame:
-    incoming = pl.DataFrame(rows, infer_schema_length=None)
-    if path.exists():
-        current = pl.read_parquet(path)
-        frame = pl.concat([current, incoming], how="diagonal_relaxed")
-    else:
-        frame = incoming
-    frame = frame.unique(subset=[key], keep="last", maintain_order=True)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    frame.write_parquet(path, compression="zstd")
-    return frame
+    return append_unique_parquet(
+        path,
+        rows,
+        key,
+        {"module": "crawl.checkpoint", "job_id": f"append-{key}"},
+    )

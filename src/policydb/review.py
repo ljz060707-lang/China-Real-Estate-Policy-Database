@@ -13,6 +13,7 @@ from urllib.parse import urlsplit
 import duckdb
 import polars as pl
 
+from policydb.parquet_store import atomic_write_parquet, read_parquet_snapshot
 from policydb.query.database import build_database
 from policydb.settings import Settings
 
@@ -365,7 +366,7 @@ def generate_review_tasks(settings: Settings | None = None) -> dict:
         )
     )
     if t2_files:
-        staging = pl.read_parquet(t2_files[0]).select(
+        staging = read_parquet_snapshot(t2_files[0]).select(
             "source_cell", "cell_value", "original_field_name", "source_sheet_name"
         )
         for item in staging.iter_rows(named=True):
@@ -601,9 +602,7 @@ def _append_csv(path: Path, fields: list[str], row: dict) -> None:
 
 
 def _write_parquet_atomic(frame: pl.DataFrame, path: Path) -> None:
-    temporary = path.with_suffix(f"{path.suffix}.tmp")
-    frame.write_parquet(temporary, compression="zstd")
-    temporary.replace(path)
+    atomic_write_parquet(frame, path, {"job_id": "manual-review-correction"})
 
 
 def _snapshot(paths: list[Path], settings: Settings) -> Path:
@@ -629,12 +628,12 @@ def apply_corrections(settings: Settings | None = None) -> dict:
     features_path = settings.curated / "policy_features.parquet"
     rules_path = settings.curated / "city_policy_rules.parquet"
     t4_candidates_path = settings.curated / "t4_match_candidates.parquet"
-    records = pl.read_parquet(records_path)
-    terms = pl.read_parquet(terms_path)
-    features = pl.read_parquet(features_path)
-    rules = pl.read_parquet(rules_path)
+    records = read_parquet_snapshot(records_path)
+    terms = read_parquet_snapshot(terms_path)
+    features = read_parquet_snapshot(features_path)
+    rules = read_parquet_snapshot(rules_path)
     t4_candidates = (
-        pl.read_parquet(t4_candidates_path) if t4_candidates_path.exists() else None
+        read_parquet_snapshot(t4_candidates_path) if t4_candidates_path.exists() else None
     )
     changed = Counter()
 

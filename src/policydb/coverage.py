@@ -7,6 +7,7 @@ import polars as pl
 
 from policydb.crawl.checkpoint import append_unique
 from policydb.crawl.registry import load_registry
+from policydb.parquet_store import read_parquet_snapshot
 from policydb.scope import load_cities_105
 from policydb.settings import Settings
 from policydb.transform.normalization import stable_id
@@ -19,11 +20,26 @@ COVERAGE_STATUSES = {
     "complete_confirmed_zero",
 }
 
+_STRICT_TERMINATION_REASONS = {
+    "END_OF_PAGINATION",
+    "DATE_BOUNDARY_REACHED",
+    "EMPTY_TERMINAL_PAGE",
+    "OFFICIAL_EXPLICIT_LAST_PAGE",
+    "COMPLETE_WITH_GAPS",
+    # Legacy names remain readable for historical evidence and old tests.
+    "next_page_absent",
+    "explicit_last_page_reached",
+    "archive_start_reached",
+    "configured_start_date_reached",
+    "source_declared_end_reached",
+    "consecutive_duplicate_pages_threshold",
+}
+
 
 def build_source_matrix(settings: Settings | None = None) -> pl.DataFrame:
     settings = settings or Settings.discover()
     curated_cities = settings.curated / "cities_105.parquet"
-    cities = pl.read_parquet(curated_cities) if curated_cities.exists() else load_cities_105(settings)
+    cities = read_parquet_snapshot(curated_cities) if curated_cities.exists() else load_cities_105(settings)
     rows: list[dict] = []
     for source in load_registry(settings):
         if not source.is_valid:
@@ -67,7 +83,21 @@ def record_source_window(
 ) -> dict:
     settings = settings or Settings.discover()
     evidence = completion_evidence or {}
-    complete = error_count == 0 and page_count >= 1 and evidence.get("exhaustive") is True
+    if evidence.get("strict_completion") is True:
+        strict_evidence = (
+            evidence.get("pagination_complete") is True
+            and str(evidence.get("termination_reason") or "") in _STRICT_TERMINATION_REASONS
+            and bool(evidence.get("termination_evidence_ids"))
+            and evidence.get("transaction_committed") is True
+            and evidence.get("checkpoint_persisted") is True
+            and evidence.get("completion_invariants_passed") is True
+        )
+        allows_article_gaps = str(evidence.get("completion_status") or "") == "COMPLETE_WITH_GAPS" or bool(evidence.get("allow_article_gaps"))
+        complete = page_count >= 1 and strict_evidence and (error_count == 0 or allows_article_gaps)
+    else:
+        # Preserve the legacy helper contract for non-controller callers.  The
+        # full-sync backfill admission gate always uses strict evidence.
+        complete = error_count == 0 and page_count >= 1 and evidence.get("exhaustive") is True
     if not complete:
         status = "failed" if error_count and fetched_count == 0 else "partial"
     elif policy_count:
@@ -76,7 +106,7 @@ def record_source_window(
         status = "complete_confirmed_zero"
     now = datetime.now(UTC).isoformat()
     row = {
-        "window_id": stable_id(source_id, city_id or "", period_start.isoformat(), period_end.isoformat(), scan_method, prefix="WINDOW"),
+        "window_id": stable_id(run_id, source_id, city_id or "", period_start.isoformat(), period_end.isoformat(), scan_method, prefix="WINDOW"),
         "run_id": run_id, "source_id": source_id, "city_id": city_id,
         "period_start": period_start.isoformat(), "period_end": period_end.isoformat(),
         "scan_method": scan_method, "coverage_status": status,
@@ -94,7 +124,7 @@ def coverage_summary(settings: Settings | None = None) -> dict:
     settings = settings or Settings.discover()
     matrix = build_source_matrix(settings)
     windows_path = settings.curated / "crawl_source_windows.parquet"
-    windows = pl.read_parquet(windows_path) if windows_path.exists() else pl.DataFrame()
+    windows = read_parquet_snapshot(windows_path) if windows_path.exists() else pl.DataFrame()
     return {
         "matrix_rows": matrix.height,
         "covered_cities": matrix["city_id"].n_unique() if matrix.height else 0,
@@ -112,7 +142,7 @@ def build_city_source_month_coverage(
     settings = settings or Settings.discover()
     end = end or date.today()
     cities = (
-        pl.read_parquet(settings.curated / "cities_105.parquet")
+        read_parquet_snapshot(settings.curated / "cities_105.parquet")
         if (settings.curated / "cities_105.parquet").exists()
         else load_cities_105(settings)
     )
@@ -136,7 +166,7 @@ def build_city_source_month_coverage(
         if role:
             source_lookup.setdefault((row["city_id"], role), []).append(row["source_id"])
     windows_path = settings.curated / "crawl_source_windows.parquet"
-    windows = pl.read_parquet(windows_path) if windows_path.exists() else pl.DataFrame()
+    windows = read_parquet_snapshot(windows_path) if windows_path.exists() else pl.DataFrame()
     window_lookup = {}
     for row in windows.iter_rows(named=True):
         month = str(row.get("period_start") or "")[:7]

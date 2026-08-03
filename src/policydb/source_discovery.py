@@ -13,6 +13,7 @@ from policydb.config.providers import SearchProvider, build_search_fallback
 from policydb.crawl.fetcher import RespectfulFetcher
 from policydb.crawl.models import RegisteredSource
 from policydb.crawl.registry import load_registry, save_registry_atomic
+from policydb.parquet_store import atomic_write_parquet
 from policydb.scope import load_cities_105
 from policydb.settings import Settings
 
@@ -56,7 +57,11 @@ def is_reusable_source_entry(url: str) -> bool:
     parsed = urlsplit(url)
     target = f"{parsed.path}?{parsed.query}" if parsed.query else parsed.path
     filename = parsed.path.rstrip("/").rsplit("/", 1)[-1]
-    if re.fullmatch(r"(?:index(?:_\d+)?|default)\.(?:s?html?|jhtml|aspx?)", filename, re.I):
+    if re.fullmatch(
+        r"(?:index(?:_\d+)?|default|(?:common_)?list|search|channel|column|bulletin|tzgg)\.(?:s?html?|jhtml|aspx?)",
+        filename,
+        re.I,
+    ):
         query_keys = {key.lower() for key in parse_qs(parsed.query)}
         return bool(parsed.scheme and parsed.netloc) and not bool(
             query_keys & {"id", "articleid", "infoid", "docid", "contentid"}
@@ -403,7 +408,7 @@ def complete_source_matrix(settings: Settings | None = None) -> dict:
     frame = pl.DataFrame(rows, infer_schema_length=None)
     output = settings.outputs / "coverage"
     output.mkdir(parents=True, exist_ok=True)
-    frame.write_parquet(output / "city_source_requirement_matrix.parquet", compression="zstd")
+    atomic_write_parquet(frame, output / "city_source_requirement_matrix.parquet", {"job_id": "source-discovery-matrix"})
     frame.write_csv(output / "city_source_requirement_matrix.csv")
     missing = frame.filter(pl.col("registered_source_count") == 0)
     return {

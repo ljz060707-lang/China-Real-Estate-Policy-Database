@@ -6,6 +6,7 @@ from pathlib import Path
 import polars as pl
 from openpyxl import load_workbook
 
+from policydb.parquet_store import read_parquet_snapshot
 from policydb.settings import Settings
 
 TARGET_SHEETS = {
@@ -35,7 +36,7 @@ def export_excel_compatible(
         raise ValueError("Excel export must not overwrite or write into Raw")
     output.parent.mkdir(parents=True, exist_ok=True)
     workbook = load_workbook(template, data_only=False)
-    records = pl.read_parquet(settings.curated / "records.parquet")
+    records = read_parquet_snapshot(settings.curated / "records.parquet")
     mapping_rows: list[dict] = []
 
     t1 = workbook["T1 房地产政策目录"]

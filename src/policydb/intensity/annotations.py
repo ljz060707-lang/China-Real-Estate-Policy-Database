@@ -6,6 +6,7 @@ import polars as pl
 
 from policydb.intensity.rules import split_clauses
 from policydb.intensity.storage import atomic_write_parquet
+from policydb.parquet_store import read_parquet_snapshot
 from policydb.settings import Settings
 
 
@@ -18,7 +19,7 @@ def prepare_annotations(
     settings = settings or Settings.discover()
     root = settings.root / "data" / "annotations" / "policy_intensity"
     root.mkdir(parents=True, exist_ok=True)
-    records = pl.read_parquet(settings.curated / "records.parquet").filter(
+    records = read_parquet_snapshot(settings.curated / "records.parquet").filter(
         pl.col("full_text").is_not_null() & pl.col("official_status").is_in(["official", "official_reprint"])
     ).sort(["record_date", "record_id"])
     sample = records.head(document_count).select(
@@ -77,4 +78,3 @@ def prepare_annotations(
         "research_ready": False,
     }
     return metrics
-

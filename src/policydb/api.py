@@ -12,6 +12,7 @@ from threading import RLock
 import duckdb
 import polars as pl
 
+from policydb.parquet_store import atomic_write_parquet
 from policydb.settings import Settings
 
 
@@ -240,7 +241,7 @@ class PolicyDB:
         if suffix == ".csv":
             frame.write_csv(path)
         elif suffix == ".parquet":
-            frame.write_parquet(path)
+            atomic_write_parquet(frame, path, {"job_id": "api-export"})
         elif suffix in (".jsonl", ".ndjson"):
             frame.write_ndjson(path)
         elif suffix == ".xlsx":

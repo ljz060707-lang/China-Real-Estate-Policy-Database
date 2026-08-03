@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
+import zipfile
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from urllib.parse import urljoin, urlsplit
+from typing import Any
+from urllib.parse import urlencode, urljoin, urlsplit
 
 import polars as pl
 from bs4 import BeautifulSoup
@@ -17,6 +21,11 @@ from policydb.crawl.registry import (
     load_registry,
     materialize_registry_parquet,
     save_registry_atomic,
+)
+from policydb.parquet_store import (
+    atomic_write_parquet,
+    merge_and_replace_parquet,
+    read_parquet_snapshot,
 )
 from policydb.scope import load_cities_105
 from policydb.settings import Settings
@@ -38,6 +47,18 @@ ROLE_ALIASES = {
     "natural_resources_department": ("自然资源", "规划和自然资源"),
 }
 
+# The original aliases are retained for historical compatibility; these
+# correctly encoded terms are used for new deterministic role evidence.
+ROLE_ALIASES.update(
+    {
+        "municipal_government": ("人民政府", "北京市人民政府", "市政府"),
+        "government_gazette": ("政府公报", "北京市人民政府公报", "公报"),
+        "housing_department": ("住房和城乡建设", "住房城乡建设", "住房", "住建委", "建设委员会"),
+        "provident_fund_center": ("住房公积金", "公积金管理中心", "公积金"),
+        "natural_resources_department": ("自然资源", "规划和自然资源", "自然资源和规划"),
+    }
+)
+
 COVERAGE_STATUS_NOTES = {
     "verified_enabled_source": "已有核验且启用的来源。",
     "enabled_source_pending_verification": "已有启用来源，但其官方入口证据仍待核验。",
@@ -50,15 +71,591 @@ COVERAGE_STATUS_NOTES = {
 
 
 def _atomic_parquet(frame: pl.DataFrame, path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
-    frame.write_parquet(temp, compression="zstd")
-    os.replace(temp, path)
+    atomic_write_parquet(frame, path, {"module": "source_slots"})
+
+
+def _normalize_excel_core_properties(path: Path) -> None:
+    """Remove writer-time timestamps from derived Excel artifacts for idempotency."""
+    temp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        with zipfile.ZipFile(path, "r") as source, zipfile.ZipFile(
+            temp, "w", compression=zipfile.ZIP_DEFLATED
+        ) as target:
+            for info in source.infolist():
+                data = source.read(info.filename)
+                if info.filename == "docProps/core.xml":
+                    text = data.decode("utf-8")
+                    text = re.sub(
+                        r"(<dcterms:(?:created|modified)[^>]*>)[^<]*(</dcterms:(?:created|modified)>)",
+                        r"\g<1>2000-01-01T00:00:00Z\g<2>",
+                        text,
+                    )
+                    data = text.encode("utf-8")
+                target.writestr(info, data)
+        os.replace(temp, path)
+    finally:
+        if temp.exists():
+            temp.unlink()
 
 
 def _official_domain(url: str) -> bool:
     host = (urlsplit(url).hostname or "").lower().rstrip(".")
     return host == "gov.cn" or host.endswith(".gov.cn")
+
+
+VERIFICATION_GATE_NAMES = (
+    "reachable",
+    "direct_healthy",
+    "official_domain_match",
+    "city_match",
+    "source_role_match",
+    "reusable_list_entry",
+    "parser_ready",
+    "pagination_ready",
+    "publication_date_available",
+    "article_link_extraction_ready",
+    "duplicate_or_existing_source",
+    "strict_admission_ready",
+)
+_PARSER_READY = {
+    "ok",
+    "verified",
+    "list_detected",
+    "pagination_detected",
+}
+_PAGINATION_READY = {
+    "next_link",
+    "natural_single_page",
+    "sitemap",
+    "bounded_cursor",
+    "gazette_issue_index",
+}
+_DIRECT_ROUTES = {"direct", "direct_ok", "curl_fallback_ok"}
+
+
+def _gate_record(
+    *,
+    run_id: str,
+    slot_id: str,
+    candidate_id: str,
+    proposal_id: str | None,
+    candidate_url: str,
+    city_id: str,
+    source_role: str,
+    gate_name: str,
+    gate_status: str,
+    observed_value: object,
+    expected_rule: str,
+    reason_code: str,
+    evidence_ids: list[str],
+    checked_at: str,
+) -> dict:
+    return {
+        "run_id": run_id,
+        "slot_id": slot_id,
+        "candidate_id": candidate_id,
+        "proposal_id": proposal_id,
+        "candidate_url": candidate_url,
+        "city_id": city_id,
+        "source_role": source_role,
+        "gate_name": gate_name,
+        "gate_status": gate_status,
+        "observed_value": json.dumps(observed_value, ensure_ascii=False, default=str),
+        "expected_rule": expected_rule,
+        "reason_code": reason_code,
+        "evidence_ids": json.dumps(evidence_ids, ensure_ascii=False),
+        "checked_at": checked_at,
+    }
+
+
+def _safe_json(value: object) -> object:
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except (TypeError, ValueError):
+            return None
+    return value
+
+
+def _probe_evidence_rows(row: dict) -> list[dict]:
+    value = _safe_json(row.get("probe_evidence_json"))
+    return value if isinstance(value, list) else []
+
+
+def _probe_observed_detail_count(row: dict) -> int | None:
+    notes = _safe_json(row.get("notes"))
+    if isinstance(notes, dict) and notes.get("detail_link_count") is not None:
+        try:
+            return int(notes["detail_link_count"])
+        except (TypeError, ValueError):
+            pass
+    values: list[int] = []
+    for item in _probe_evidence_rows(row):
+        for key in ("detail_link_count", "new_detail_link_count"):
+            if item.get(key) is not None:
+                try:
+                    values.append(int(item[key]))
+                except (TypeError, ValueError):
+                    continue
+    return max(values) if values else None
+
+
+def _publication_date_observed(row: dict) -> bool | None:
+    explicit = row.get("publication_date_available")
+    if explicit is not None:
+        return bool(explicit)
+    explicit = row.get("date_extraction_ready")
+    if explicit is not None:
+        return bool(explicit)
+    date_pattern = re.compile(
+        r"(?<!\d)(?:20\d{2}[-/.]\d{1,2}[-/.]\d{1,2}|20\d{2}年\d{1,2}月\d{1,2}日)"
+    )
+    for item in _probe_evidence_rows(row):
+        haystack = " ".join(
+            str(item.get(key) or "")
+            for key in ("page_title", "final_url", "url", "title")
+        )
+        if date_pattern.search(haystack):
+            return True
+    return None
+
+
+def _article_links_observed(row: dict) -> bool | None:
+    explicit = row.get("article_link_extraction_ready")
+    if explicit is not None:
+        return bool(explicit)
+    detail_count = _probe_observed_detail_count(row)
+    if detail_count is None:
+        return None
+    return detail_count > 0
+
+
+def _candidate_evidence_ids(row: dict, registered: object | None) -> list[str]:
+    values: list[str] = []
+    for key in ("discovery_evidence_url", "official_evidence", "city_match_evidence", "role_match_evidence"):
+        value = str(row.get(key) or "").strip()
+        if value:
+            values.append(f"{key}:{value[:240]}")
+    if registered is not None:
+        values.append(f"registry:{getattr(registered, 'source_id', '')}")
+    for item in _probe_evidence_rows(row):
+        digest = str(item.get("response_sha256") or "")
+        if digest:
+            values.append(f"probe:{digest}")
+        elif item.get("checked_at"):
+            values.append(f"probe_at:{item['checked_at']}")
+    return list(dict.fromkeys(values))
+
+
+def _city_tokens(value: object) -> set[str]:
+    text = str(value or "").strip()
+    if not text:
+        return set()
+    tokens = {text}
+    for suffix in ("市", "县", "区", "甯?"):
+        if text.endswith(suffix) and len(text) > len(suffix):
+            tokens.add(text[: -len(suffix)])
+    return {token for token in tokens if token}
+
+
+def evaluate_candidate_gates(
+    row: dict,
+    *,
+    slot: dict | None = None,
+    registry_by_id: dict[str, object] | None = None,
+    duplicate_count: int = 1,
+    run_id: str = "deterministic_verify",
+    proposal_id: str | None = None,
+    checked_at: str | None = None,
+    historical: bool = False,
+) -> tuple[dict, list[dict]]:
+    """Evaluate the source admission gates without consulting AI or mutating data."""
+    checked_at = checked_at or datetime.now(UTC).isoformat()
+    registry_by_id = registry_by_id or {}
+    slot = slot or row
+    candidate_id = str(row.get("candidate_id") or "")
+    slot_id = str(row.get("slot_id") or slot.get("slot_id") or "")
+    city_id = str(row.get("city_id") or slot.get("city_id") or "")
+    source_role = str(row.get("source_role") or slot.get("source_role") or "")
+    candidate_url = str(row.get("canonical_url") or row.get("candidate_url") or "")
+    evidence_text = str(row.get("discovery_evidence_text") or "")
+    source_id = str(row.get("source_id") or "")
+    if not source_id and "source_id=" in evidence_text:
+        source_id = evidence_text.split("source_id=", 1)[1].split()[0].split(";", 1)[0]
+    registered = registry_by_id.get(source_id)
+    canonical = canonicalize_url(candidate_url) if candidate_url else ""
+    final_url = str(row.get("final_url") or "")
+    final_host = (urlsplit(final_url).hostname or "").lower()
+    probe_count = int(row.get("health_probe_count") or 0)
+    probe_success = int(row.get("health_probe_success_count") or 0)
+    http_status = row.get("http_status")
+    try:
+        http_status_int = int(http_status or 0)
+    except (TypeError, ValueError):
+        http_status_int = 0
+    route = str(row.get("network_route") or "").lower()
+    health = str(row.get("health_status") or "").lower()
+    parser_status = str(row.get("parser_status") or "").lower()
+    pagination = str(row.get("pagination_strategy") or "").lower()
+    candidate_kind = str(row.get("candidate_kind") or "")
+    page_type = str(row.get("page_type") or "")
+    detail_count = _probe_observed_detail_count(row)
+    date_observed = _publication_date_observed(row)
+    article_links_observed = _article_links_observed(row)
+    city_name = str(slot.get("city_name") or row.get("city_name") or "")
+    city_haystack = " ".join(
+        str(row.get(field) or "")
+        for field in ("site_name", "department_name", "city_match_evidence", "candidate_url", "canonical_url")
+    )
+    city_tokens = _city_tokens(city_name)
+    registry_city_ok = bool(registered and city_id in getattr(registered, "city_ids", []))
+    city_evidence = str(row.get("city_match_evidence") or "")
+    city_explicit_wrong = bool(city_evidence) and city_id not in city_evidence and not any(
+        token in city_evidence for token in city_tokens
+    )
+    city_ok = registry_city_ok or any(token in city_haystack for token in city_tokens)
+    role = source_role
+    role_terms = ROLE_ALIASES.get(role, (ROLE_TERMS.get(role, ""),))
+    role_haystack = " ".join(
+        str(row.get(field) or "")
+        for field in ("site_name", "department_name", "role_match_evidence")
+    )
+    registry_role_ok = bool(
+        registered
+        and (
+            getattr(registered, "agency_type", None) == role
+            or getattr(registered, "source_role", None) == role
+        )
+    )
+    gazette_role_ok = bool(
+        registered
+        and role == "government_gazette"
+        and getattr(registered, "gazette_url", None)
+        and canonicalize_url(registered.gazette_url) == canonical
+    )
+    role_evidence = str(row.get("role_match_evidence") or "").lower()
+    role_evidence_ok = bool(
+        role_evidence
+        and (
+            "registry" in role_evidence
+            or source_role.lower() in role_evidence
+            or any(term and term.lower() in role_evidence for term in role_terms)
+        )
+    )
+    role_ok = registry_role_ok or gazette_role_ok or any(
+        term and term in role_haystack for term in role_terms
+    ) or role_evidence_ok
+    official = _official_domain(canonical)
+    redirected_official = not final_host or _official_domain(final_url)
+    entry_ok = bool(
+        canonical
+        and is_reusable_source_entry(canonical)
+        and page_type not in {"policy_detail", "content_page", "policy_content_page"}
+        and candidate_kind != "policy_content_evidence"
+        and not str(canonical).lower().split("?", 1)[0].endswith(
+            (".pdf", ".doc", ".docx")
+        )
+    )
+    parser_ok = parser_status in _PARSER_READY
+    pagination_ok = pagination in _PAGINATION_READY
+    direct_evidence_present = bool(
+        probe_count
+        or probe_success
+        or http_status_int
+        or health not in {"", "pending", "unknown", "not_started"}
+        or route not in {"", "pending", "unknown", "not_started"}
+    )
+    direct_ok = bool(
+        direct_evidence_present
+        and http_status_int == 200
+        and health in {"healthy", "ok"}
+        and route in _DIRECT_ROUTES
+        and probe_success >= 2
+        and redirected_official
+    )
+    duplicate_flag = row.get("duplicate_or_existing_source")
+    duplicate_ok = not bool(duplicate_flag) and duplicate_count <= 1
+    gates: list[dict] = []
+
+    def add(
+        name: str,
+        status: str,
+        observed: object,
+        expected: str,
+        reason: str,
+        evidence: list[str] | None = None,
+    ) -> None:
+        gates.append(
+            _gate_record(
+                run_id=run_id,
+                slot_id=slot_id,
+                candidate_id=candidate_id,
+                proposal_id=proposal_id or row.get("proposal_id"),
+                candidate_url=canonical,
+                city_id=city_id,
+                source_role=source_role,
+                gate_name=name,
+                gate_status=status,
+                observed_value=observed,
+                expected_rule=expected,
+                reason_code=reason,
+                evidence_ids=_candidate_evidence_ids(row, registered) if evidence is None else evidence,
+                checked_at=checked_at,
+            )
+        )
+
+    evidence_ids = _candidate_evidence_ids(row, registered)
+    add(
+        "reachable",
+        "PASS" if canonical and urlsplit(canonical).scheme in {"http", "https"} and urlsplit(canonical).hostname else "FAIL",
+        {"url": canonical, "http_status": http_status_int or None},
+        "canonical URL must be an HTTP/HTTPS URL with a hostname",
+        "url_valid" if canonical and urlsplit(canonical).scheme in {"http", "https"} and urlsplit(canonical).hostname else "invalid_candidate_url",
+        evidence_ids,
+    )
+    if not direct_evidence_present:
+        add("direct_healthy", "UNKNOWN", {"health_status": health or None, "network_route": route or None}, "two independent direct probes must return HTTP 200 with parser evidence", "direct_health_evidence_missing", evidence_ids)
+    else:
+        add("direct_healthy", "PASS" if direct_ok else "FAIL", {"health_status": health or None, "network_route": route or None, "http_status": http_status_int or None, "probe_success": probe_success}, "two independent direct probes must return HTTP 200 with parser evidence", "direct_health_ok" if direct_ok else "direct_health_failed", evidence_ids)
+    add(
+        "official_domain_match",
+        "PASS" if official and redirected_official else "FAIL",
+        {"canonical_host": (urlsplit(canonical).hostname or "").lower(), "final_host": final_host or None},
+        "canonical and final hosts must be gov.cn or a gov.cn subdomain",
+        "official_domain_match" if official and redirected_official else "official_domain_mismatch",
+        evidence_ids,
+    )
+    if city_ok:
+        city_status, city_reason = "PASS", "city_match"
+    elif city_explicit_wrong:
+        city_status, city_reason = "FAIL", "city_mismatch"
+    else:
+        city_status, city_reason = "UNKNOWN", "city_evidence_missing"
+    add("city_match", city_status, {"city_id": city_id, "city_name": city_name, "registry_city_match": registry_city_ok}, "candidate must have explicit city evidence or a registry city match", city_reason, evidence_ids)
+    if role_ok:
+        role_status, role_reason = "PASS", "source_role_match"
+    elif registered or row.get("role_match_evidence"):
+        role_status, role_reason = "FAIL", "source_role_mismatch"
+    else:
+        role_status, role_reason = "UNKNOWN", "source_role_evidence_missing"
+    add("source_role_match", role_status, {"source_role": source_role, "registry_role_match": registry_role_ok}, "candidate institution must match the required source role", role_reason, evidence_ids)
+    add("reusable_list_entry", "PASS" if entry_ok else "FAIL", {"page_type": page_type, "candidate_kind": candidate_kind, "entry_eligible": bool(row.get("entry_eligible"))}, "URL must be a reusable list/homepage entry, never a detail page or PDF", "reusable_entry" if entry_ok else "detail_or_pdf_not_reusable", evidence_ids)
+    if parser_ok:
+        parser_status_value, parser_reason = "PASS", "parser_ready"
+    elif parser_status in {"", "pending"} and not direct_evidence_present:
+        parser_status_value, parser_reason = "UNKNOWN", "parser_evidence_missing"
+    else:
+        parser_status_value, parser_reason = "FAIL", "parser_not_ready"
+    add("parser_ready", parser_status_value, {"parser_status": parser_status or None, "detail_link_count": detail_count}, "parser must extract at least one article/detail link from the entry", parser_reason, evidence_ids)
+    if pagination_ok:
+        pagination_status, pagination_reason = "PASS", "pagination_ready"
+    elif pagination in {"", "unknown"} and not direct_evidence_present:
+        pagination_status, pagination_reason = "UNKNOWN", "pagination_evidence_missing"
+    else:
+        pagination_status, pagination_reason = "FAIL", "pagination_not_ready"
+    add("pagination_ready", pagination_status, {"pagination_strategy": pagination or None}, "pagination must have a reproducible strategy or a verified natural single page", pagination_reason, evidence_ids)
+    # A source entry is a list/homepage boundary. It may legitimately have
+    # no date on the boundary page while exposing article links whose dates
+    # are extracted by the document parser. Keep the strict parser,
+    # pagination and article-link gates; delegate only this entry-level date
+    # check when those deterministic prerequisites are already present.
+    date_delegated_to_article_parser = bool(
+        date_observed is not True
+        and entry_ok
+        and parser_ok
+        and pagination_ok
+        and article_links_observed is True
+    )
+    if date_observed is True:
+        date_status, date_reason = "PASS", "publication_date_evidence_present"
+    elif date_delegated_to_article_parser:
+        date_status, date_reason = "PASS", "publication_date_delegated_to_article_parser"
+    elif date_observed is False:
+        date_status, date_reason = "FAIL", "publication_date_unavailable"
+    else:
+        date_status, date_reason = "UNKNOWN", "publication_date_evidence_missing"
+    add("publication_date_available", date_status, {"available": date_observed}, "entry evidence must expose a publication-date signal for downstream record extraction", date_reason, evidence_ids)
+    if article_links_observed is True:
+        link_status, link_reason = "PASS", "article_links_extracted"
+    elif article_links_observed is False:
+        link_status, link_reason = "FAIL", "article_link_extraction_failed"
+    else:
+        link_status, link_reason = "UNKNOWN", "article_link_evidence_missing"
+    add("article_link_extraction_ready", link_status, {"detail_link_count": detail_count, "ready": article_links_observed}, "entry parser must extract reusable article links", link_reason, evidence_ids)
+    add("duplicate_or_existing_source", "PASS" if duplicate_ok else "FAIL", {"duplicate_count": duplicate_count, "explicit_duplicate": bool(duplicate_flag)}, "candidate must not be a duplicate of another formal candidate unless explicitly merged by policy", "no_duplicate" if duplicate_ok else "duplicate_or_existing_source", evidence_ids)
+    prior_statuses = {item["gate_name"]: item["gate_status"] for item in gates}
+    non_pass = [name for name in VERIFICATION_GATE_NAMES if name != "strict_admission_ready" and prior_statuses.get(name) != "PASS"]
+    if not non_pass:
+        strict_status, strict_reason = "PASS", "strict_admission_ready"
+    elif any(prior_statuses.get(name) == "FAIL" for name in non_pass):
+        strict_status, strict_reason = "FAIL", "strict_gate_rejected"
+    else:
+        strict_status, strict_reason = "UNKNOWN", "historical_evidence_missing" if historical else "strict_evidence_incomplete"
+    add("strict_admission_ready", strict_status, {"failed_or_unknown_gates": non_pass}, "all deterministic source-admission gates must pass before verified or enabled", strict_reason, evidence_ids)
+    statuses = [item["gate_status"] for item in gates]
+    if all(status == "PASS" for status in statuses):
+        status = "VERIFIED"
+    elif "FAIL" in statuses:
+        status = "REJECTED"
+    else:
+        status = "UNKNOWN"
+    failed_gates = [item["gate_name"] for item in gates if item["gate_status"] != "PASS"]
+    reason_codes = list(dict.fromkeys(item["reason_code"] for item in gates if item["gate_status"] != "PASS"))
+    if not failed_gates:
+        reason_codes = ["verified_all_deterministic_gates"]
+    result = {
+        "candidate_id": candidate_id,
+        "proposal_id": proposal_id or row.get("proposal_id"),
+        "slot_id": slot_id,
+        "candidate_url": canonical,
+        "city_id": city_id,
+        "source_role": source_role,
+        "status": status,
+        "verified": status == "VERIFIED",
+        "strict_enabled": bool(row.get("is_enabled")) and status == "VERIFIED",
+        "failed_gates": failed_gates,
+        "reason_codes": reason_codes,
+        "last_checked_at": row.get("last_checked_at") or checked_at,
+        "historical": historical,
+    }
+    return result, gates
+
+
+def build_verification_summary(candidate_results: list[dict], gate_results: list[dict]) -> dict:
+    failed_gate_counts: dict[str, int] = {}
+    unknown_gate_counts: dict[str, int] = {}
+    reason_code_counts: dict[str, int] = {}
+    for gate in gate_results:
+        status = str(gate.get("gate_status") or "")
+        if status == "FAIL":
+            failed_gate_counts[gate["gate_name"]] = failed_gate_counts.get(gate["gate_name"], 0) + 1
+        elif status == "UNKNOWN":
+            unknown_gate_counts[gate["gate_name"]] = unknown_gate_counts.get(gate["gate_name"], 0) + 1
+        if status != "PASS":
+            reason = str(gate.get("reason_code") or "historical_evidence_missing")
+            reason_code_counts[reason] = reason_code_counts.get(reason, 0) + 1
+    verified = [item for item in candidate_results if item.get("status") == "VERIFIED"]
+    failed = [item for item in candidate_results if item.get("status") == "REJECTED"]
+    unknown = [item for item in candidate_results if item.get("status") == "UNKNOWN"]
+    rejected = [
+        {
+            "candidate_id": item.get("candidate_id"),
+            "candidate_url": item.get("candidate_url"),
+            "failed_gates": item.get("failed_gates") or ["historical_evidence_missing"],
+            "reason_codes": item.get("reason_codes") or ["historical_evidence_missing"],
+            "current_status": item.get("status") or "UNKNOWN",
+        }
+        for item in candidate_results
+        if item.get("status") != "VERIFIED"
+    ]
+    return {
+        "checked_candidates": len(candidate_results),
+        "verified_candidates": len(verified),
+        "failed_candidates": len(failed),
+        "unknown_candidates": len(unknown),
+        "candidate_results": candidate_results,
+        "gate_results": gate_results,
+        "failed_gate_counts": dict(sorted(failed_gate_counts.items())),
+        "unknown_gate_counts": dict(sorted(unknown_gate_counts.items())),
+        "reason_code_counts": dict(sorted(reason_code_counts.items())),
+        "rejected": rejected,
+        "strict_enabled": sum(bool(item.get("strict_enabled")) for item in verified),
+        # Backward-compatible aliases used by older batch reports.
+        "checked": len(candidate_results),
+        "verified": len(verified),
+        "enabled": sum(bool(item.get("strict_enabled")) for item in verified),
+    }
+
+
+def _dynamic_human_question(failed_gates: list[str], reason_codes: list[str]) -> str:
+    gates = set(failed_gates)
+    if "city_match" in gates:
+        return "Can you confirm the official city jurisdiction for this URL and provide explicit city evidence?"
+    if "source_role_match" in gates:
+        return "Can you confirm that this institution is the required source role, or identify the correct successor institution?"
+    if "reusable_list_entry" in gates:
+        return "This result appears to be a detail, PDF, or policy-content page. Is there an official reusable list or homepage entry?"
+    if "direct_healthy" in gates or "reachable" in gates:
+        return "Can this official URL be reached twice through the direct route with HTTP 200, or should it remain blocked?"
+    if "pagination_ready" in gates:
+        return "Can you provide evidence of the real pagination or stopping condition for this official list?"
+    if "publication_date_available" in gates:
+        return "Does the entry expose a reproducible publication-date signal for downstream policy records?"
+    if "article_link_extraction_ready" in gates or "parser_ready" in gates:
+        return "Can the entry parser reliably extract article links, or should this URL be rejected as a non-list page?"
+    if "duplicate_or_existing_source" in gates:
+        return "Is this URL a duplicate of an existing source, and which source should be retained?"
+    return f"Please resolve the deterministic evidence gaps: {', '.join(reason_codes) or 'historical_evidence_missing'}."
+
+
+def build_human_review_rows(
+    candidates: list[dict],
+    candidate_results: list[dict],
+    *,
+    run_id: str,
+    strict_enabled_ids: set[str] | None = None,
+) -> list[dict]:
+    metadata = {str(row.get("candidate_id")): row for row in candidates}
+    strict_enabled_ids = strict_enabled_ids or set()
+    rows: list[dict] = []
+    for result in candidate_results:
+        if result.get("status") == "VERIFIED":
+            continue
+        candidate_id = str(result.get("candidate_id") or "")
+        source = {**metadata.get(candidate_id, {}), **result}
+        failed_gates = list(result.get("failed_gates") or ["historical_evidence_missing"])
+        reason_codes = list(result.get("reason_codes") or ["historical_evidence_missing"])
+        probe_success = int(source.get("health_probe_success_count") or 0)
+        probe_count = int(source.get("health_probe_count") or 0)
+        direct_healthy = bool(
+            str(source.get("health_status") or "").lower() in {"healthy", "ok"}
+            and str(source.get("network_route") or "").lower() in _DIRECT_ROUTES
+            and int(source.get("http_status") or 0) == 200
+            and probe_success >= 2
+        )
+        parser_ready = str(source.get("parser_status") or "").lower() in _PARSER_READY
+        probe_status = "completed" if probe_count >= 2 else "partial" if probe_count else "not_started"
+        machine = "needs_human_review" if result.get("status") == "UNKNOWN" else "deterministic_rejected"
+        rows.append(
+            {
+                "run_id": run_id,
+                "review_id": f"REVIEW_{candidate_id}",
+                "proposal_id": source.get("proposal_id"),
+                "candidate_id": candidate_id,
+                "slot_id": source.get("slot_id"),
+                "city_id": source.get("city_id"),
+                "city_name": source.get("city_name"),
+                "source_role": source.get("source_role"),
+                "candidate_url": source.get("candidate_url") or source.get("canonical_url"),
+                "candidate_title": source.get("candidate_title"),
+                "probe_status": probe_status,
+                "direct_healthy": direct_healthy,
+                "parser_ready": parser_ready,
+                "verified": False,
+                "strict_enabled": candidate_id in strict_enabled_ids,
+                "failed_gates": json.dumps(failed_gates, ensure_ascii=False),
+                "reason_codes": json.dumps(reason_codes, ensure_ascii=False),
+                "verification_summary": json.dumps(result, ensure_ascii=False, default=str),
+                "last_checked_at": result.get("last_checked_at") or source.get("last_checked_at"),
+                "exact_question_for_human": _dynamic_human_question(failed_gates, reason_codes),
+                "allowed_decisions": json.dumps(["approve_primary", "approve_alternative", "reject_all", "change_role", "accept_municipal_substitute", "defer", "quarantine"], ensure_ascii=False),
+                "machine_recommendation": machine,
+                "impact": "This decision cannot write verified or enabled directly; it only routes the candidate back through deterministic verification.",
+                "priority": int(source.get("selection_rank") or 1),
+            }
+        )
+    return rows
+
+
+def _classify_registered_candidate(url: str, role: str) -> tuple[str, str, bool]:
+    """Reuse the seed classifier for registry-derived entries."""
+    from policydb.seed_source_candidates import _candidate_kind, classify_seed_page
+
+    page_type = classify_seed_page(url)
+    candidate_kind, entry_eligible = _candidate_kind(page_type, role)
+    return page_type, candidate_kind, bool(
+        entry_eligible and is_reusable_source_entry(url)
+    )
 
 
 def slot_paths(settings: Settings | None = None) -> tuple[Path, Path]:
@@ -80,7 +677,7 @@ def build_requirement_slots(settings: Settings | None = None) -> dict:
     }
     slot_path, candidate_path = slot_paths(settings)
     existing_candidates = (
-        pl.read_parquet(candidate_path)
+        read_parquet_snapshot(candidate_path)
         if candidate_path.exists()
         else pl.DataFrame()
     )
@@ -242,7 +839,7 @@ def upsert_candidates(
     slot_path, candidate_path = slot_paths(settings)
     if not slot_path.exists():
         build_requirement_slots(settings)
-    slots = pl.read_parquet(slot_path)
+    slots = read_parquet_snapshot(slot_path)
     now = datetime.now(UTC).isoformat()
     normalized: list[dict] = []
     for row in rows:
@@ -257,12 +854,26 @@ def upsert_candidates(
         canonical = canonicalize_url(candidate_url)
         domain = (urlsplit(canonical).hostname or "").lower()
         slot_id = str(match[0, "slot_id"])
+        page_type, derived_kind, derived_entry_eligible = _classify_registered_candidate(
+            canonical, role
+        )
+        candidate_kind = str(row.get("candidate_kind") or derived_kind)
+        if page_type != "site_or_column_entry":
+            candidate_kind = derived_kind
+        entry_eligible = derived_entry_eligible
+        source_id = row.get("source_id")
+        candidate_id = str(
+            row.get("candidate_id")
+            or stable_id(slot_id, canonical, candidate_kind, source_id or "", prefix="SRCCAND")
+        )
         normalized.append(
             {
-                "candidate_id": stable_id(slot_id, canonical, prefix="SRCCAND"),
+                "candidate_id": candidate_id,
                 "slot_id": slot_id,
                 "city_id": city_id,
                 "source_role": role,
+                "source_id": source_id,
+                "agency_type": row.get("agency_type"),
                 "candidate_url": candidate_url,
                 "canonical_url": canonical,
                 "domain": domain,
@@ -282,6 +893,8 @@ def upsert_candidates(
                 "robots_status": row.get("robots_status", "unknown"),
                 "parser_status": row.get("parser_status", "pending"),
                 "pagination_strategy": row.get("pagination_strategy", "unknown"),
+                "publication_date_available": row.get("publication_date_available"),
+                "article_link_extraction_ready": row.get("article_link_extraction_ready"),
                 "health_probe_count": int(row.get("health_probe_count") or 0),
                 "health_probe_success_count": int(
                     row.get("health_probe_success_count") or 0
@@ -297,15 +910,18 @@ def upsert_candidates(
                 "manual_review_status": row.get("manual_review_status", "pending"),
                 "first_seen_at": row.get("first_seen_at", now),
                 "last_checked_at": row.get("last_checked_at"),
-                "candidate_kind": row.get("candidate_kind"),
-                "page_type": row.get("page_type"),
-                "entry_eligible": bool(row.get("entry_eligible", False)),
+                "candidate_kind": candidate_kind,
+                "page_type": page_type,
+                "entry_eligible": entry_eligible,
                 "role_assignment_method": row.get("role_assignment_method"),
                 "substitute_for_role": row.get("substitute_for_role"),
                 "substitute_reason": row.get("substitute_reason"),
                 "official_evidence": row.get("official_evidence"),
                 "entry_evidence": row.get("entry_evidence"),
                 "pagination_evidence": row.get("pagination_evidence"),
+                "registry_source_evidence": row.get("registry_source_evidence"),
+                "registry_verification_status": row.get("registry_verification_status"),
+                "registry_health_evidence": row.get("registry_health_evidence"),
                 "generation_batch_id": row.get("generation_batch_id"),
                 "is_seed_derived": bool(row.get("is_seed_derived", False)),
                 "has_seed_evidence": bool(row.get("has_seed_evidence", False)),
@@ -317,11 +933,17 @@ def upsert_candidates(
                     row.get("has_cross_jurisdiction_conflict", False)
                 ),
                 "notes": row.get("notes"),
+                "created_at": row.get("created_at", now),
+                "updated_at": row.get("updated_at", now),
+                "verification_failed_gates": row.get("verification_failed_gates"),
+                "verification_reason_codes": row.get("verification_reason_codes"),
+                "verification_summary_json": row.get("verification_summary_json"),
+                "verification_checked_at": row.get("verification_checked_at"),
             }
         )
     incoming_by_id = {str(row["candidate_id"]): row for row in normalized}
     if candidate_path.exists():
-        existing = pl.read_parquet(candidate_path)
+        existing = read_parquet_snapshot(candidate_path)
         existing_by_id = {
             str(row["candidate_id"]): row for row in existing.iter_rows(named=True)
         }
@@ -360,11 +982,21 @@ def upsert_candidates(
                         "health_probe_success_count",
                         "probe_evidence_json",
                         "last_checked_at",
+                        "publication_date_available",
+                        "article_link_extraction_ready",
+                        "verification_failed_gates",
+                        "verification_reason_codes",
+                        "verification_summary_json",
+                        "verification_checked_at",
                     ):
                         merged[field] = previous.get(field)
             merged["first_seen_at"] = previous.get("first_seen_at") or incoming_row.get(
                 "first_seen_at"
             )
+            merged["created_at"] = previous.get("created_at") or incoming_row.get(
+                "created_at", now
+            )
+            merged["updated_at"] = now
             previous_is_seed = bool(previous.get("is_seed_derived"))
             incoming_is_seed = bool(incoming_row.get("is_seed_derived"))
             merged["has_seed_evidence"] = bool(
@@ -404,98 +1036,180 @@ def upsert_candidates(
     return {"upserted": len(rows), "total": incoming.height}
 
 
-def seed_candidates_from_registry(settings: Settings | None = None) -> dict:
+def seed_candidates_from_registry(
+    settings: Settings | None = None,
+    *,
+    city: str | None = None,
+    source_id: str | None = None,
+    slot_id: str | None = None,
+    write: bool = True,
+) -> dict:
+    """Plan or upsert reusable candidates from formal registry entries only."""
     settings = settings or Settings.discover()
     cities = load_cities_105(settings)
+    city_ids: set[str] | None = None
+    if city:
+        matches = cities.filter(
+            (pl.col("city_id") == city)
+            | (pl.col("city_name") == city)
+            | (pl.col("city_name_short") == city)
+        )
+        if matches.height != 1:
+            raise ValueError(f"city is not uniquely resolved: {city}")
+        city_ids = {str(matches[0, "city_id"])}
+    if slot_id and slot_id not in set(
+        stable_id(str(row["city_id"]), role, prefix="SLOT")
+        for row in cities.iter_rows(named=True)
+        for role in REQUIRED_ROLES
+    ):
+        raise ValueError(f"unknown slot_id: {slot_id}")
     city_lookup = {str(row["city_id"]): row for row in cities.iter_rows(named=True)}
     rows: list[dict] = []
+    planned: list[dict] = []
+    now = datetime.now(UTC).isoformat()
     for source in load_registry(settings):
-        primary_role = (
+        if source_id and source.source_id != source_id:
+            continue
+        role = (
             source.agency_type
             if source.agency_type in REQUIRED_ROLES
             else source.source_role
+            if source.source_role in REQUIRED_ROLES
+            else None
         )
-        role_urls: list[tuple[str, list[str | None]]] = []
-        if primary_role in REQUIRED_ROLES:
-            role_urls.append(
-                (
-                    primary_role,
-                    [source.homepage_url, *source.list_page_urls, *source.seed_urls],
-                )
-            )
-        if source.gazette_url:
-            role_urls.append(("government_gazette", [source.gazette_url]))
-        if not role_urls:
+        if role is None:
             continue
         for city_id in source.city_ids:
-            city = city_lookup.get(str(city_id))
-            if not city:
+            city_id = str(city_id)
+            if city_ids is not None and city_id not in city_ids:
                 continue
-            for role, urls in role_urls:
-                for url in dict.fromkeys(item for item in urls if item):
-                    official = _official_domain(str(url))
-                    city_name = str(city["city_name_short"])
-                    city_evidence = city_name in source.source_name or city_name in str(url)
-                    role_evidence = (
-                        (role == "government_gazette" and url == source.gazette_url)
-                        or source.agency_type == role
-                        or source.source_role == role
-                    )
-                    rows.append({
+            city_row = city_lookup.get(city_id)
+            if not city_row:
+                continue
+            target_slot = stable_id(city_id, role, prefix="SLOT")
+            if slot_id and target_slot != slot_id:
+                continue
+            urls = list(source.list_page_urls)
+            if not urls and source.homepage_url:
+                urls = [source.homepage_url]
+            urls.extend(
+                url
+                for url in source.seed_urls
+                if _classify_registered_candidate(str(url), role)[0]
+                == "site_or_column_entry"
+            )
+            role_urls: list[tuple[str, str]] = [(role, str(url)) for url in urls]
+            if source.gazette_url:
+                role_urls.append(("government_gazette", str(source.gazette_url)))
+            for candidate_role, url in dict.fromkeys(role_urls):
+                canonical = canonicalize_url(url)
+                page_type, candidate_kind, entry_eligible = _classify_registered_candidate(
+                    canonical, candidate_role
+                )
+                official = _official_domain(canonical)
+                candidate_id = stable_id(
+                    stable_id(city_id, candidate_role, prefix="SLOT"),
+                    canonical,
+                    candidate_kind,
+                    source.source_id,
+                    prefix="SRCCAND",
+                )
+                evidence = (
+                    f"registry source_id={source.source_id}; city_id={city_id}; "
+                    f"agency_type={source.agency_type}; source_role={source.source_role}; "
+                    f"page_type={page_type}; entry_url_field="
+                    f"{'list_page_urls' if url in source.list_page_urls else 'homepage_or_qualified_seed'}"
+                )
+                row = {
+                    "candidate_id": candidate_id,
+                    "source_id": source.source_id,
+                    "agency_type": source.agency_type,
+                    "city_id": city_id,
+                    "source_role": candidate_role,
+                    "candidate_url": url,
+                    "site_name": source.source_name,
+                    "department_name": source.organization_name_standardized,
+                    "discovery_method": "registered_source_entry",
+                    "discovery_evidence_url": canonical,
+                    "discovery_evidence_text": evidence,
+                    "registry_source_evidence": evidence,
+                    "registry_verification_status": (
+                        "verified" if source.official_domain_verified else "unverified"
+                    ),
+                    "registry_health_evidence": source.health_status,
+                    "official_domain_evidence": (
+                        "hostname is gov.cn or a subdomain" if official else None
+                    ),
+                    "city_match_evidence": f"registry city_ids contains {city_id}",
+                    "role_match_evidence": (
+                        f"registry agency_type={source.agency_type}; assigned_role={candidate_role}"
+                    ),
+                    "candidate_kind": candidate_kind,
+                    "page_type": page_type,
+                    "entry_eligible": entry_eligible,
+                    "official_confidence": 1.0 if official else 0.0,
+                    "city_confidence": 1.0,
+                    "role_confidence": 1.0,
+                    "overall_confidence": 1.0 if official and entry_eligible else 0.0,
+                    "is_official": official,
+                    "is_verified": False,
+                    "is_enabled": False,
+                    "manual_review_status": "pending_probe",
+                    "health_status": "pending",
+                    "last_checked_at": None,
+                    "created_at": now,
+                    "updated_at": now,
+                    "is_seed_derived": False,
+                    "has_seed_evidence": False,
+                }
+                rows.append(row)
+                planned.append(
+                    {
+                        "source_id": source.source_id,
+                        "slot_id": target_slot,
                         "city_id": city_id,
-                        "source_role": role,
-                        "candidate_url": url,
-                        "site_name": source.source_name,
-                        "department_name": source.organization_name_standardized,
-                        "discovery_method": source.discovery_method
-                        or "existing_registry",
-                        "discovery_evidence_text": f"existing source_id={source.source_id}",
-                        "official_domain_evidence": (
-                            "hostname is gov.cn or a subdomain" if official else None
-                        ),
-                        "city_match_evidence": (
-                            f"registry city_ids contains {city_id}" if city_evidence else None
-                        ),
-                        "role_match_evidence": (
-                            f"registry role={role}" if role_evidence else None
-                        ),
-                        "official_confidence": 1.0 if official else 0.2,
-                        "city_confidence": 1.0 if city_id in source.city_ids else 0.0,
-                        "role_confidence": 1.0 if role_evidence else 0.0,
-                        "overall_confidence": (
-                            1.0 if official and city_evidence and role_evidence else 0.5
-                        ),
-                        "is_official": official,
-                        # Registry metadata is discovery evidence, not a live
-                        # parser/network attestation. A real probe and the
-                        # deterministic verifier must approve this candidate.
-                        "is_verified": False,
-                        "is_enabled": False,
-                        "manual_review_status": "pending_probe",
-                        "health_status": source.health_status,
-                        "last_checked_at": (
-                            source.last_health_at.isoformat()
-                            if source.last_health_at
-                            else None
-                        ),
-                    })
-    if not rows:
-        build_requirement_slots(settings)
-        return {"upserted": 0, "total": 0}
-    return upsert_candidates(rows, settings)
+                        "source_role": candidate_role,
+                        "canonical_url": canonical,
+                        "candidate_kind": candidate_kind,
+                        "entry_eligible": entry_eligible,
+                        "candidate_id": candidate_id,
+                        "registry_source_evidence": evidence,
+                    }
+                )
+    if write and rows:
+        result = upsert_candidates(rows, settings)
+    else:
+        result = {
+            "upserted": 0,
+            "total": (
+                read_parquet_snapshot(slot_paths(settings)[1]).height
+                if slot_paths(settings)[1].exists()
+                else 0
+            ),
+        }
+    return {
+        **result,
+        "write_applied": write,
+        "planned_count": len(planned),
+        "planned_candidates": planned,
+        "filters": {"city": city, "source_id": source_id, "slot_id": slot_id},
+    }
 
 
 def list_candidates(
     *,
     city: str | None = None,
     status: str | None = None,
+    source_id: str | None = None,
+    candidate_id: str | None = None,
+    slot_id: str | None = None,
     settings: Settings | None = None,
 ) -> pl.DataFrame:
     settings = settings or Settings.discover()
     slot_path, candidate_path = slot_paths(settings)
     if not candidate_path.exists():
         return pl.DataFrame()
-    frame = pl.read_parquet(candidate_path)
+    frame = read_parquet_snapshot(candidate_path)
     if city:
         cities = load_cities_105(settings).filter(
             (pl.col("city_name") == city)
@@ -514,19 +1228,429 @@ def list_candidates(
             frame = frame.filter(pl.col("is_enabled"))
         else:
             frame = frame.filter(pl.col("manual_review_status") == status)
+    if source_id and "source_id" in frame.columns:
+        frame = frame.filter(pl.col("source_id") == source_id)
+    if candidate_id:
+        frame = frame.filter(pl.col("candidate_id") == candidate_id)
+    if slot_id:
+        frame = frame.filter(pl.col("slot_id") == slot_id)
     return frame
+
+
+def _probe_fetch_compat(fetcher: RespectfulFetcher, url: str, referer: str | None = None):
+    """Preserve Referer on production fetchers while supporting legacy test doubles."""
+    if referer is None:
+        return fetcher.fetch(url)
+    try:
+        return fetcher.fetch(url, referer=referer)
+    except TypeError as exc:
+        if "referer" not in str(exc).lower():
+            raise
+        return fetcher.fetch(url)
+
+
+def _parse_entry_probe(result) -> dict:
+    body_ok = bool(result.body)
+    direct_ok = str(result.network_route or "").lower() in {
+        "direct", "direct_ok", "curl_fallback_ok"
+    }
+    status_ok = result.status_code == 200 and body_ok and direct_ok
+    details: set[str] = set()
+    next_urls: list[str] = []
+    page_title = None
+    js_shell = False
+    navigation_count = 0
+    breadcrumb_detected = False
+    publication_date_available = False
+    page_text = ""
+    gazette_issue_refs: list[tuple[int, int]] = []
+    if "html" in str(result.content_type or "").lower() and body_ok:
+        soup = BeautifulSoup(result.body, "html.parser")
+        page_title = soup.title.get_text(" ", strip=True) if soup.title else None
+        page_text = soup.get_text(" ", strip=True)
+        raw_body = result.body.decode("utf-8", errors="replace")
+        # Beijing's official gazette history page renders issue links through
+        # showUrl(year, issue) JavaScript calls.  These are real official
+        # index entries even though they are not HTML anchors; the probe
+        # resolves a bounded sample below and records the returned issue URL
+        # and date page as deterministic evidence.
+        gazette_issue_refs = [
+            (int(year), int(issue))
+            for year, issue in re.findall(
+                r"showUrl\(\s*(20[0-9]{2})\s*,\s*([0-9]+)\s*\)",
+                raw_body,
+            )
+        ]
+        gazette_issue_refs = list(dict.fromkeys(gazette_issue_refs))
+        js_shell = len(page_text) < 40 and bool(soup.find("script"))
+        navigation_count = len(soup.select("nav a, .nav a, [class*='menu'] a"))
+        breadcrumb_detected = bool(soup.select(".breadcrumb, .crumb, [class*='location']"))
+        # Many Chinese government list templates render the publication date
+        # in a sibling span rather than inside the anchor.  Inspect the page
+        # text as a deterministic evidence signal, while retaining the
+        # anchor/URL check below for templates that do put the date in links.
+        publication_date_available = bool(
+            re.search(r"\b20\d{2}[-/.]\d{1,2}(?:[-/.]\d{1,2})?\b", page_text)
+            or re.search(r"20\d{2}\s*(?:年|nian)\s*\d{1,2}\s*(?:月|yue)", page_text, re.I)
+        )
+        origin = (urlsplit(result.final_url).hostname or "").lower()
+        for anchor in soup.find_all("a", href=True):
+            target = urljoin(result.final_url, str(anchor.get("href") or ""))
+            if (urlsplit(target).hostname or "").lower() != origin:
+                continue
+            if canonicalize_url(target) == canonicalize_url(result.final_url):
+                continue
+            label = anchor.get_text(" ", strip=True)
+            if re.search(
+                r"(?:20\d{2}[-/.]\d{1,2}(?:[-/.]\d{1,2})?|20\d{2}年\d{1,2}月)",
+                f"{label} {target}",
+            ):
+                publication_date_available = True
+            rel = {str(item).lower() for item in (anchor.get("rel") or [])}
+            if "next" in rel or re.search(r"(?:next|涓嬩竴|涓嬮〉|鍚庨〉)", label, re.I):
+                next_urls.append(target)
+            elif len(label) >= 4 and not re.search(
+                r"^(?:棣栭〉|鐧诲綍|娉ㄥ唽|杩斿洖|缃戠珯鍦板浘)$", label
+            ):
+                details.add(canonicalize_url(target))
+    return {
+        "status_ok": status_ok,
+        "detail_links": details,
+        "detail_link_count": len(details),
+        "next_urls": list(dict.fromkeys(next_urls)),
+        "page_title": page_title,
+        "js_shell": js_shell,
+        "navigation_count": navigation_count,
+        "breadcrumb_detected": breadcrumb_detected,
+        "publication_date_available": publication_date_available,
+        "gazette_issue_refs": gazette_issue_refs,
+        "page_text_excerpt": page_text[:1600],
+    }
+
+
+def _probe_gazette_issue_index(
+    fetcher: RespectfulFetcher,
+    result,
+    info: dict,
+    *,
+    max_issues: int = 2,
+) -> dict:
+    """Resolve a bounded official gazette index sample without admitting details.
+
+    Some government gazette pages expose issue links only through a small
+    same-domain JSON endpoint called by JavaScript.  Resolving two issue
+    links proves that the list is live and that its entries expose an exact
+    publication date, while the candidate itself remains the reusable index
+    page rather than an issue/detail page.
+    """
+    refs = list(info.get("gazette_issue_refs") or [])[:max_issues]
+    if not refs:
+        return {"strategy": None, "detail_links": set(), "publication_date_available": False, "evidence": []}
+    detail_links: set[str] = set()
+    evidence: list[dict] = []
+    publication_date_available = False
+    endpoint_base = str(result.final_url).rstrip("/") + "/"
+    for year, issue in refs:
+        endpoint = urljoin(
+            endpoint_base,
+            "findUrl?" + urlencode({"gbnf": str(year), "gbqs": str(issue)}),
+        )
+        item = {
+            "year": year,
+            "issue": issue,
+            "endpoint_url": endpoint,
+        }
+        try:
+            endpoint_result = _probe_fetch_compat(fetcher, endpoint, str(result.final_url))
+            item.update(
+                {
+                    "endpoint_status_code": endpoint_result.status_code,
+                    "endpoint_network_route": endpoint_result.network_route,
+                    "endpoint_response_sha256": endpoint_result.response_sha256,
+                }
+            )
+            payload = json.loads(endpoint_result.body.decode("utf-8", errors="replace"))
+            issue_url = str(payload.get("url") or "").strip()
+            if not issue_url or not _official_domain(issue_url):
+                item["error_type"] = "invalid_official_issue_url"
+                evidence.append(item)
+                continue
+            issue_result = _probe_fetch_compat(fetcher, issue_url, endpoint)
+            issue_info = _parse_entry_probe(issue_result)
+            canonical_issue_url = canonicalize_url(issue_url)
+            detail_links.add(canonical_issue_url)
+            publication_date_available = publication_date_available or bool(
+                issue_info.get("publication_date_available")
+            )
+            item.update(
+                {
+                    "issue_url": issue_url,
+                    "issue_status_code": issue_result.status_code,
+                    "issue_final_url": issue_result.final_url,
+                    "issue_network_route": issue_result.network_route,
+                    "issue_response_sha256": issue_result.response_sha256,
+                    "issue_page_title": issue_info.get("page_title"),
+                    "issue_publication_date_available": bool(
+                        issue_info.get("publication_date_available")
+                    ),
+                }
+            )
+        except Exception as exc:
+            item.update({"error_type": type(exc).__name__})
+        evidence.append(item)
+    return {
+        "strategy": "gazette_issue_index" if detail_links else None,
+        "detail_links": detail_links,
+        "publication_date_available": publication_date_available,
+        "evidence": evidence,
+    }
+
+
+def _hidden_index_urls(url: str, max_pages: int = 8) -> list[str]:
+    parsed = urlsplit(url)
+    directory, _, filename = parsed.path.rpartition("/")
+    match = re.search(
+        r"^(?P<prefix>index(?:_\d+)?)(?P<suffix>\.(?:s?html?|jhtml|aspx?))$",
+        filename,
+        re.I,
+    )
+    if not match:
+        return []
+    return [
+        parsed._replace(
+            path=f"{directory}/{match.group('prefix')}_{number}{match.group('suffix')}"
+        ).geturl()
+        for number in range(1, max_pages + 1)
+    ]
+
+
+def _probe_hidden_index(fetcher: RespectfulFetcher, result, info: dict) -> tuple[list[dict], set[str]]:
+    evidence: list[dict] = []
+    links = set(info["detail_links"])
+    previous = str(result.final_url)
+    for url in _hidden_index_urls(previous):
+        try:
+            page = _probe_fetch_compat(fetcher, url, previous)
+            page_info = _parse_entry_probe(page)
+            new_links = page_info["detail_links"] - links
+            links.update(page_info["detail_links"])
+            evidence.append(
+                {
+                    "url": url,
+                    "status_code": page.status_code,
+                    "final_url": page.final_url,
+                    "network_route": page.network_route,
+                    "response_sha256": page.response_sha256,
+                    "status_ok": page_info["status_ok"],
+                    "detail_link_count": page_info["detail_link_count"],
+                    "new_detail_link_count": len(new_links),
+                }
+            )
+            if not page_info["status_ok"] or not new_links:
+                break
+            previous = str(page.final_url or url)
+        except Exception as exc:
+            evidence.append({"url": url, "error_type": type(exc).__name__})
+            break
+    return evidence, links
+
+
+def _probe_candidates_v2(
+    *,
+    city: str | None,
+    source_id: str | None,
+    candidate_id: str | None,
+    candidate_ids: list[str] | None,
+    slot_id: str | None,
+    limit: int | None,
+    rounds: int,
+    settings: Settings,
+    fetcher: RespectfulFetcher | None,
+    attempt_callback: Callable[[dict[str, Any]], Any] | None = None,
+) -> dict:
+    frame = list_candidates(
+        city=city, source_id=source_id, candidate_id=candidate_id,
+        slot_id=slot_id, settings=settings,
+    )
+    if candidate_ids is not None:
+        frame = frame.filter(pl.col("candidate_id").is_in([str(item) for item in candidate_ids]))
+    if limit is not None:
+        frame = frame.head(limit)
+    if frame.is_empty():
+        return {"checked": 0, "healthy": 0, "parser_verified": 0, "failed": 0}
+    fetcher = fetcher or RespectfulFetcher(
+        timeout=settings.request_timeout,
+        connect_timeout=settings.connect_timeout,
+        retries=settings.max_retries,
+        rate_limit=settings.default_rate_limit,
+        check_robots=settings.respect_robots,
+        attempt_callback=attempt_callback,
+    )
+    checked: list[dict] = []
+    healthy = parser_verified = failed = 0
+    for row in frame.iter_rows(named=True):
+        # canonical_url is a deduplication key.  Fetch the original candidate
+        # URL so a meaningful host alias (for example www.beijing.gov.cn) is
+        # not lost before TLS/SNI and official-page evidence are collected.
+        url = str(row.get("candidate_url") or row["canonical_url"])
+        evidence: list[dict] = []
+        success = parser_success = 0
+        last = None
+        last_info: dict = {}
+        last_strategy = "unknown"
+        last_pagination: list[dict] = []
+        for round_number in range(1, rounds + 1):
+            try:
+                result = _probe_fetch_compat(fetcher, url)
+                info = _parse_entry_probe(result)
+                strategy = "next_link" if info["next_urls"] else "unknown"
+                pagination = [
+                    {"url": target, "source": "rel_or_label_next"}
+                    for target in info["next_urls"]
+                ]
+                gazette_evidence = _probe_gazette_issue_index(
+                    fetcher,
+                    result,
+                    info,
+                ) if row.get("source_role") == "government_gazette" else {
+                    "strategy": None,
+                    "detail_links": set(),
+                    "publication_date_available": False,
+                    "evidence": [],
+                }
+                if gazette_evidence.get("strategy"):
+                    info["detail_links"].update(gazette_evidence["detail_links"])
+                    info["detail_link_count"] = len(info["detail_links"])
+                    info["publication_date_available"] = bool(
+                        info.get("publication_date_available")
+                        or gazette_evidence.get("publication_date_available")
+                    )
+                    strategy = str(gazette_evidence["strategy"])
+                    pagination.extend(gazette_evidence.get("evidence", []))
+                elif strategy == "unknown" and info["status_ok"]:
+                    pagination, all_links = _probe_hidden_index(fetcher, result, info)
+                    if any(
+                        item.get("status_ok") and item.get("new_detail_link_count", 0) > 0
+                        for item in pagination
+                    ):
+                        strategy = "bounded_cursor"
+                        info["detail_links"] = all_links
+                        info["detail_link_count"] = len(all_links)
+                    elif info["detail_link_count"] > 0:
+                        strategy = "natural_single_page"
+                parser_ok = info["status_ok"] and info["detail_link_count"] > 0 and not info["js_shell"]
+                success += int(info["status_ok"])
+                parser_success += int(parser_ok)
+                last, last_info, last_strategy, last_pagination = result, info, strategy, pagination
+                evidence.append(
+                    {
+                        "round": round_number,
+                        "checked_at": datetime.now(UTC).isoformat(),
+                        "status_code": result.status_code,
+                        "final_url": result.final_url,
+                        "network_route": result.network_route,
+                        "response_sha256": result.response_sha256,
+                        "page_title": info["page_title"],
+                        "breadcrumb_detected": info["breadcrumb_detected"],
+                        "navigation_link_count": info["navigation_count"],
+                        "detail_link_count": info["detail_link_count"],
+                        "pagination_strategy": strategy,
+                        "pagination_evidence": pagination,
+                        "gazette_issue_evidence": gazette_evidence.get("evidence", []),
+                        "js_shell": info["js_shell"],
+                        "parser_ok": parser_ok,
+                    }
+                )
+            except Exception as exc:
+                evidence.append(
+                    {"round": round_number, "checked_at": datetime.now(UTC).isoformat(), "error_type": type(exc).__name__}
+                )
+        if last is None:
+            failed += 1
+            row.update({
+                "health_status": "unhealthy", "parser_status": "fetch_failed",
+                "pagination_strategy": "unknown", "health_probe_count": rounds,
+                "health_probe_success_count": success,
+                "publication_date_available": False,
+                "article_link_extraction_ready": False,
+                "probe_evidence_json": json.dumps(evidence, ensure_ascii=False),
+                "last_checked_at": datetime.now(UTC).isoformat(),
+            })
+        else:
+            parser_ok = parser_success == rounds
+            row.update({
+                "http_status": last.status_code,
+                "final_url": last.final_url,
+                "redirect_chain_json": json.dumps(last.redirect_chain, ensure_ascii=False, default=str),
+                "network_route": last.network_route,
+                "health_status": "healthy" if success == rounds else "unhealthy",
+                "parser_status": "pagination_detected" if parser_ok and last_strategy != "natural_single_page" else "list_detected" if parser_ok else "no_list_links",
+                "pagination_strategy": last_strategy,
+                "publication_date_available": bool(last_info.get("publication_date_available")),
+                "article_link_extraction_ready": bool(last_info.get("detail_link_count", 0) > 0),
+                "pagination_evidence": json.dumps(last_pagination, ensure_ascii=False, default=str),
+                "health_probe_count": rounds,
+                "health_probe_success_count": success,
+                "site_name": " ".join(
+                    filter(None, [str(row.get("site_name") or ""), str(last_info.get("page_title") or "")])
+                )[:500]
+                or None,
+                "department_name": " ".join(
+                    filter(None, [str(row.get("department_name") or ""), str(last_info.get("page_text_excerpt") or "")])
+                )[:2200]
+                or None,
+                "probe_evidence_json": json.dumps(evidence, ensure_ascii=False, default=str),
+                "last_checked_at": datetime.now(UTC).isoformat(),
+                "notes": json.dumps({"detail_link_count": last_info.get("detail_link_count", 0), "pagination_strategy": last_strategy, "response_sha256": last.response_sha256}, ensure_ascii=False),
+            })
+            healthy += int(success == rounds)
+            parser_verified += int(parser_ok)
+        checked.append(row)
+    upsert_candidates(checked, settings, authoritative_review=True)
+    verification = verify_candidates(
+        city=city,
+        source_id=source_id,
+        candidate_id=candidate_id,
+        candidate_ids=[str(row["candidate_id"]) for row in checked],
+        slot_id=slot_id,
+        settings=settings,
+    )
+    return {
+        "checked": len(checked), "healthy": healthy, "parser_verified": parser_verified,
+        "failed": failed, "verification": verification,
+        "filters": {"city": city, "source_id": source_id, "candidate_id": candidate_id, "slot_id": slot_id},
+    }
 
 
 def probe_candidates(
     *,
     city: str | None = None,
+    source_id: str | None = None,
+    candidate_id: str | None = None,
+    candidate_ids: list[str] | None = None,
+    slot_id: str | None = None,
     limit: int | None = None,
     rounds: int = 2,
     settings: Settings | None = None,
     fetcher: RespectfulFetcher | None = None,
+    attempt_callback: Callable[[dict[str, Any]], Any] | None = None,
 ) -> dict:
     """Fetch candidate entries and retain auditable list/parser evidence."""
     settings = settings or Settings.discover()
+    if rounds < 2:
+        raise ValueError("candidate verification requires at least two independent probes")
+    return _probe_candidates_v2(
+        city=city,
+        source_id=source_id,
+        candidate_id=candidate_id,
+        candidate_ids=candidate_ids,
+        slot_id=slot_id,
+        limit=limit,
+        rounds=rounds,
+        settings=settings,
+        fetcher=fetcher,
+        attempt_callback=attempt_callback,
+    )
     frame = list_candidates(city=city, settings=settings)
     if limit is not None:
         frame = frame.head(limit)
@@ -680,7 +1804,9 @@ def probe_candidates(
                 {
                     "health_status": "unhealthy",
                     "parser_status": "fetch_failed",
-                    "pagination_strategy": "unknown",
+                "pagination_strategy": "unknown",
+                "publication_date_available": False,
+                "article_link_extraction_ready": False,
                     "health_probe_count": rounds,
                     "health_probe_success_count": successful_rounds,
                     "probe_evidence_json": json.dumps(
@@ -705,17 +1831,26 @@ def probe_candidates(
     }
 
 
-def verify_candidates(
+def _legacy_verify_candidates(
     *,
     city: str | None = None,
+    source_id: str | None = None,
+    candidate_id: str | None = None,
+    slot_id: str | None = None,
     settings: Settings | None = None,
 ) -> dict:
     """Apply only deterministic evidence gates; no candidate is enabled here."""
     settings = settings or Settings.discover()
-    frame = list_candidates(city=city, settings=settings)
+    frame = list_candidates(
+        city=city,
+        source_id=source_id,
+        candidate_id=candidate_id,
+        slot_id=slot_id,
+        settings=settings,
+    )
     if frame.is_empty():
         return {"checked": 0, "verified": 0, "enabled": 0}
-    slots = pl.read_parquet(slot_paths(settings)[0]).select(
+    slots = read_parquet_snapshot(slot_paths(settings)[0]).select(
         "slot_id", "city_name", "source_role"
     )
     frame = frame.join(slots, on=["slot_id", "source_role"], how="left")
@@ -724,11 +1859,9 @@ def verify_candidates(
     for row in frame.iter_rows(named=True):
         official = _official_domain(str(row["canonical_url"]))
         evidence_text = str(row.get("discovery_evidence_text") or "")
-        source_id = (
-            evidence_text.split("source_id=", 1)[1].split()[0].split(";", 1)[0]
-            if "source_id=" in evidence_text
-            else ""
-        )
+        source_id = str(row.get("source_id") or "")
+        if not source_id and "source_id=" in evidence_text:
+            source_id = evidence_text.split("source_id=", 1)[1].split()[0].split(";", 1)[0]
         registered = registry_by_id.get(source_id)
         registry_city_ok = bool(
             registered and str(row["city_id"]) in registered.city_ids
@@ -764,7 +1897,11 @@ def verify_candidates(
         health_ok = str(row.get("health_status") or "").lower() in {
             "healthy",
             "ok",
+        }
+        route_ok = str(row.get("network_route") or "").lower() in {
+            "direct",
             "direct_ok",
+            "curl_fallback_ok",
         }
         candidate_kind = str(row.get("candidate_kind") or "")
         page_type = str(row.get("page_type") or "")
@@ -794,6 +1931,7 @@ def verify_candidates(
             and city_ok
             and role_ok
             and health_ok
+            and route_ok
             and entry_ok
             and parser_ok
             and http_ok
@@ -812,7 +1950,7 @@ def verify_candidates(
                         float(official)
                         + float(city_ok)
                         + float(role_ok)
-                        + float(health_ok and parser_ok and http_ok)
+                        + float(health_ok and route_ok and parser_ok and http_ok)
                     )
                     / 4,
                 ),
@@ -831,6 +1969,302 @@ def verify_candidates(
         "verified": sum(bool(row["is_verified"]) for row in verified_rows),
         "enabled": sum(bool(row["is_enabled"]) for row in verified_rows),
     }
+
+
+def verify_candidates(
+    *,
+    city: str | None = None,
+    source_id: str | None = None,
+    candidate_id: str | None = None,
+    slot_id: str | None = None,
+    candidate_ids: list[str] | None = None,
+    run_id: str | None = None,
+    settings: Settings | None = None,
+) -> dict:
+    """Apply deterministic evidence gates and persist an auditable gate result."""
+    settings = settings or Settings.discover()
+    frame = list_candidates(
+        city=city,
+        source_id=source_id,
+        candidate_id=candidate_id,
+        slot_id=slot_id,
+        settings=settings,
+    )
+    if candidate_ids is not None:
+        frame = frame.filter(pl.col("candidate_id").is_in([str(item) for item in candidate_ids]))
+    if frame.is_empty():
+        return build_verification_summary([], [])
+    slots = read_parquet_snapshot(slot_paths(settings)[0]).select(
+        "slot_id", "city_name", "source_role"
+    )
+    frame = frame.join(slots, on=["slot_id", "source_role"], how="left")
+    registry_by_id = {source.source_id: source for source in load_registry(settings)}
+    duplicate_counts: dict[str, int] = {}
+    for row in frame.iter_rows(named=True):
+        key = str(row.get("canonical_url") or "")
+        duplicate_counts[key] = duplicate_counts.get(key, 0) + 1
+    verified_rows: list[dict] = []
+    candidate_results: list[dict] = []
+    gate_results: list[dict] = []
+    effective_run_id = run_id or "deterministic_verify"
+    for row in frame.iter_rows(named=True):
+        result, gates = evaluate_candidate_gates(
+            row,
+            slot=row,
+            registry_by_id=registry_by_id,
+            duplicate_count=duplicate_counts.get(str(row.get("canonical_url") or ""), 1),
+            run_id=effective_run_id,
+            checked_at=str(row.get("last_checked_at") or datetime.now(UTC).isoformat()),
+        )
+        candidate_results.append(result)
+        gate_results.extend(gates)
+        gate_by_name = {item["gate_name"]: item for item in gates}
+        verified = bool(result["verified"])
+        result_status = str(result["status"])
+        official = gate_by_name["official_domain_match"]["gate_status"] == "PASS"
+        city_ok = gate_by_name["city_match"]["gate_status"] == "PASS"
+        role_ok = gate_by_name["source_role_match"]["gate_status"] == "PASS"
+        entry_ok = gate_by_name["reusable_list_entry"]["gate_status"] == "PASS"
+        row.update(
+            {
+                "official_confidence": 1.0 if official else 0.0,
+                "city_confidence": 1.0 if city_ok else 0.0,
+                "role_confidence": 1.0 if role_ok else 0.0,
+                "entry_eligible": entry_ok,
+                "overall_confidence": 1.0 if verified else min(
+                    0.89,
+                    sum(item["gate_status"] == "PASS" for item in gates[:-1])
+                    / max(1, len(gates) - 1),
+                ),
+                "is_official": official,
+                "is_verified": verified,
+                "is_enabled": bool(row.get("is_enabled")) and verified,
+                "manual_review_status": (
+                    "approved"
+                    if verified
+                    else "needs_human_review"
+                    if result_status == "UNKNOWN"
+                    else "rejected_by_gate"
+                ),
+                "verification_failed_gates": json.dumps(result["failed_gates"], ensure_ascii=False),
+                "verification_reason_codes": json.dumps(result["reason_codes"], ensure_ascii=False),
+                "verification_summary_json": json.dumps(result, ensure_ascii=False, default=str),
+                "verification_checked_at": result["last_checked_at"],
+                "last_checked_at": result["last_checked_at"],
+            }
+        )
+        row.pop("city_name", None)
+        verified_rows.append(row)
+    upsert_candidates(verified_rows, settings, authoritative_review=True)
+    return build_verification_summary(candidate_results, gate_results)
+
+
+def rebuild_verification_audit(
+    run_dir: Path,
+    *,
+    settings: Settings | None = None,
+    output: Path | None = None,
+) -> dict:
+    """Rebuild verification evidence into a new directory without changing history."""
+    settings = settings or Settings.discover()
+    run_dir = Path(run_dir).resolve()
+    if not run_dir.exists() or not run_dir.is_dir():
+        raise ValueError(f"run directory does not exist: {run_dir}")
+    output_dir = (output or run_dir / "verification_audit_rebuilt").resolve()
+    if output_dir == run_dir:
+        raise ValueError("historical rebuild output must not overwrite the original run directory")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    applied_path = run_dir / "applied_candidates.parquet"
+    if applied_path.exists():
+        applied = read_parquet_snapshot(applied_path)
+    else:
+        proposal_path = run_dir / "candidate_proposals.parquet"
+        proposals = read_parquet_snapshot(proposal_path) if proposal_path.exists() else pl.DataFrame()
+        applied = proposals.filter(pl.col("selection_status") == "selected_top3") if proposals.height and "selection_status" in proposals.columns else proposals.head(0)
+    candidate_path = slot_paths(settings)[1]
+    current = read_parquet_snapshot(candidate_path) if candidate_path.exists() else pl.DataFrame()
+    current_by_id = {
+        str(row.get("candidate_id")): row
+        for row in current.iter_rows(named=True)
+    }
+    registry_by_id = {source.source_id: source for source in load_registry(settings)}
+    applied_rows = applied.to_dicts() if applied.height else []
+    duplicate_counts: dict[str, int] = {}
+    for row in applied_rows:
+        key = canonicalize_url(str(row.get("candidate_url") or ""))
+        duplicate_counts[key] = duplicate_counts.get(key, 0) + 1
+    candidate_results: list[dict] = []
+    gate_results: list[dict] = []
+    metadata_rows: list[dict] = []
+    for applied_row in applied_rows:
+        candidate_id = str(applied_row.get("candidate_id") or "")
+        current_row = current_by_id.get(candidate_id, {})
+        row = {**applied_row, **current_row}
+        row.setdefault("candidate_id", candidate_id)
+        row.setdefault("candidate_url", applied_row.get("candidate_url"))
+        row.setdefault("canonical_url", applied_row.get("candidate_url"))
+        row.setdefault("city_id", applied_row.get("city_id"))
+        row.setdefault("source_role", applied_row.get("source_role"))
+        slot = {
+            "slot_id": row.get("slot_id"),
+            "city_id": row.get("city_id"),
+            "city_name": row.get("city_name"),
+            "source_role": row.get("source_role"),
+        }
+        result, gates = evaluate_candidate_gates(
+            row,
+            slot=slot,
+            registry_by_id=registry_by_id,
+            duplicate_count=duplicate_counts.get(canonicalize_url(str(row.get("candidate_url") or "")), 1),
+            run_id=run_dir.name,
+            proposal_id=str(applied_row.get("proposal_id") or "") or None,
+            checked_at=str(row.get("last_checked_at") or run_dir.name),
+            historical=True,
+        )
+        candidate_results.append(result)
+        gate_results.extend(gates)
+        metadata_rows.append(row)
+    summary = build_verification_summary(candidate_results, gate_results)
+    gate_columns = [
+        "run_id", "slot_id", "candidate_id", "proposal_id", "candidate_url", "city_id",
+        "source_role", "gate_name", "gate_status", "observed_value", "expected_rule",
+        "reason_code", "evidence_ids", "checked_at",
+    ]
+    gate_frame = pl.from_dicts(gate_results, infer_schema_length=None) if gate_results else pl.DataFrame({column: pl.Series(column, [], dtype=pl.String) for column in gate_columns})
+    atomic_write_parquet(gate_frame, output_dir / "candidate_gate_results.parquet", {"module": "source_slots.audit"})
+    rejection_rows = summary["rejected"]
+    rejection_columns = ["candidate_id", "candidate_url", "failed_gates", "reason_codes", "current_status"]
+    rejection_frame = pl.from_dicts(
+        [
+            {
+                **row,
+                "failed_gates": json.dumps(row.get("failed_gates") or [], ensure_ascii=False),
+                "reason_codes": json.dumps(row.get("reason_codes") or [], ensure_ascii=False),
+            }
+            for row in rejection_rows
+        ],
+        infer_schema_length=None,
+    ) if rejection_rows else pl.DataFrame({column: pl.Series(column, [], dtype=pl.String) for column in rejection_columns})
+    atomic_write_parquet(rejection_frame, output_dir / "strict_rejections.parquet", {"module": "source_slots.audit"})
+    review_rows = build_human_review_rows(metadata_rows, candidate_results, run_id=run_dir.name)
+    review_columns = list(review_rows[0]) if review_rows else [
+        "run_id", "review_id", "proposal_id", "candidate_id", "slot_id", "city_id", "city_name",
+        "source_role", "candidate_url", "candidate_title", "probe_status", "direct_healthy",
+        "parser_ready", "verified", "strict_enabled", "failed_gates", "reason_codes",
+        "verification_summary", "last_checked_at", "exact_question_for_human", "allowed_decisions",
+        "machine_recommendation", "impact", "priority",
+    ]
+    review_frame = pl.from_dicts(review_rows, infer_schema_length=None) if review_rows else pl.DataFrame({column: pl.Series(column, [], dtype=pl.String) for column in review_columns})
+    review_path = output_dir / "HUMAN_REVIEW_QUEUE_REFRESHED.xlsx"
+    review_frame.write_excel(review_path, autofit=True)
+    _normalize_excel_core_properties(review_path)
+    ai_fields = (
+        "search_queries",
+        "institution_aliases",
+        "entry_type_hint",
+        "pagination_hint",
+        "confidence",
+        "recommended_action",
+        "human_question",
+    )
+    ai_records: list[dict] = []
+    for response_path in sorted(run_dir.rglob("ai_responses.parquet")):
+        try:
+            response_frame = read_parquet_snapshot(response_path)
+        except Exception:
+            continue
+        for response_row in response_frame.to_dicts():
+            payload = _safe_json(response_row.get("response_payload"))
+            payload_dict = payload if isinstance(payload, dict) else {}
+            explicit_zero_or_empty = [
+                field
+                for field in ai_fields
+                if field in payload_dict
+                and payload_dict[field] in (0, False, "", [])
+            ]
+            ai_records.append(
+                {
+                    "request_id": response_row.get("request_id"),
+                    "slot_id": response_row.get("slot_id"),
+                    "provider": response_row.get("provider"),
+                    "model": response_row.get("model"),
+                    "status": response_row.get("status"),
+                    "response_hash": response_row.get("response_hash"),
+                    "payload_present": bool(payload_dict),
+                    "payload_fields": sorted(payload_dict),
+                    "fields_defaulted_by_schema": [
+                        field for field in ai_fields if field not in payload_dict
+                    ],
+                    "explicit_zero_or_empty_fields": explicit_zero_or_empty,
+                    "mapping_audit_status": (
+                        "legacy_payload_explicit_fields"
+                        if payload_dict
+                        else "legacy_payload_missing"
+                    ),
+                }
+            )
+    ai_mapping_audit = {
+        "historical_read_only": True,
+        "records": len(ai_records),
+        "records_with_payload": sum(bool(row["payload_present"]) for row in ai_records),
+        "records_without_payload": sum(not bool(row["payload_present"]) for row in ai_records),
+        "explicit_zero_or_empty_field_counts": {
+            field: sum(field in row["explicit_zero_or_empty_fields"] for row in ai_records)
+            for field in ai_fields
+        },
+        "legacy_audit_fields_missing": sum(
+            "ai_parse_status" not in row and row["payload_present"] for row in ai_records
+        ),
+        "record_summaries": ai_records,
+        "raw_model_response_saved": False,
+    }
+    (output_dir / "ai_mapping_audit.json").write_text(
+        json.dumps(ai_mapping_audit, ensure_ascii=False, indent=2, default=str) + "\n",
+        encoding="utf-8",
+    )
+    source_files = [path for path in (applied_path, candidate_path) if path.exists()]
+    source_fingerprint = hashlib.sha256(
+        "".join(f"{path.name}:{hashlib.sha256(path.read_bytes()).hexdigest()}" for path in source_files).encode("utf-8")
+    ).hexdigest()
+    report = {
+        "run_dir": str(run_dir),
+        "output_dir": str(output_dir),
+        "status": "COMPLETED_WITH_UNKNOWN" if summary["unknown_candidates"] else "COMPLETED",
+        "historical_read_only": True,
+        "original_files_untouched": True,
+        "source_fingerprint": source_fingerprint,
+        "checked_candidates": summary["checked_candidates"],
+        "verified_candidates": summary["verified_candidates"],
+        "failed_candidates": summary["failed_candidates"],
+        "unknown_candidates": summary["unknown_candidates"],
+        "gate_rows": gate_frame.height,
+        "strict_rejections": rejection_frame.height,
+        "human_review_rows": review_frame.height,
+        "reason_code_counts": summary["reason_code_counts"],
+        "original_files": [str(path) for path in source_files],
+        "original_artifact_hashes": {
+            str(path): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in (
+                run_dir / "deterministic_verification.parquet",
+                run_dir / "HUMAN_REVIEW_QUEUE.xlsx",
+                run_dir / "run_summary.json",
+                *source_files,
+            )
+            if path.exists()
+        },
+        "ai_mapping_audit": {
+            "records": ai_mapping_audit["records"],
+            "records_with_payload": ai_mapping_audit["records_with_payload"],
+            "records_without_payload": ai_mapping_audit["records_without_payload"],
+            "explicit_zero_or_empty_field_counts": ai_mapping_audit[
+                "explicit_zero_or_empty_field_counts"
+            ],
+            "raw_model_response_saved": False,
+        },
+    }
+    (output_dir / "verification_summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2, default=str) + "\n", encoding="utf-8")
+    (output_dir / "audit_rebuild_report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2, default=str) + "\n", encoding="utf-8")
+    return report
 
 
 def promote_candidate(
@@ -858,6 +2292,7 @@ def promote_candidate(
         raise ValueError("candidate parser/list-page evidence is not verified")
 
     canonical = str(row["canonical_url"])
+    active_entry_url = str(row.get("candidate_url") or canonical)
     parsed = urlsplit(canonical)
     role = str(row["source_role"])
     city_id = str(row["city_id"])
@@ -877,7 +2312,7 @@ def promote_candidate(
         agency_type=role,
         official_status="official",
         seed_urls=[],
-        list_page_urls=[canonical],
+        list_page_urls=[active_entry_url],
         homepage_url=f"{parsed.scheme}://{parsed.netloc}/",
         parser_adapter="generic_government",
         crawl_enabled=False,
@@ -911,17 +2346,66 @@ def promote_candidate(
         action = f"promote_candidate={candidate_id};source={source_id}"
     else:
         previous = sources[existing_index]
+        previous_entries = [
+            str(value)
+            for value in previous.list_page_urls
+            if value and canonicalize_url(str(value)) != canonical
+        ]
+        previous_history = [
+            str(value)
+            for value in getattr(previous, "historical_entry_urls", [])
+            if value and canonicalize_url(str(value)) != canonical
+        ]
         source = source.model_copy(
             update={
                 "seed_urls": previous.seed_urls,
-                "list_page_urls": sorted(set(previous.list_page_urls + [canonical])),
+                # A newly verified candidate is the active source entry.  The
+                # previous entries remain auditable history instead of being
+                # allowed to make the next crawl fail before it reaches the
+                # replacement URL.
+                "list_page_urls": [active_entry_url],
+                "historical_entry_urls": sorted(set(previous_history + previous_entries)),
                 "crawl_enabled": previous.crawl_enabled,
+                "recommended_enabled": previous.recommended_enabled,
             }
         )
         sources[existing_index] = source
         action = f"merge_promoted_candidate={candidate_id};source={source_id}"
     save_registry_atomic(sources, settings, action=action)
     materialize_registry_parquet(sources, settings)
+    sync_path = settings.curated / "source_sync_state.parquet"
+    if sync_path.exists():
+        sync_frame = read_parquet_snapshot(sync_path)
+        if "source_id" in sync_frame.columns:
+            sync_rows = sync_frame.filter(pl.col("source_id").cast(pl.String) == source_id)
+            if sync_rows.height == 1:
+                sync_row = sync_rows.row(0, named=True)
+                prior_backfill = str(sync_row.get("backfill_status") or "").lower()
+                if prior_backfill in {
+                    "",
+                    "not_started",
+                    "retry_wait",
+                    "failed_recoverable",
+                    "partial",
+                } or sync_row.get("next_retry_at"):
+                    sync_row.update(
+                        {
+                            "list_url": active_entry_url,
+                            "canonical_list_url": canonical,
+                            "source_status": "CRAWL_READY",
+                            "backfill_status": "not_started",
+                            "next_retry_at": None,
+                            "consecutive_failures": 0,
+                            "last_error": None,
+                            "updated_at": datetime.now(UTC).isoformat(),
+                        }
+                    )
+                    merge_and_replace_parquet(
+                        sync_path,
+                        pl.DataFrame([sync_row], infer_schema_length=None),
+                        ("source_id",),
+                        {"module": "source_slots.promote_candidate"},
+                    )
     build_requirement_slots(settings)
     return {"candidate_id": candidate_id, "source_id": source_id, "crawl_enabled": source.crawl_enabled}
 
@@ -1130,11 +2614,11 @@ def resolve_slot(
 ) -> dict:
     settings = settings or Settings.discover()
     slot_path, candidate_path = slot_paths(settings)
-    slots = pl.read_parquet(slot_path)
+    slots = read_parquet_snapshot(slot_path)
     if slots.filter(pl.col("slot_id") == slot_id).height != 1:
         raise ValueError(f"unknown slot_id: {slot_id}")
     if candidate_id:
-        candidates = pl.read_parquet(candidate_path)
+        candidates = read_parquet_snapshot(candidate_path)
         candidate = candidates.filter(
             (pl.col("candidate_id") == candidate_id)
             & (pl.col("slot_id") == slot_id)
@@ -1185,7 +2669,7 @@ def audit_525(settings: Settings | None = None) -> dict:
     slot_path, _ = slot_paths(settings)
     if not slot_path.exists():
         return build_requirement_slots(settings)
-    frame = pl.read_parquet(slot_path)
+    frame = read_parquet_snapshot(slot_path)
     output = settings.outputs / "acceptance"
     output.mkdir(parents=True, exist_ok=True)
     csv_path = output / "source_525_audit.csv"

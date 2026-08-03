@@ -8,6 +8,7 @@ from pathlib import Path
 
 import polars as pl
 
+from policydb.parquet_store import read_parquet_snapshot
 from policydb.settings import Settings
 from policydb.source_slots import audit_525
 
@@ -36,12 +37,12 @@ def build_exhaustive_acceptance(
     shards_path = settings.curated / "crawl_shards.parquet"
     progress_path = settings.curated / "city_year_progress.parquet"
     candidates_path = settings.curated / "source_candidates.parquet"
-    shards = pl.read_parquet(shards_path) if shards_path.exists() else pl.DataFrame()
+    shards = read_parquet_snapshot(shards_path) if shards_path.exists() else pl.DataFrame()
     progress = (
-        pl.read_parquet(progress_path) if progress_path.exists() else pl.DataFrame()
+        read_parquet_snapshot(progress_path) if progress_path.exists() else pl.DataFrame()
     )
     candidates = (
-        pl.read_parquet(candidates_path)
+        read_parquet_snapshot(candidates_path)
         if candidates_path.exists()
         else pl.DataFrame()
     )

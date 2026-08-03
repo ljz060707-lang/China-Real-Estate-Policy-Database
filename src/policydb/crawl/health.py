@@ -8,6 +8,7 @@ from bs4 import BeautifulSoup
 from policydb.crawl.fetcher import RespectfulFetcher
 from policydb.crawl.models import RegisteredSource
 from policydb.crawl.registry import load_registry, save_registry_atomic, set_sources_enabled
+from policydb.parquet_store import atomic_write_parquet
 from policydb.settings import Settings
 
 
@@ -99,7 +100,7 @@ def evaluate_sources(
     path = settings.curated / "source_health.parquet"
     if rows:
         path.parent.mkdir(parents=True, exist_ok=True)
-        pl.DataFrame(rows).write_parquet(path, compression="zstd")
+        atomic_write_parquet(pl.DataFrame(rows), path, {"module": "crawl.health"})
     index = {row["source_id"]: row for row in rows}
     updated = []
     for source in load_registry(settings):

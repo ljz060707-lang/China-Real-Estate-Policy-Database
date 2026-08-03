@@ -1,5 +1,13 @@
 # 中国房地产与城市政策研究数据库（CRPD）
 
+> 当前交付标准：系统先保证真实可运行、扩大城市和政策文本覆盖、展示可审计缺口；“算法上的严格完整”是后续 Silver 深度补全目标，不是本轮覆盖门槛。
+
+## 当前运行模式
+
+Bronze 快速原始覆盖和 Silver 清洗/验证已启用；Gold 政策强度只保留禁用占位，不产生任何政策强度 API 调用。首轮使用 `FAST_BULK_INGEST` 广度优先、城市轮转、来源时间/页数/文档/附件预算和 checkpoint/resume。所有状态、来源、缺口和运行历史都保留在本地审计目录中。
+
+Dashboard 默认只监听 `127.0.0.1`，读取真实 Parquet、checkpoint、来源注册表、gap 和 automation 状态；操作通过经过校验的 JSON job queue 进入正式业务层，不接受任意 shell 命令。当前覆盖数字是观测值，不代表 105 城或 525 槽位已严格完成。
+
 CRPD 是面向中国房地产与城市政策研究的可追溯数据库。系统统一保存政策实体、正式版本、
 不同网站发布副本、政策动作、原文证据、AI 分类、去重关系和城市—时间覆盖状态。
 
@@ -302,3 +310,30 @@ uv run policydb sources validate-registry
 政府网页抓取固定完全直连且不读取环境代理；AI和搜索API使用独立代理会话。525个槽位中没有
 证据的项保持 `unresolved`，不会用推测URL补齐。城市—年度只有在来源、时间、分页、错误、
 归档、正文、AI和去重全部闭环后才会标为 `certified_complete`。
+## Current continuous-sync standard
+
+CRPD currently prioritizes real operability, breadth of city/policy-text coverage, auditable source gaps, and an actionable local Dashboard. The active layers are Bronze (fast raw coverage) and Silver (cleaning, verification, deduplication); Gold policy-intensity is a disabled placeholder and makes no model/API calls.
+
+The bounded breadth-first command is:
+
+```powershell
+$env:CRPD_DATA_ROOT = "D:\Data Set\CRPD"
+\.venv\Scripts\python.exe -m policydb.autopilot_cli fast-bulk-ingest --config .\config\continuous_sync.yaml --dry-run
+\.venv\Scripts\python.exe -m policydb.autopilot_cli fast-bulk-ingest --max-cities 5 --apply --resume
+```
+
+It rotates cities across the five required roles, limits each source to 10 minutes/30 list pages/300 documents/one attachment attempt by default, and persists checkpointed `PARTIAL_BUT_USABLE` or `PARTIAL_EMPTY` states. It does not claim strict historical completeness.
+
+Start and inspect the local Dashboard with:
+
+```powershell
+.\scripts\start_dashboard.ps1 -NoBrowser
+.\scripts\check_dashboard.ps1
+.\scripts\stop_dashboard.ps1
+```
+
+Dashboard operations write validated JSON jobs under `D:\Data Set\CRPD\control\dashboard_jobs`; no arbitrary shell command is accepted. The Dashboard reads curated Parquet, checkpoints, source registries, gap records, and run status rather than simulated values. It exposes overview KPIs, the 525-slot funnel, city/role matrix, year coverage, document quality, source health, gaps, architecture, and the disabled Gold placeholder.
+
+Research snapshots are immutable run directories containing curated summaries and a manifest with `policy_intensity_enabled=false` and `policy_intensity_rows=0`.
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/DASHBOARD_GUIDE.md](docs/DASHBOARD_GUIDE.md), [docs/OPERATIONS.md](docs/OPERATIONS.md), [docs/DATA_COMPLETENESS.md](docs/DATA_COMPLETENESS.md), [docs/FULL_CRAWL_WORKFLOW.md](docs/FULL_CRAWL_WORKFLOW.md), [docs/CITY_COMPLETION_WORKFLOW.md](docs/CITY_COMPLETION_WORKFLOW.md), and [docs/STATUS_MODEL.md](docs/STATUS_MODEL.md).

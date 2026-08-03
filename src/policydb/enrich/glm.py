@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from policydb.crawl.checkpoint import append_unique
 from policydb.crawl.dedup import glm_cache_key, normalized_text_hash
+from policydb.parquet_store import read_parquet_snapshot
 from policydb.settings import Settings
 from policydb.transform.normalization import stable_id
 
@@ -195,7 +196,7 @@ class GLMEnricher:
         text_hash = normalized_text_hash(text)
         cache_key = glm_cache_key(text_hash, self.model, self.prompt_version, self.schema_version)
         if self.cache_path.exists():
-            cached = pl.read_parquet(self.cache_path).filter(
+            cached = read_parquet_snapshot(self.cache_path).filter(
                 (pl.col("cache_key") == cache_key)
                 & (pl.col("model_name") == self.model)
                 & (pl.col("prompt_version") == self.prompt_version)
@@ -256,7 +257,7 @@ class GLMEnricher:
         )
         verification_id = stable_id(cache_key, prefix="LLMVERIFY")
         if self.verification_cache_path.exists():
-            cached = pl.read_parquet(self.verification_cache_path).filter(
+            cached = read_parquet_snapshot(self.verification_cache_path).filter(
                 (pl.col("verification_id") == verification_id)
                 & (pl.col("status") == "complete")
             )
@@ -330,11 +331,13 @@ class GLMEnricher:
         self,
         run_id: str | None = None,
         document_version_ids: list[str] | None = None,
+        *,
+        require_archive: bool = False,
     ) -> pl.DataFrame:
         versions_path = self.settings.curated / "policy_document_versions.parquet"
         if not versions_path.exists():
             return pl.DataFrame()
-        versions = pl.read_parquet(versions_path)
+        versions = read_parquet_snapshot(versions_path)
         if document_version_ids:
             versions = versions.filter(
                 pl.col("document_version_id").is_in(document_version_ids)
@@ -343,12 +346,39 @@ class GLMEnricher:
             items_path = self.settings.curated / "crawl_items.parquet"
             if not items_path.exists():
                 return versions.head(0)
-            items = pl.read_parquet(items_path).filter(pl.col("run_id") == run_id).select(
-                "item_id"
+            run_items = read_parquet_snapshot(items_path).filter(pl.col("run_id") == run_id)
+            item_ids = run_items.select("item_id")["item_id"].to_list()
+            carried_urls = (
+                run_items.filter(pl.col("status") == "unchanged")
+                .select("canonical_url")["canonical_url"].to_list()
+                if run_items.height and "status" in run_items.columns
+                else []
             )
-            versions = versions.join(
-                items, left_on="crawl_item_id", right_on="item_id", how="inner"
-            )
+            item_match = pl.col("crawl_item_id").is_in(item_ids)
+            if carried_urls and "canonical_url" in versions.columns:
+                item_match = item_match | pl.col("canonical_url").is_in(carried_urls)
+            versions = versions.filter(item_match)
+        if not require_archive:
+            return versions
+        # Paid or remote inference is never eligible before the immutable
+        # archive/hash gate.  Missing audit rows are an explicit empty queue,
+        # not an invitation to infer from an unverified local file.
+        checks_path = self.settings.curated / "archive_integrity_checks.parquet"
+        if not checks_path.exists():
+            return versions.head(0)
+        checks = read_parquet_snapshot(checks_path)
+        eligible_ids = {
+            str(row["document_version_id"])
+            for row in checks.iter_rows(named=True)
+            if str(row.get("archive_status") or "") == "archived"
+            and str(row.get("sha256_expected") or "").lower()
+            == str(row.get("sha256_actual") or "").lower()
+            and row.get("document_version_id") is not None
+        }
+        versions = versions.filter(
+            pl.col("document_version_id").is_in(sorted(eligible_ids))
+            & pl.col("extracted_text").fill_null("").str.len_chars().gt(0)
+        )
         return versions
 
     def enrich_pending(
@@ -356,7 +386,9 @@ class GLMEnricher:
         run_id: str | None = None,
         document_version_ids: list[str] | None = None,
     ) -> dict:
-        versions = self._pending_versions(run_id, document_version_ids)
+        versions = self._pending_versions(
+            run_id, document_version_ids, require_archive=True
+        )
         if versions.is_empty():
             return {"pending": 0, "completed": 0, "awaiting_api_key": 0, "failed": 0, "irrelevant": 0}
         completed = awaiting = failed = irrelevant = 0
@@ -389,10 +421,12 @@ class GLMEnricher:
         versions_path = self.settings.curated / "policy_document_versions.parquet"
         if not versions_path.exists() or not self.cache_path.exists():
             return {"pending": 0, "completed": 0, "awaiting_api_key": 0, "failed": 0}
-        versions = self._pending_versions(run_id, document_version_ids).select(
+        versions = self._pending_versions(
+            run_id, document_version_ids, require_archive=True
+        ).select(
             "content_sha256", "extracted_text"
         ).unique("content_sha256", keep="last")
-        extractions = pl.read_parquet(self.cache_path).filter(
+        extractions = read_parquet_snapshot(self.cache_path).filter(
             (pl.col("status") == "complete") & pl.col("output_json").is_not_null()
         )
         work = extractions.join(versions, on="content_sha256", how="inner")

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
+from typing import Any
 from urllib.parse import urlsplit
 from urllib.robotparser import RobotFileParser
 
@@ -10,7 +12,7 @@ import httpx
 
 from policydb.crawl.dedup import content_sha256
 from policydb.crawl.models import FetchResult
-from policydb.network import GovernmentDirectClient
+from policydb.network import GovernmentDirectClient, government_browser_headers
 
 
 class CrawlFetchError(RuntimeError):
@@ -94,22 +96,24 @@ class RespectfulFetcher:
         self,
         *,
         client: httpx.Client | None = None,
-        user_agent: str = "Mozilla/5.0 (compatible; PolicyDBResearchBot/0.1; +local-research)",
+        user_agent: str | None = None,
         timeout: float = 30,
         connect_timeout: float = 10,
         retries: int = 3,
         rate_limit: float = 0.5,
         check_robots: bool = True,
         max_response_bytes: int = 50 * 1024 * 1024,
+        attempt_callback: Callable[[dict[str, Any]], Any] | None = None,
     ) -> None:
-        self.user_agent = user_agent
+        self.user_agent = government_browser_headers(user_agent)["User-Agent"]
         self.direct_client = (
             None
             if client is not None
             else GovernmentDirectClient(
-                user_agent=user_agent,
+                user_agent=self.user_agent,
                 timeout=timeout,
                 connect_timeout=connect_timeout,
+                attempt_callback=attempt_callback,
             )
         )
         self.client = client or self.direct_client.client
@@ -117,6 +121,7 @@ class RespectfulFetcher:
         self.rate_limit = rate_limit
         self.check_robots = check_robots
         self.max_response_bytes = max_response_bytes
+        self.attempt_callback = attempt_callback
         self._robots: dict[str, RobotFileParser] = {}
         self._last_request: dict[str, float] = {}
 
@@ -127,10 +132,34 @@ class RespectfulFetcher:
         origin = f"{parts.scheme}://{parts.netloc}"
         if origin not in self._robots:
             parser = RobotFileParser(origin + "/robots.txt")
+            attempt_id = None
             try:
-                response = self.client.get(parser.url)
-                parser.parse(response.text.splitlines() if response.status_code == 200 else [])
-            except httpx.HTTPError:
+                if self.direct_client is not None:
+                    # The direct client owns the request and invokes the
+                    # attempt callback itself.  Calling its underlying
+                    # httpx client here would bypass the HTTP budget ledger.
+                    direct_response = self.direct_client.get(parser.url)
+                    parser.parse(
+                        direct_response.content.decode("utf-8", errors="ignore").splitlines()
+                        if direct_response.status_code == 200
+                        else []
+                    )
+                else:
+                    if self.attempt_callback is not None:
+                        attempt_id = self.attempt_callback(
+                            {"phase": "before", "stage": "robots", "url": parser.url, "attempt": 1}
+                        )
+                    response = self.client.get(parser.url)
+                    if self.attempt_callback is not None:
+                        self.attempt_callback(
+                            {"phase": "after", "attempt_id": attempt_id, "url": parser.url, "status_code": response.status_code}
+                        )
+                    parser.parse(response.text.splitlines() if response.status_code == 200 else [])
+            except httpx.HTTPError as exc:
+                if self.attempt_callback is not None and self.direct_client is None:
+                    self.attempt_callback(
+                        {"phase": "after", "attempt_id": attempt_id, "url": parser.url, "error_type": type(exc).__name__, "error_message": str(exc)}
+                    )
                 parser.parse([])
             self._robots[origin] = parser
         return self._robots[origin].can_fetch(self.user_agent, url)
@@ -141,6 +170,7 @@ class RespectfulFetcher:
         *,
         etag: str | None = None,
         last_modified: str | None = None,
+        referer: str | None = None,
     ) -> FetchResult:
         if not self._allowed(url):
             raise RobotsBlocked(f"robots.txt disallows {url}")
@@ -150,22 +180,30 @@ class RespectfulFetcher:
             time.sleep(self.rate_limit - elapsed)
         error: Exception | None = None
         for attempt in range(self.retries):
+            response = None
+            injected_attempt_id = None
             try:
                 headers = {}
                 if etag:
                     headers["If-None-Match"] = etag
                 if last_modified:
                     headers["If-Modified-Since"] = last_modified
+                if referer:
+                    headers["Referer"] = referer
                 direct_response = (
                     self.direct_client.get(url, headers=headers)
                     if self.direct_client is not None
                     else None
                 )
-                response = (
-                    self.client.get(url, headers=headers)
-                    if direct_response is None
-                    else None
-                )
+                if direct_response is None and self.attempt_callback is not None:
+                    injected_attempt_id = self.attempt_callback(
+                        {"phase": "before", "stage": "government_fetch", "url": url, "attempt": attempt + 1}
+                    )
+                response = self.client.get(url, headers=headers) if direct_response is None else None
+                if direct_response is None and self.attempt_callback is not None:
+                    self.attempt_callback(
+                        {"phase": "after", "attempt_id": injected_attempt_id, "url": url, "status_code": response.status_code}
+                    )
                 status_code = (
                     direct_response.status_code
                     if direct_response is not None
@@ -270,6 +308,21 @@ class RespectfulFetcher:
                     ),
                 )
             except (httpx.HTTPError, CrawlFetchError) as exc:
+                if (
+                    self.attempt_callback is not None
+                    and self.direct_client is None
+                    and injected_attempt_id is not None
+                    and response is None
+                ):
+                    self.attempt_callback(
+                        {
+                            "phase": "after",
+                            "attempt_id": injected_attempt_id,
+                            "url": url,
+                            "error_type": type(exc).__name__,
+                            "error_message": str(exc),
+                        }
+                    )
                 error = classify_fetch_error(exc, url)
                 if attempt + 1 < self.retries:
                     time.sleep(min(2**attempt, 8))

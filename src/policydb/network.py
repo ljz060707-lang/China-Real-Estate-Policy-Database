@@ -6,6 +6,7 @@ import os
 import socket
 import ssl
 import subprocess
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -18,6 +19,44 @@ from policydb.crawl.dedup import content_sha256
 from policydb.settings import Settings
 
 REDIRECT_CODES = {301, 302, 303, 307, 308}
+DEFAULT_GOVERNMENT_USER_AGENT = (
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+    'AppleWebKit/537.36 (KHTML, like Gecko) '
+    'Chrome/150.0.0.0 Safari/537.36'
+)
+_GOVERNMENT_BROWSER_HEADERS = {
+    'Accept': (
+        'text/html,application/xhtml+xml,application/xml;q=0.9,'
+        'image/avif,image/webp,*/*;q=0.8'
+    ),
+    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.5',
+    'Cache-Control': 'no-cache',
+    'Upgrade-Insecure-Requests': '1',
+}
+
+def government_browser_headers(
+    user_agent: str | None = None,
+    extra: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    '''Build the single browser-compatible header set for direct government traffic.'''
+    candidate = str(user_agent or '').strip()
+    looks_like_browser = (
+        candidate.startswith('Mozilla/')
+        and 'AppleWebKit/' in candidate
+        and ('Chrome/' in candidate or 'Safari/' in candidate)
+    )
+    headers = {
+        'User-Agent': candidate
+        if looks_like_browser
+        else DEFAULT_GOVERNMENT_USER_AGENT
+    }
+    headers.update(_GOVERNMENT_BROWSER_HEADERS)
+    if extra:
+        for key, value in extra.items():
+            if key.lower() == 'user-agent':
+                continue
+            headers[key] = str(value)
+    return headers
 NETWORK_STATUSES = {
     "direct_ok",
     "proxy_ok",
@@ -87,6 +126,22 @@ def _tls_like(error: Exception) -> bool:
     return any(token in lowered for token in ("ssl", "tls", "unexpected_eof", "eof while reading"))
 
 
+def _curl_browser_arguments() -> list[str]:
+    headers = government_browser_headers()
+    return [
+        "--user-agent",
+        headers["User-Agent"],
+        "--header",
+        f"Accept: {headers['Accept']}",
+        "--header",
+        f"Accept-Language: {headers['Accept-Language']}",
+        "--header",
+        f"Cache-Control: {headers['Cache-Control']}",
+        "--header",
+        f"Upgrade-Insecure-Requests: {headers['Upgrade-Insecure-Requests']}",
+    ]
+
+
 def _curl_schannel_get(
     url: str, original_url: str, aliases: set[str]
 ) -> DirectResponse | None:
@@ -109,6 +164,7 @@ def _curl_schannel_get(
                 "30",
                 "--silent",
                 "--show-error",
+                *_curl_browser_arguments(),
                 "--write-out",
                 "\n__CRPD_CURL_META__%{http_code}|%{url_effective}",
                 url,
@@ -170,18 +226,20 @@ class GovernmentDirectClient:
         *,
         timeout: float = 30.0,
         connect_timeout: float = 10.0,
-        user_agent: str = "Mozilla/5.0 (compatible; CRPDResearchBot/2.0)",
+        user_agent: str | None = None,
         max_redirects: int = 10,
         allowed_aliases: set[str] | None = None,
         transport: httpx.BaseTransport | None = None,
+        attempt_callback: Callable[[dict[str, Any]], Any] | None = None,
     ) -> None:
         self.max_redirects = max_redirects
         self.allowed_aliases = allowed_aliases or set()
+        self.attempt_callback = attempt_callback
         self.client = httpx.Client(
             trust_env=False,
             follow_redirects=False,
             verify=True,
-            headers={"User-Agent": user_agent},
+            headers=government_browser_headers(user_agent),
             timeout=httpx.Timeout(timeout, connect=connect_timeout),
             transport=transport,
         )
@@ -204,22 +262,83 @@ class GovernmentDirectClient:
         chain: list[dict[str, Any]] = []
         seen: set[str] = set()
         response: httpx.Response | None = None
-        for _ in range(self.max_redirects + 1):
+        for attempt_number in range(1, self.max_redirects + 2):
             if current in seen:
                 raise httpx.TooManyRedirects("redirect loop detected")
             seen.add(current)
+            attempt_id = None
+            if self.attempt_callback is not None:
+                attempt_id = self.attempt_callback(
+                    {
+                        "phase": "before",
+                        "stage": "government_fetch",
+                        "url": current,
+                        "attempt": attempt_number,
+                    }
+                )
             try:
-                response = self.client.get(current, headers=headers)
+                request_headers = government_browser_headers(
+                    self.client.headers.get("User-Agent"), headers
+                )
+                response = self.client.get(current, headers=request_headers)
+                if self.attempt_callback is not None:
+                    self.attempt_callback(
+                        {
+                            "phase": "after",
+                            "attempt_id": attempt_id,
+                            "url": current,
+                            "status_code": response.status_code,
+                        }
+                    )
             except Exception as exc:
+                if self.attempt_callback is not None:
+                    self.attempt_callback(
+                        {
+                            "phase": "after",
+                            "attempt_id": attempt_id,
+                            "url": current,
+                            "error_type": type(exc).__name__,
+                            "error_message": str(exc),
+                        }
+                    )
                 if _tls_like(exc):
+                    fallback_id = None
+                    if self.attempt_callback is not None:
+                        fallback_id = self.attempt_callback(
+                            {
+                                "phase": "before",
+                                "stage": "government_tls_fallback",
+                                "url": current,
+                                "attempt": attempt_number,
+                            }
+                        )
                     fallback = _curl_schannel_get(
                         current,
                         original,
                         {item.lower() for item in self.allowed_aliases},
                     )
                     if fallback is not None:
+                        if self.attempt_callback is not None:
+                            self.attempt_callback(
+                                {
+                                    "phase": "after",
+                                    "attempt_id": fallback_id,
+                                    "url": current,
+                                    "status_code": fallback.status_code,
+                                }
+                            )
                         fallback.redirect_chain = [*chain, *fallback.redirect_chain]
                         return fallback
+                    if self.attempt_callback is not None and fallback_id:
+                        self.attempt_callback(
+                            {
+                                "phase": "after",
+                                "attempt_id": fallback_id,
+                                "url": current,
+                                "error_type": "tls_fallback_failed",
+                                "error_message": "curl Schannel fallback returned no response",
+                            }
+                        )
                 exc.redirect_chain = list(chain)
                 exc.network_route = "direct"
                 exc.requested_protocol = urlsplit(original).scheme
@@ -293,6 +412,7 @@ def _attempt_httpx(url: str, *, trust_env: bool) -> dict[str, Any]:
             follow_redirects=False,
             verify=True,
             timeout=httpx.Timeout(12.0, connect=6.0),
+            headers=government_browser_headers(),
         ) as client:
             response = client.get(url)
         return {
@@ -336,6 +456,7 @@ def _curl_direct(url: str) -> dict[str, Any]:
                 "15",
                 "--silent",
                 "--show-error",
+                *_curl_browser_arguments(),
                 "--head",
                 "--output",
                 os.devnull,

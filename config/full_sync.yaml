@@ -1,0 +1,35 @@
+# Bounded defaults for the continuous source/backfill/incremental workflow.
+# Secrets are resolved through the existing secret store/environment and are
+# intentionally absent from this file.
+scope: all
+discovery_mode: AUTO
+all_five_source_roles: false
+max_slots: 20
+max_sources: 20
+max_documents: 1000
+top_k: 3
+concurrency: 1
+discovery_concurrency: 1
+crawl_concurrency: 1
+max_ai_calls: 0
+max_search_calls: 5
+max_http_calls: 100
+budget_tokens: null
+budget_usd: null
+rate_limit_per_minute: 20
+lookback_days: 30
+checkpoint_every: 1
+stop_on_error_rate: 0.20
+max_consecutive_failures: 3
+daily_call_limit: null
+freshness_sla_env: POLICYDB_FRESHNESS_SLA_HOURS
+role_sla_env: POLICYDB_ROLE_SLA_CONFIG
+test_evidence_env: POLICYDB_TEST_EVIDENCE_PATH
+queues:
+  - source_discovery_queue
+  - source_verification_queue
+  - historical_backfill_queue
+  - incremental_refresh_queue
+  - gap_repair_queue
+  - document_fetch_queue
+  - attachment_fetch_queue

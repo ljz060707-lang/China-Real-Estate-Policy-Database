@@ -1,0 +1,29 @@
+# Explicit policy inputs for the deterministic source gate.
+# Ambiguous cases are routed to HUMAN_REVIEW; this file never writes a verified flag.
+version: "1"
+rules:
+  department_entry_priority: highest
+  municipal_directory_substitute:
+    allowed: false
+    requires: [official_city_evidence, role_evidence, reusable_list_entry, two_direct_probes]
+  government_gazette:
+    allowed_roles: [government_gazette]
+    requires: [official_domain, list_entry, parser_evidence, pagination_evidence]
+  government_service_portal:
+    allowed: false
+    requires: [explicit_policy_approval, official_city_evidence, role_evidence]
+  organization_merger_successor:
+    ambiguous_action: HUMAN_REVIEW
+  city_county_boundary:
+    ambiguous_action: HUMAN_REVIEW
+  multi_role_coverage:
+    allowed: false
+    ambiguous_action: HUMAN_REVIEW
+  stale_or_blocked_page:
+    retry_before_review: true
+    ambiguous_action: HUMAN_REVIEW
+  nonstandard_official_domain:
+    ambiguous_action: HUMAN_REVIEW
+  inaccessible_source:
+    retry_before_review: true
+    never_enable_without_gate: true

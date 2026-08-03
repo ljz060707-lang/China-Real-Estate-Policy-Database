@@ -7,6 +7,7 @@ from pathlib import Path
 
 import polars as pl
 
+from policydb.parquet_store import read_parquet_snapshot
 from policydb.settings import Settings
 
 
@@ -17,7 +18,7 @@ def _hash_file(path: Path) -> str:
 def train_baselines(settings: Settings | None = None, *, seed: int = 20260722) -> dict:
     settings = settings or Settings.discover()
     gold = settings.root / "data" / "annotations" / "policy_intensity" / "adjudicated_gold.parquet"
-    if not gold.exists() or pl.read_parquet(gold).is_empty():
+    if not gold.exists() or read_parquet_snapshot(gold).is_empty():
         return {
             "status": "blocked_missing_gold",
             "training_rows": 0,
@@ -42,7 +43,7 @@ def train_baselines(settings: Settings | None = None, *, seed: int = 20260722) -
             "metrics": {},
             "research_ready": False,
         }
-    frame = pl.read_parquet(gold).filter(pl.col("is_policy_action").is_not_null())
+    frame = read_parquet_snapshot(gold).filter(pl.col("is_policy_action").is_not_null())
     if frame.height < 20:
         return {"status": "blocked_insufficient_gold", "training_rows": frame.height, "metrics": {}, "research_ready": False}
     texts = frame["clause_text"].to_list()
@@ -79,4 +80,3 @@ def train_baselines(settings: Settings | None = None, *, seed: int = 20260722) -
     }
     (output / "metadata.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
     return metadata
-

@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 import polars as pl
 
 from policydb.crawl.dedup import canonicalize_url
+from policydb.parquet_store import atomic_write_parquet, read_parquet_snapshot
 from policydb.scope import load_cities_105
 from policydb.settings import Settings
 from policydb.source_discovery import is_reusable_source_entry
@@ -47,7 +48,7 @@ def _city_aliases(settings: Settings) -> dict[str, tuple[str, ...]]:
 def prefilter_ai_candidates(settings: Settings, *, output: Path | None = None) -> dict:
     """Filter only the existing AI batch; never writes source candidates."""
     _, candidate_path = slot_paths(settings)
-    frame = pl.read_parquet(candidate_path).filter(
+    frame = read_parquet_snapshot(candidate_path).filter(
         pl.col("discovery_method") == "ai_assisted_search"
     )
     aliases = _city_aliases(settings)
@@ -117,7 +118,7 @@ def prefilter_ai_candidates(settings: Settings, *, output: Path | None = None) -
     }
     if output is not None:
         output.mkdir(parents=True, exist_ok=True)
-        result.write_parquet(output / "candidate_prefilter.parquet", compression="zstd")
-        shortlists.write_parquet(output / "candidate_shortlists.parquet", compression="zstd")
+        atomic_write_parquet(result, output / "candidate_prefilter.parquet", {"job_id": "source-candidate-prefilter"})
+        atomic_write_parquet(shortlists, output / "candidate_shortlists.parquet", {"job_id": "source-candidate-shortlists"})
         (output / "candidate_prefilter_summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"summary": summary, "prefilter": result, "shortlists": shortlists}

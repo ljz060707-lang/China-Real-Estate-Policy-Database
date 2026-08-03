@@ -31,3 +31,18 @@ data/curated/*.parquet
 data/research/*.parquet
 database/*.duckdb
 data/reference/backups/
+
+# Local continuous-sync and dashboard runtime artifacts.  Curated source code,
+# schemas, small fixtures, and documentation remain explicitly stageable.
+*.log
+*.pid
+*.lock
+*.tmp
+*.before_*
+*.parquet
+*.duckdb
+*.duckdb-wal
+temp/
+backups/
+snapshots/
+*/outputs/

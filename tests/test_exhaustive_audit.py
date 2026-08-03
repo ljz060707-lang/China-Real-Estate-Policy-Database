@@ -240,7 +240,7 @@ def test_candidate_requires_two_direct_parser_probes(tmp_path):
                 status_code=200,
                 body=(
                     b"<html><title>Policies</title><nav><a href='/'>Home</a></nav>"
-                    b"<a href='/zwgk/policy-1'>Policy item one</a>"
+                        b"<a href='/zwgk/2026/01/01/policy-1'>2026-01-01 Policy item one</a>"
                     b"<a rel='next' href='/zwgk/page-2'>Next</a></html>"
                 ),
                 content_type="text/html",
@@ -286,7 +286,11 @@ def test_authoritative_verification_revokes_detail_page_and_enablement(tmp_path)
     )
     result = verify_candidates(city="南京市", settings=settings)
     candidate = list_candidates(city="南京市", settings=settings).row(0, named=True)
-    assert result == {"checked": 1, "verified": 0, "enabled": 0}
+    assert result["checked"] == 1
+    assert result["verified"] == 0
+    assert result["enabled"] == 0
+    assert result["failed_candidates"] == 1
+    assert result["candidate_results"][0]["failed_gates"]
     assert candidate["is_verified"] is False
     assert candidate["is_enabled"] is False
     assert candidate["entry_eligible"] is False

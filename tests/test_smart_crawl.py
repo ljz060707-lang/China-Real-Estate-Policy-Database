@@ -338,6 +338,25 @@ def test_registry_write_is_atomic_and_backed_up(tmp_path):
     assert list((settings.root / "data" / "reference" / "backups").glob("*.yaml"))
 
 
+def test_registry_replace_retries_transient_windows_permission(monkeypatch, tmp_path):
+    settings = Settings(root=_repo(tmp_path))
+    source = _source(crawl_enabled=False)
+    original_replace = __import__("os").replace
+    attempts = {"count": 0}
+
+    def flaky_replace(source_path, destination_path):
+        attempts["count"] += 1
+        if attempts["count"] < 3:
+            raise PermissionError("transient sharing violation")
+        return original_replace(source_path, destination_path)
+
+    monkeypatch.setattr("policydb.crawl.registry.os.replace", flaky_replace)
+    save_registry_atomic([source], settings, action="transient_retry")
+
+    assert attempts["count"] == 3
+    assert load_registry(settings)[0].source_id == source.source_id
+
+
 def test_none_search_provider_is_explicitly_empty():
     assert NoneSearchProvider().search("anything") == []
 

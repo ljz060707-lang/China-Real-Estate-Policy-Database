@@ -12,6 +12,7 @@ from pathlib import Path
 import polars as pl
 
 from policydb.intensity.storage import atomic_write_parquet
+from policydb.parquet_store import read_parquet_snapshot
 from policydb.settings import Settings
 from policydb.transform.normalization import stable_id
 
@@ -37,7 +38,11 @@ def _archive_folder(content_type: str, suffix: str) -> str:
 
 
 def archive_document_versions(
-    settings: Settings | None = None, *, archive_root: Path | None = None
+    settings: Settings | None = None,
+    *,
+    archive_root: Path | None = None,
+    run_id: str | None = None,
+    document_version_ids: list[str] | None = None,
 ) -> dict:
     settings = settings or Settings.discover()
     archive_root = Path(archive_root or settings.policy_archive_root)
@@ -47,7 +52,31 @@ def archive_document_versions(
             "The archive will not fall back to another drive."
         )
     versions_path = settings.curated / "policy_document_versions.parquet"
-    versions = pl.read_parquet(versions_path) if versions_path.exists() else pl.DataFrame()
+    versions = read_parquet_snapshot(versions_path) if versions_path.exists() else pl.DataFrame()
+    scope = "all_versions"
+    if run_id:
+        scope = f"run:{run_id}"
+        items_path = settings.curated / "crawl_items.parquet"
+        if versions.height and items_path.exists():
+            run_items = read_parquet_snapshot(items_path).filter(pl.col("run_id") == run_id)
+            item_ids = run_items.select("item_id")["item_id"].to_list()
+            carried_urls = (
+                run_items.filter(pl.col("status") == "unchanged")
+                .select("canonical_url")["canonical_url"].to_list()
+                if run_items.height
+                else []
+            )
+            versions = versions.filter(
+                pl.col("crawl_item_id").is_in(item_ids)
+                | pl.col("canonical_url").is_in(carried_urls)
+            )
+        elif versions.height:
+            versions = versions.head(0)
+    if document_version_ids is not None:
+        scope = "document_versions"
+        versions = versions.filter(
+            pl.col("document_version_id").is_in([str(item) for item in document_version_ids])
+        )
     now = datetime.now(UTC).isoformat()
     rows = []
     for row in versions.iter_rows(named=True):
@@ -133,28 +162,45 @@ def archive_document_versions(
             "checked_at": pl.String,
         }
     )
-    atomic_write_parquet(frame, settings.curated / "policy_files.parquet")
-    atomic_write_parquet(frame, settings.curated / "archive_integrity_checks.parquet")
+    # A scoped run must not erase historical integrity evidence.  Merge by the
+    # stable policy_file_id key; only an explicit all-version call replaces the
+    # complete audit view.
+    policy_files_path = settings.curated / "policy_files.parquet"
+    integrity_path = settings.curated / "archive_integrity_checks.parquet"
+    if scope == "all_versions":
+        merged = frame
+    else:
+        existing = read_parquet_snapshot(integrity_path) if integrity_path.exists() else pl.DataFrame()
+        merged = (
+            pl.concat([existing, frame], how="diagonal_relaxed")
+            .unique(subset=["policy_file_id"], keep="last", maintain_order=True)
+            if existing.height
+            else frame
+        )
+    atomic_write_parquet(merged, policy_files_path)
+    atomic_write_parquet(merged, integrity_path)
     report_dir = settings.outputs / "archive"
     report_dir.mkdir(parents=True, exist_ok=True)
     with (report_dir / "archive_coverage_report.csv").open(
         "w", encoding="utf-8-sig", newline=""
     ) as handle:
-        writer = csv.DictWriter(handle, fieldnames=frame.columns)
+        writer = csv.DictWriter(handle, fieldnames=merged.columns)
         writer.writeheader()
-        writer.writerows(frame.iter_rows(named=True))
+        writer.writerows(merged.iter_rows(named=True))
     counts = (
         {
             row["archive_status"]: row["len"]
             for row in frame.group_by("archive_status").len().iter_rows(named=True)
         }
-        if frame.height
+        if merged.height
         else {}
     )
     manifest = {
         "created_at": now,
         "archive_root": str(archive_root),
         "document_versions": frame.height,
+        "scope": scope,
+        "integrity_rows": merged.height,
         "status_counts": counts,
         "hash_verified": counts.get("archived", 0),
     }

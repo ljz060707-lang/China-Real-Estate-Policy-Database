@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 
 import polars as pl
 
+from policydb.parquet_store import atomic_write_parquet, read_parquet_snapshot
 from policydb.scope import load_cities_105
 from policydb.settings import Settings
 from policydb.transform.normalization import clean_text, stable_id
@@ -206,10 +207,10 @@ def materialize_geography(settings: Settings | None = None) -> dict:
     cities = (
         load_cities_105(settings)
         if reference_cities.exists()
-        else pl.read_parquet(settings.curated / "cities_105.parquet")
+        else read_parquet_snapshot(settings.curated / "cities_105.parquet")
     )
-    links = pl.read_parquet(settings.curated / "record_jurisdictions.parquet")
-    jurisdictions = pl.read_parquet(settings.curated / "jurisdictions.parquet")
+    links = read_parquet_snapshot(settings.curated / "record_jurisdictions.parquet")
+    jurisdictions = read_parquet_snapshot(settings.curated / "jurisdictions.parquet")
     values = [str(value) for value in links["geography_original"].drop_nulls().to_list()]
     city_index = _city_alias_index(cities)
     learned = _learn_city_provinces(values, city_index)
@@ -254,8 +255,11 @@ def materialize_geography(settings: Settings | None = None) -> dict:
         "updated_at": pl.String,
     }
     normalized = pl.DataFrame(rows, schema=schema)
-    normalized.write_parquet(
-        settings.curated / "record_geographies_normalized.parquet", compression="zstd"
+    atomic_write_parquet(
+        normalized,
+        settings.curated / "record_geographies_normalized.parquet",
+        {"module": "geography"},
+        key_columns=("record_geography_id",),
     )
     best = (
         normalized.sort(["jurisdiction_id", "match_confidence"], descending=[False, True])
@@ -293,7 +297,12 @@ def materialize_geography(settings: Settings | None = None) -> dict:
         pl.col("valid_from").cast(pl.String),
         pl.col("valid_to").cast(pl.String),
     )
-    cleaned.write_parquet(settings.curated / "jurisdictions.parquet", compression="zstd")
+    atomic_write_parquet(
+        cleaned,
+        settings.curated / "jurisdictions.parquet",
+        {"module": "geography"},
+        key_columns=("jurisdiction_id",),
+    )
     return {
         "relation_count": normalized.height,
         "normalized_count": normalized.filter(pl.col("jurisdiction_level") != "unknown").height,

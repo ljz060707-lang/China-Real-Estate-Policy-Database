@@ -10,6 +10,7 @@ from pathlib import Path
 import duckdb
 import polars as pl
 
+from policydb.parquet_store import atomic_write_parquet, read_parquet_snapshot
 from policydb.settings import Settings
 from policydb.validate.quality import validate
 
@@ -56,7 +57,7 @@ def create_release(version: str, settings: Settings | None = None) -> Path:
     (out / "excel").mkdir()
     for src in settings.curated.glob("*.parquet"):
         shutil.copy2(src, out / "parquet" / src.name)
-        _csv_safe(pl.read_parquet(src)).write_csv(out / "csv" / f"{src.stem}.csv")
+        _csv_safe(read_parquet_snapshot(src)).write_csv(out / "csv" / f"{src.stem}.csv")
     with duckdb.connect(str(settings.database), read_only=True) as con:
         for view in (
             "v_city_month_policy_panel",
@@ -71,9 +72,9 @@ def create_release(version: str, settings: Settings | None = None) -> Path:
             ).fetchone()[0]:
                 continue
             frame = con.execute(f"SELECT * FROM {view}").pl()
-            frame.write_parquet(out / "parquet" / f"{view}.parquet")
+            atomic_write_parquet(frame, out / "parquet" / f"{view}.parquet", {"job_id": f"release-{view}"})
             frame.write_csv(out / "csv" / f"{view}.csv")
-    excel_records = pl.read_parquet(settings.curated / "records.parquet")
+    excel_records = read_parquet_snapshot(settings.curated / "records.parquet")
     datetime_columns = [
         name for name, dtype in excel_records.schema.items() if isinstance(dtype, pl.Datetime)
     ]

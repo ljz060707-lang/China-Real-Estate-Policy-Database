@@ -166,10 +166,21 @@ class FallbackSearchProvider:
 
     def search(self, query: str, **kwargs: object) -> list[SearchResult]:
         maximum = int(kwargs.get("max_results", 10))
+        attempt_callback = kwargs.pop("_crpd_attempt_callback", None)
         collected: list[SearchResult] = []
         seen: set[str] = set()
         self.last_attempts = []
         for provider in self.providers:
+            attempt_id = None
+            if attempt_callback is not None:
+                attempt_id = attempt_callback(
+                    {
+                        "phase": "before",
+                        "stage": "search",
+                        "query": query,
+                        "provider": provider.name,
+                    }
+                )
             try:
                 results = provider.search(query, **kwargs)
                 self.last_attempts.append(
@@ -179,7 +190,30 @@ class FallbackSearchProvider:
                 self.last_attempts.append(
                     {"provider": provider.name, "status": "failed", "error_type": type(exc).__name__}
                 )
+                if attempt_callback is not None:
+                    attempt_callback(
+                        {
+                            "phase": "after",
+                            "attempt_id": attempt_id,
+                            "stage": "search",
+                            "query": query,
+                            "provider": provider.name,
+                            "error_type": type(exc).__name__,
+                            "error_message": str(exc),
+                        }
+                    )
                 continue
+            if attempt_callback is not None:
+                attempt_callback(
+                    {
+                        "phase": "after",
+                        "attempt_id": attempt_id,
+                        "stage": "search",
+                        "query": query,
+                        "provider": provider.name,
+                        "status_code": 200,
+                    }
+                )
             for result in results:
                 if result.url in seen:
                     continue

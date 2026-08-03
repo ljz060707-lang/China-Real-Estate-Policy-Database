@@ -9,6 +9,7 @@ import polars as pl
 from policydb.intensity.rules import DeterministicPolicyRules
 from policydb.intensity.scoring import aggregate_action_score, score_dimensions
 from policydb.intensity.storage import atomic_write_parquet, upsert_parquet
+from policydb.parquet_store import read_parquet_snapshot
 from policydb.query.database import build_database
 from policydb.settings import Settings
 
@@ -30,7 +31,7 @@ class PolicyIntensityService:
 
     def extract(self, *, limit: int | None = None, formal_only: bool = False) -> dict:
         self._ensure_model_fact_tables()
-        records = pl.read_parquet(self.settings.curated / "records.parquet")
+        records = read_parquet_snapshot(self.settings.curated / "records.parquet")
         records = records.filter(pl.col("full_text").is_not_null())
         if formal_only:
             records = records.filter(pl.col("official_status").is_in(["official", "official_reprint"]))
@@ -39,7 +40,7 @@ class PolicyIntensityService:
         version_lookup: dict[str, str] = {}
         versions_path = self.settings.curated / "policy_document_versions.parquet"
         if versions_path.exists():
-            versions = pl.read_parquet(versions_path).filter(pl.col("record_id").is_not_null())
+            versions = read_parquet_snapshot(versions_path).filter(pl.col("record_id").is_not_null())
             if not versions.is_empty():
                 version_lookup = dict(
                     versions.group_by("record_id").agg(pl.col("document_version_id").last()).iter_rows()
@@ -111,9 +112,9 @@ class PolicyIntensityService:
         action_path = self.settings.curated / "policy_actions.parquet"
         if not action_path.exists():
             return {"status": "blocked_missing_actions", "scores": 0}
-        actions = pl.read_parquet(action_path)
+        actions = read_parquet_snapshot(action_path)
         calibrations_path = self.settings.curated / "policy_action_calibrations.parquet"
-        calibrations = pl.read_parquet(calibrations_path) if calibrations_path.exists() else pl.DataFrame()
+        calibrations = read_parquet_snapshot(calibrations_path) if calibrations_path.exists() else pl.DataFrame()
         from policydb.intensity.models import ActionCalibration, PolicyAction
 
         dimension_models = []
@@ -170,10 +171,10 @@ class PolicyIntensityService:
         records_path = self.settings.curated / "records.parquet"
         if not score_path.exists() or not links_path.exists():
             return {"status": "blocked_missing_scores_or_city_links", "rows": 0}
-        scores = pl.read_parquet(score_path)
-        records = pl.read_parquet(records_path).select("record_id", "record_date", "official_level")
-        links = pl.read_parquet(links_path).filter(~pl.col("needs_review"))
-        actions = pl.read_parquet(self.settings.curated / "policy_actions.parquet").select(
+        scores = read_parquet_snapshot(score_path)
+        records = read_parquet_snapshot(records_path).select("record_id", "record_date", "official_level")
+        links = read_parquet_snapshot(links_path).filter(~pl.col("needs_review"))
+        actions = read_parquet_snapshot(self.settings.curated / "policy_actions.parquet").select(
             "action_id", "direction", "instrument"
         )
         base = scores.join(actions, on="action_id", how="left").join(records, on="record_id", how="left").join(

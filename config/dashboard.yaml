@@ -1,0 +1,8 @@
+dashboard:
+  host: 127.0.0.1
+  port: 8501
+  browser: false
+  data_refresh_seconds: 60
+  page_size: 100
+  operations_queue: "D:/Data Set/CRPD/control/dashboard_jobs"
+  gold_policy_intensity_enabled: false

@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import tempfile
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -11,6 +13,7 @@ import yaml
 
 from policydb.crawl.dedup import canonicalize_url
 from policydb.crawl.models import RegisteredSource
+from policydb.parquet_store import atomic_write_parquet, read_parquet_snapshot
 from policydb.settings import Settings
 from policydb.transform.normalization import stable_id
 
@@ -44,9 +47,32 @@ def save_registry_atomic(
         "source_count": len(sources),
         "sources": [source.model_dump(mode="json", exclude_none=True) for source in sources],
     }
-    temp = path.with_suffix(".yaml.tmp")
-    temp.write_text(yaml.safe_dump(payload, allow_unicode=True, sort_keys=False), encoding="utf-8")
-    os.replace(temp, path)
+    payload_text = yaml.safe_dump(payload, allow_unicode=True, sort_keys=False)
+    temp_fd, temp_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+    )
+    os.close(temp_fd)
+    temp = Path(temp_name)
+    temp.write_text(payload_text, encoding="utf-8")
+    with temp.open("r+b") as stream:
+        stream.flush()
+        os.fsync(stream.fileno())
+    replace_error: PermissionError | None = None
+    for attempt in range(5):
+        try:
+            os.replace(temp, path)
+            replace_error = None
+            break
+        except PermissionError as exc:
+            replace_error = exc
+            if attempt == 4:
+                raise
+            # Windows scanners and readers can briefly hold the destination
+            # after the atomic write is prepared.  Retry the replace without
+            # weakening atomicity or falling back to an in-place write.
+            time.sleep(0.05 * (attempt + 1))
+    if replace_error is not None:
+        raise replace_error
     log_path = settings.root / "data" / "logs" / "source_registry_changes.jsonl"
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with log_path.open("a", encoding="utf-8") as stream:
@@ -74,9 +100,7 @@ def materialize_registry_parquet(
             "coverage_end_date": pl.String,
         },
     )
-    temporary = path.with_suffix(".parquet.registry.tmp")
-    frame.write_parquet(temporary, compression="zstd")
-    os.replace(temporary, path)
+    atomic_write_parquet(frame, path, {"module": "crawl.registry"})
     return path
 
 
@@ -105,7 +129,7 @@ def materialize_seed_record_links(settings: Settings | None = None) -> dict:
     records_path = settings.curated / "records.parquet"
     if not records_path.exists():
         return {"rows": 0}
-    records = pl.read_parquet(records_path)
+    records = read_parquet_snapshot(records_path)
     if "primary_source_url" not in records.columns:
         return {"rows": 0}
     source_by_url = {
@@ -137,5 +161,5 @@ def materialize_seed_record_links(settings: Settings | None = None) -> dict:
         )
     path = settings.curated / "source_seed_records.parquet"
     if rows:
-        pl.DataFrame(rows).write_parquet(path, compression="zstd")
+        atomic_write_parquet(pl.DataFrame(rows), path, {"module": "crawl.registry"})
     return {"rows": len(rows), "path": str(path)}

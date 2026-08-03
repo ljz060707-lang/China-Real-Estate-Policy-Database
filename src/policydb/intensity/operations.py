@@ -10,6 +10,7 @@ import polars as pl
 from policydb.intensity.models import DecisionCandidate, ModelDecision
 from policydb.intensity.router import HybridDecisionRouter
 from policydb.intensity.storage import atomic_write_parquet, upsert_parquet
+from policydb.parquet_store import read_parquet_snapshot
 from policydb.settings import Settings
 
 
@@ -18,9 +19,9 @@ def route_predictions(settings: Settings | None = None) -> dict:
     dimensions_path = settings.curated / "policy_intensity_dimensions.parquet"
     if not dimensions_path.exists():
         return {"status": "blocked_missing_dimension_scores", "decisions": 0}
-    dimensions = pl.read_parquet(dimensions_path).filter(pl.col("applicable"))
+    dimensions = read_parquet_snapshot(dimensions_path).filter(pl.col("applicable"))
     predictions_path = settings.curated / "policy_model_predictions.parquet"
-    predictions = pl.read_parquet(predictions_path) if predictions_path.exists() else pl.DataFrame()
+    predictions = read_parquet_snapshot(predictions_path) if predictions_path.exists() else pl.DataFrame()
     router = HybridDecisionRouter()
     decisions: list[ModelDecision] = []
     for row in dimensions.iter_rows(named=True):
@@ -70,7 +71,7 @@ def route_predictions(settings: Settings | None = None) -> dict:
         )
         decision_path = settings.curated / "policy_model_decisions.parquet"
         if decision_path.exists():
-            existing = pl.read_parquet(decision_path).filter(
+            existing = read_parquet_snapshot(decision_path).filter(
                 ~(
                     (pl.col("router_version") == router.version)
                     & pl.col("accepted_value").is_null()
@@ -92,7 +93,7 @@ def create_model_review_tasks(settings: Settings | None = None) -> dict:
     path = settings.curated / "policy_model_decisions.parquet"
     if not path.exists():
         return {"status": "blocked_missing_decisions", "created": 0}
-    decisions = pl.read_parquet(path).filter(
+    decisions = read_parquet_snapshot(path).filter(
         pl.col("review_required") & pl.col("accepted_value").is_not_null()
     )
     now = datetime.now(UTC).isoformat()
@@ -146,7 +147,7 @@ def validate_intensity(settings: Settings | None = None) -> dict:
     files = {name: (settings.curated / name).exists() for name in required}
     formal = provisional = 0
     if files["policy_intensity_scores.parquet"]:
-        scores = pl.read_parquet(settings.curated / "policy_intensity_scores.parquet")
+        scores = read_parquet_snapshot(settings.curated / "policy_intensity_scores.parquet")
         formal = scores.filter(pl.col("formal_status") == "formal").height
         provisional = scores.filter(pl.col("formal_status") == "provisional").height
     return {

@@ -6,15 +6,39 @@ from datetime import UTC, datetime
 import polars as pl
 
 from policydb.intensity.storage import atomic_write_parquet
+from policydb.parquet_store import read_parquet_snapshot
 from policydb.settings import Settings
 from policydb.transform.normalization import stable_id
 
 
-def materialize_policy_identity(settings: Settings | None = None) -> dict:
+def materialize_policy_identity(
+    settings: Settings | None = None,
+    *,
+    run_id: str | None = None,
+    document_version_ids: list[str] | None = None,
+) -> dict:
     settings = settings or Settings.discover()
-    records = pl.read_parquet(settings.curated / "records.parquet")
+    records = read_parquet_snapshot(settings.curated / "records.parquet")
     versions_path = settings.curated / "policy_document_versions.parquet"
-    versions = pl.read_parquet(versions_path) if versions_path.exists() else pl.DataFrame()
+    versions = read_parquet_snapshot(versions_path) if versions_path.exists() else pl.DataFrame()
+    scope = "all_versions"
+    if run_id:
+        scope = f"run:{run_id}"
+        items_path = settings.curated / "crawl_items.parquet"
+        if versions.height and items_path.exists():
+            item_ids = (
+                read_parquet_snapshot(items_path)
+                .filter(pl.col("run_id") == run_id)
+                .select("item_id")["item_id"].to_list()
+            )
+            versions = versions.filter(pl.col("crawl_item_id").is_in(item_ids))
+        elif versions.height:
+            versions = versions.head(0)
+    if document_version_ids is not None:
+        scope = "document_versions"
+        versions = versions.filter(
+            pl.col("document_version_id").is_in([str(item) for item in document_version_ids])
+        )
     now = datetime.now(UTC).isoformat()
     entities = records.select("record_id").with_columns(
         pl.col("record_id").map_elements(
@@ -54,7 +78,13 @@ def materialize_policy_identity(settings: Settings | None = None) -> dict:
             "created_at": pl.String,
         }
     )
-    atomic_write_parquet(publications, settings.curated / "policy_publications.parquet")
+    publications_path = settings.curated / "policy_publications.parquet"
+    if scope != "all_versions" and publications_path.exists():
+        old_publications = read_parquet_snapshot(publications_path)
+        publications = pl.concat([old_publications, publications], how="diagonal_relaxed").unique(
+            subset=["publication_id"], keep="last", maintain_order=True
+        )
+    atomic_write_parquet(publications, publications_path)
     groups = []
     if versions.height:
         for key_name in ("content_sha256", "normalized_text_hash", "policy_identity_key"):
@@ -93,7 +123,13 @@ def materialize_policy_identity(settings: Settings | None = None) -> dict:
             "created_at": pl.String,
         }
     )
-    atomic_write_parquet(clusters, settings.curated / "policy_duplicate_clusters.parquet")
+    clusters_path = settings.curated / "policy_duplicate_clusters.parquet"
+    if scope != "all_versions" and clusters_path.exists():
+        old_clusters = read_parquet_snapshot(clusters_path)
+        clusters = pl.concat([old_clusters, clusters], how="diagonal_relaxed").unique(
+            subset=["cluster_id"], keep="last", maintain_order=True
+        )
+    atomic_write_parquet(clusters, clusters_path)
     output = settings.root / "outputs/dedup"
     output.mkdir(parents=True, exist_ok=True)
     clusters.write_csv(output / "dedup_audit_report.csv")
@@ -103,4 +139,5 @@ def materialize_policy_identity(settings: Settings | None = None) -> dict:
         "duplicate_clusters": clusters.height,
         "automatic_exact_clusters": clusters.filter(~pl.col("review_required")).height,
         "review_required": clusters.filter(pl.col("review_required")).height,
+        "scope": scope,
     }

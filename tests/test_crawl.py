@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import date
 
 import fitz
@@ -71,6 +72,68 @@ def test_crawl_pipeline_fetches_versions_and_resumes(tmp_path):
     assert pl.read_parquet(
         root / "data" / "curated" / "policy_document_versions.parquet"
     ).height == 1
+
+
+def test_completion_window_uses_finalized_run_status(tmp_path):
+    """Completion evidence must observe the run row after finalization."""
+    root = tmp_path / "repo"
+    (root / "data" / "reference").mkdir(parents=True)
+    (root / "data" / "curated").mkdir(parents=True)
+    registry = {
+        "sources": [
+            {
+                "source_id": "SRC_WINDOW",
+                "source_name": "测试窗口来源",
+                "domain": "example.gov.cn",
+                "source_type": "government",
+                "source_role": "canonical_candidate",
+                "official_status": "official",
+                "list_page_urls": ["https://example.gov.cn/list"],
+                "crawl_enabled": True,
+                "priority": 0,
+                "rate_limit": 0,
+            }
+        ]
+    }
+    (root / "data" / "reference" / "source_registry.yaml").write_text(
+        yaml.safe_dump(registry, allow_unicode=True), encoding="utf-8"
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/list":
+            html = '<a href="/policy/1">Policy 2020-01-01</a>'
+        else:
+            html = (
+                "<html><title>Policy</title><body>"
+                "Official policy document content for the completion-window test."
+                "</body></html>"
+            )
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/html; charset=utf-8"},
+            text=html,
+            request=request,
+        )
+
+    fetcher = RespectfulFetcher(
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+        check_robots=False,
+        rate_limit=0,
+    )
+    pipeline = CrawlPipeline(Settings(root=root), fetcher=fetcher)
+    plan = pipeline.plan(
+        run_type="test",
+        start_date=date(2020, 1, 1),
+        end_date=date(2020, 12, 31),
+    )
+    result = pipeline.run(plan["run_id"])
+
+    windows = pl.read_parquet(root / "data" / "curated" / "crawl_source_windows.parquet")
+    evidence = json.loads(windows[0, "completion_evidence"])
+    assert result == {"run_id": plan["run_id"], "fetched": 1, "failed": 0}
+    assert windows[0, "is_complete"] is True
+    assert evidence["transaction_committed"] is True
+    assert evidence["completion_invariants_passed"] is True
 
 
 def test_fetch_error_does_not_delete_previous_data(tmp_path):

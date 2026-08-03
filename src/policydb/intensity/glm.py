@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from policydb.intensity.models import GLMIntensityRubric, ModelPrediction
 from policydb.intensity.storage import upsert_parquet
+from policydb.parquet_store import read_parquet_snapshot
 from policydb.settings import Settings
 
 
@@ -178,7 +179,7 @@ def glm_extract_pending(settings: Settings | None = None, *, limit: int = 50) ->
     path = settings.curated / "policy_actions.parquet"
     if not path.exists():
         return {"status": "blocked_missing_actions", "processed": 0, "failed": 0}
-    actions = pl.read_parquet(path).filter(pl.col("formal_eligible")).head(limit)
+    actions = read_parquet_snapshot(path).filter(pl.col("formal_eligible")).head(limit)
     client = GLMIntensityClient(settings)
     processed = failed = 0
     errors: dict[str, int] = {}
@@ -210,8 +211,8 @@ def glm_verify_pending(settings: Settings | None = None, *, limit: int = 50) -> 
     actions_path = settings.curated / "policy_actions.parquet"
     if not predictions_path.exists() or not actions_path.exists():
         return {"status": "blocked_missing_extractions", "processed": 0, "failed": 0}
-    predictions = pl.read_parquet(predictions_path).filter(pl.col("task_name") == "action_assessment").head(limit)
-    actions = pl.read_parquet(actions_path).select("action_id", "clause_text")
+    predictions = read_parquet_snapshot(predictions_path).filter(pl.col("task_name") == "action_assessment").head(limit)
+    actions = read_parquet_snapshot(actions_path).select("action_id", "clause_text")
     work = predictions.join(actions, on="action_id", how="inner")
     client = GLMIntensityClient(settings)
     processed = failed = 0

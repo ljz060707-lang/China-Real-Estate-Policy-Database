@@ -12,6 +12,7 @@ import polars as pl
 from pydantic import BaseModel, Field
 
 from policydb.classify.rules import classify
+from policydb.parquet_store import atomic_write_parquet, read_parquet_snapshot
 from policydb.query.database import build_database
 from policydb.settings import Settings
 from policydb.transform.normalization import normalize_title, stable_id
@@ -192,7 +193,7 @@ def _t2_index(settings: Settings) -> dict[str, dict]:
     files = list((settings.root / "data" / "staging" / "excel").glob("*T2_城市房地产政策现状.parquet"))
     if not files:
         return {}
-    return {row["source_cell"]: row for row in pl.read_parquet(files[0]).iter_rows(named=True)}
+    return {row["source_cell"]: row for row in read_parquet_snapshot(files[0]).iter_rows(named=True)}
 
 
 def _existing_t4_links(settings: Settings) -> dict[int, str]:
@@ -200,7 +201,7 @@ def _existing_t4_links(settings: Settings) -> dict[int, str]:
     if not path.exists():
         return {}
     frame = (
-        pl.read_parquet(path)
+        read_parquet_snapshot(path)
         .filter(
             (pl.col("source_sheet") == "T4 2023年城市需求支持政策")
             & pl.col("record_id").is_not_null()
@@ -214,7 +215,7 @@ def _existing_t4_links(settings: Settings) -> dict[int, str]:
     links = dict(zip(frame["source_row"].to_list(), frame["record_id"].to_list(), strict=True))
     overlay_path = settings.curated / "auto_t4_links.parquet"
     if overlay_path.exists():
-        overlay = pl.read_parquet(overlay_path).unique("source_row", keep="last")
+        overlay = read_parquet_snapshot(overlay_path).unique("source_row", keep="last")
         links.update(
             zip(overlay["source_row"].to_list(), overlay["record_id"].to_list(), strict=True)
         )
@@ -241,7 +242,7 @@ def _apply_curated_repairs(
     t4_updates: dict[int, str] = {}
     topic_updates: dict[str, list[dict]] = {}
     records_path = settings.curated / "records.parquet"
-    records_frame = pl.read_parquet(records_path) if records_path.exists() else pl.DataFrame()
+    records_frame = read_parquet_snapshot(records_path) if records_path.exists() else pl.DataFrame()
     for task in tasks:
         decision = decisions[task["task_id"]]
         if (
@@ -287,12 +288,12 @@ def _apply_curated_repairs(
             )
             .alias("title_normalized"),
         )
-        records.write_parquet(records_path, compression="zstd")
+        atomic_write_parquet(records, records_path, {"job_id": "review-automation"})
         changed["titles"] = len(title_updates)
 
     features_path = settings.curated / "policy_features.parquet"
     if t4_updates and features_path.exists():
-        features = pl.read_parquet(features_path).with_columns(
+        features = read_parquet_snapshot(features_path).with_columns(
             pl.col("source_cell").str.extract(r"(\d+)", 1).cast(pl.Int64).alias("_source_row")
         )
         overlay_rows = []
@@ -321,16 +322,18 @@ def _apply_curated_repairs(
             overlay = pl.DataFrame(overlay_rows)
             if overlay_path.exists():
                 overlay = pl.concat(
-                    [pl.read_parquet(overlay_path), overlay], how="diagonal_relaxed"
+                    [read_parquet_snapshot(overlay_path), overlay], how="diagonal_relaxed"
                 )
-            overlay.unique("source_cell", keep="last").write_parquet(
-                overlay_path, compression="zstd"
+            atomic_write_parquet(
+                overlay.unique("source_cell", keep="last"),
+                overlay_path,
+                {"job_id": "review-automation-t4"},
             )
         changed["t4_rows"] = len(t4_updates)
 
     terms_path = settings.curated / "record_terms.parquet"
     if topic_updates and terms_path.exists():
-        terms = pl.read_parquet(terms_path).with_columns(
+        terms = read_parquet_snapshot(terms_path).with_columns(
             pl.when(
                 pl.col("record_id").is_in(list(topic_updates))
                 & (pl.col("taxonomy_name") == "topic")
@@ -359,7 +362,7 @@ def _apply_curated_repairs(
             terms = pl.concat([terms, pl.DataFrame(rows)], how="diagonal_relaxed").unique(
                 ["record_id", "term_id", "classification_source"], keep="last"
             )
-            terms.write_parquet(terms_path, compression="zstd")
+            atomic_write_parquet(terms, terms_path, {"job_id": "review-automation-terms"})
             changed["topic_relations"] = len(rows)
 
     if changed:

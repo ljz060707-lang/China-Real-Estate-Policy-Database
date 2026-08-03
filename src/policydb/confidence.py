@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 import polars as pl
 
 from policydb.crawl.checkpoint import CRAWL_SCHEMAS, append_unique
+from policydb.parquet_store import atomic_write_parquet, read_parquet_snapshot
 from policydb.settings import Settings
 from policydb.transform.normalization import stable_id
 
@@ -83,7 +84,7 @@ def materialize_field_confidence(settings: Settings | None = None) -> dict:
     records_path = settings.curated / "records.parquet"
     if not records_path.exists():
         return {"rows": 0, "records": 0}
-    records = pl.read_parquet(records_path)
+    records = read_parquet_snapshot(records_path)
     now = datetime.now(UTC).isoformat()
     rows: list[dict] = []
     authority = {
@@ -136,11 +137,14 @@ def materialize_field_confidence(settings: Settings | None = None) -> dict:
             )
     path = settings.curated / "field_confidence.parquet"
     incoming = pl.DataFrame(rows, schema=CRAWL_SCHEMAS["field_confidence"], infer_schema_length=None)
-    current = pl.read_parquet(path) if path.exists() else pl.DataFrame(schema=CRAWL_SCHEMAS["field_confidence"])
+    current = read_parquet_snapshot(path) if path.exists() else pl.DataFrame(schema=CRAWL_SCHEMAS["field_confidence"])
     combined = pl.concat([current, incoming], how="diagonal_relaxed").unique(
         subset=["field_confidence_id"], keep="last", maintain_order=True
     )
-    temporary = path.with_suffix(".parquet.confidence.tmp")
-    combined.write_parquet(temporary, compression="zstd")
-    temporary.replace(path)
+    atomic_write_parquet(
+        combined,
+        path,
+        {"module": "confidence"},
+        key_columns=("field_confidence_id",),
+    )
     return {"rows": incoming.height, "total_rows": combined.height, "records": records.height}

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import os
 import re
 from collections import defaultdict
 from datetime import UTC, date, datetime
@@ -12,9 +11,10 @@ from urllib.parse import urlsplit
 import polars as pl
 
 from policydb.crawl.dedup import canonicalize_url
+from policydb.parquet_store import atomic_write_parquet, read_parquet_snapshot
 from policydb.scope import load_cities_105
 from policydb.settings import Settings
-from policydb.source_discovery import REQUIRED_ROLES
+from policydb.source_discovery import REQUIRED_ROLES, is_reusable_source_entry
 from policydb.source_slots import build_requirement_slots, slot_paths, upsert_candidates
 from policydb.transform.normalization import stable_id
 
@@ -97,10 +97,10 @@ def classify_seed_page(url: str) -> str:
     """Conservatively distinguish content pages from reusable entry pages."""
     parsed = urlsplit(url)
     target = f"{parsed.path}?{parsed.query}" if parsed.query else parsed.path
+    if is_reusable_source_entry(url) and not parsed.query:
+        return "site_or_column_entry"
     if _CONTENT_PATH.search(target):
         return "policy_content_page"
-    if _ENTRY_PATH.search(parsed.path or "/") and not parsed.query:
-        return "site_or_column_entry"
     return "unknown_page"
 
 
@@ -113,10 +113,7 @@ def _file_sha256(path: Path) -> str:
 
 
 def _atomic_parquet(frame: pl.DataFrame, path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
-    frame.write_parquet(temp, compression="zstd")
-    os.replace(temp, path)
+    atomic_write_parquet(frame, path, {"module": "seed_source_candidates"})
 
 
 def seed_candidate_paths(settings: Settings | None = None) -> tuple[Path, Path]:
@@ -201,7 +198,7 @@ def _load_seed_rows(settings: Settings) -> pl.DataFrame:
     records_path = settings.curated / "records.parquet"
     seed_path = settings.curated / "source_seed_records.parquet"
     if seed_path.exists():
-        seeds = pl.read_parquet(seed_path).select(
+        seeds = read_parquet_snapshot(seed_path).select(
             "record_id",
             pl.col("seed_url").alias("original_url"),
             "source_id",
@@ -209,7 +206,7 @@ def _load_seed_rows(settings: Settings) -> pl.DataFrame:
             "source_cell",
         )
     else:
-        records = pl.read_parquet(records_path)
+        records = read_parquet_snapshot(records_path)
         seeds = records.select(
             "record_id",
             pl.col("primary_source_url").alias("original_url"),
@@ -223,8 +220,8 @@ def _load_seed_rows(settings: Settings) -> pl.DataFrame:
 
 
 def _city_record_edges(settings: Settings) -> tuple[pl.DataFrame, dict[str, int]]:
-    relations = pl.read_parquet(settings.curated / "record_jurisdictions.parquet")
-    jurisdictions = pl.read_parquet(settings.curated / "jurisdictions.parquet")
+    relations = read_parquet_snapshot(settings.curated / "record_jurisdictions.parquet")
+    jurisdictions = read_parquet_snapshot(settings.curated / "jurisdictions.parquet")
     cities = load_cities_105(settings).with_columns(
         pl.col("city_code").cast(pl.String).str.zfill(6).alias("administrative_code")
     )
@@ -304,7 +301,7 @@ def generate_candidates_from_seed_records(
     seed_path = settings.curated / "source_seed_records.parquet"
     batch_id = _batch_id([*required, seed_path])
     generated_at = datetime.now(UTC).isoformat()
-    records = pl.read_parquet(settings.curated / "records.parquet").select(
+    records = read_parquet_snapshot(settings.curated / "records.parquet").select(
         "record_id", "title", "record_date", "geography_original"
     )
     seeds = _load_seed_rows(settings)
@@ -314,7 +311,7 @@ def generate_candidates_from_seed_records(
     )
     registry_path = settings.curated / "source_registry.parquet"
     registry = (
-        pl.read_parquet(registry_path).to_dicts() if registry_path.exists() else []
+        read_parquet_snapshot(registry_path).to_dicts() if registry_path.exists() else []
     )
     sources_by_id = {str(row["source_id"]): row for row in registry}
     sources_by_domain: dict[str, list[dict]] = defaultdict(list)
@@ -528,7 +525,7 @@ def generate_candidates_from_seed_records(
         _, candidate_path = slot_paths(settings)
         current_candidate_ids = set(candidate_rows)
         if candidate_path.exists():
-            existing_candidates = pl.read_parquet(candidate_path)
+            existing_candidates = read_parquet_snapshot(candidate_path)
             kept: list[dict] = []
             for candidate in existing_candidates.iter_rows(named=True):
                 candidate_id = str(candidate["candidate_id"])
@@ -546,7 +543,7 @@ def generate_candidates_from_seed_records(
         build_requirement_slots(settings)
         upsert_candidates(list(candidate_rows.values()), settings)
         existing_evidence = (
-            pl.read_parquet(evidence_path) if evidence_path.exists() else pl.DataFrame()
+            read_parquet_snapshot(evidence_path) if evidence_path.exists() else pl.DataFrame()
         )
         evidence_frame = _merge_evidence(existing_evidence, evidence_rows)
         _atomic_parquet(evidence_frame, evidence_path)
@@ -562,7 +559,7 @@ def generate_candidates_from_seed_records(
             "rejected_non_gov_url_count": rejected_non_gov,
         }
         if runs_path.exists():
-            runs = pl.read_parquet(runs_path).filter(
+            runs = read_parquet_snapshot(runs_path).filter(
                 pl.col("generation_batch_id") != batch_id
             )
             runs = pl.concat(
@@ -619,9 +616,9 @@ def source_candidate_audit_frame(
     slot_path, candidate_path = slot_paths(settings)
     if not slot_path.exists():
         return pl.DataFrame()
-    slots = pl.read_parquet(slot_path)
+    slots = read_parquet_snapshot(slot_path)
     candidates = (
-        pl.read_parquet(candidate_path) if candidate_path.exists() else pl.DataFrame()
+        read_parquet_snapshot(candidate_path) if candidate_path.exists() else pl.DataFrame()
     )
     if candidates.height:
         frame = slots.join(candidates, on=["slot_id", "city_id", "source_role"], how="left")
@@ -673,7 +670,7 @@ def export_source_candidate_audit(
         if suffix == ".csv":
             frame.write_csv(path)
         elif suffix == ".parquet":
-            frame.write_parquet(path, compression="zstd")
+            atomic_write_parquet(frame, path, {"module": "seed_source_candidates.export"})
         elif suffix == ".xlsx":
             frame.write_excel(path, autofit=True)
         else:

@@ -18,6 +18,7 @@ from policydb.crawl.checkpoint import append_unique
 from policydb.crawl.dedup import canonicalize_url, content_sha256
 from policydb.crawl.fetcher import RespectfulFetcher
 from policydb.crawl.parser import parse_document
+from policydb.parquet_store import atomic_write_parquet, read_parquet_snapshot
 from policydb.settings import Settings
 from policydb.transform.normalization import stable_id
 
@@ -145,7 +146,7 @@ class SourceRecoveryEngine:
         if not registry_path.exists():
             return []
         registry = (
-            pl.read_parquet(registry_path)
+            read_parquet_snapshot(registry_path)
             .filter(
                 pl.col("crawl_enabled")
                 & pl.col("search_url_template").is_not_null()
@@ -463,13 +464,13 @@ def recover_review_sources(
             )
     if updates:
         records_path = settings.curated / "records.parquet"
-        records = pl.read_parquet(records_path)
+        records = read_parquet_snapshot(records_path)
         records = records.with_columns(
             pl.col("record_id")
             .replace_strict(updates, default=pl.col("full_text"))
             .alias("full_text")
         )
-        records.write_parquet(records_path, compression="zstd")
+        atomic_write_parquet(records, records_path, {"job_id": "source-recovery"})
         from policydb.query.database import build_database
 
         build_database(settings)

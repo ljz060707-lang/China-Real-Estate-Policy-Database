@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 from calendar import monthrange
 from dataclasses import dataclass
@@ -13,6 +12,7 @@ import polars as pl
 
 from policydb.crawl.pipeline import CrawlPipeline
 from policydb.crawl.registry import load_registry
+from policydb.parquet_store import atomic_write_parquet, read_parquet_snapshot
 from policydb.scope import load_cities_105
 from policydb.settings import Settings
 from policydb.source_discovery import REQUIRED_ROLES
@@ -137,15 +137,12 @@ def split_window(start_date: date, end_date: date) -> list[tuple[date, date]]:
 
 
 def _atomic_parquet(frame: pl.DataFrame, path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_suffix(path.suffix + ".tmp")
-    frame.write_parquet(temp, compression="zstd")
-    os.replace(temp, path)
+    atomic_write_parquet(frame, path, {"module": "exhaustive"})
 
 
 def _upsert(frame: pl.DataFrame, path: Path, key: str) -> None:
     if path.exists():
-        existing = pl.read_parquet(path)
+        existing = read_parquet_snapshot(path)
         existing = existing.filter(~pl.col(key).is_in(frame[key].to_list()))
         frame = pl.concat([existing, frame], how="diagonal_relaxed")
     _atomic_parquet(frame, path)
@@ -262,7 +259,7 @@ class ExhaustiveCrawler:
         rows: list[dict] = []
         for role in roles:
             sources = registered[role]
-            role_slot = pl.read_parquet(slot_paths(self.settings)[0]).filter(
+            role_slot = read_parquet_snapshot(slot_paths(self.settings)[0]).filter(
                 (pl.col("city_id") == city_row["city_id"])
                 & (pl.col("source_role") == role)
             )
@@ -337,7 +334,7 @@ class ExhaustiveCrawler:
         if self.shards_path.exists():
             existing = {
                 str(item["shard_id"]): item
-                for item in pl.read_parquet(self.shards_path).iter_rows(named=True)
+                for item in read_parquet_snapshot(self.shards_path).iter_rows(named=True)
             }
             rows = [
                 existing.get(str(item["shard_id"]), item)
@@ -363,7 +360,7 @@ class ExhaustiveCrawler:
         path = self.settings.curated / "crawl_items.parquet"
         if not path.exists():
             return 0, 0
-        frame = pl.read_parquet(path)
+        frame = read_parquet_snapshot(path)
         unknown = 0
         rejected = 0
         updated: list[dict] = []
@@ -441,7 +438,7 @@ class ExhaustiveCrawler:
             source_roles=source_roles,
             source_ids=source_ids,
         )
-        frame = pl.read_parquet(self.shards_path).filter(
+        frame = read_parquet_snapshot(self.shards_path).filter(
             pl.col("batch_id") == plan["batch_id"]
         )
         runnable_status = ["pending"]
@@ -497,7 +494,7 @@ class ExhaustiveCrawler:
             }
             scans_path = self.settings.curated / "crawl_discovery_scans.parquet"
             scans = (
-                pl.read_parquet(scans_path).filter(
+                read_parquet_snapshot(scans_path).filter(
                     pl.col("run_id") == run_plan["run_id"]
                 )
                 if scans_path.exists()
@@ -728,7 +725,7 @@ class ExhaustiveCrawler:
         """Persist real per-run postprocess residuals into their leaf shards."""
         if not self.shards_path.exists() or not run_metrics:
             return {"updated_shards": 0}
-        frame = pl.read_parquet(self.shards_path)
+        frame = read_parquet_snapshot(self.shards_path)
         rows: list[dict] = []
         updated = 0
         for row in frame.iter_rows(named=True):
@@ -748,9 +745,9 @@ class ExhaustiveCrawler:
 
     def rebuild_progress(self) -> dict:
         slots_path = slot_paths(self.settings)[0]
-        slots = pl.read_parquet(slots_path) if slots_path.exists() else pl.DataFrame()
+        slots = read_parquet_snapshot(slots_path) if slots_path.exists() else pl.DataFrame()
         shards = (
-            pl.read_parquet(self.shards_path)
+            read_parquet_snapshot(self.shards_path)
             if self.shards_path.exists()
             else pl.DataFrame()
         )
@@ -1035,7 +1032,7 @@ class ExhaustiveCrawler:
         path = self.settings.curated / "city_year_progress.parquet"
         if not path.exists():
             return {"rows": 0, "data": []}
-        frame = pl.read_parquet(path)
+        frame = read_parquet_snapshot(path)
         if city:
             city_row = self.resolve_city(city)
             frame = frame.filter(pl.col("city_id") == city_row["city_id"])
@@ -1052,7 +1049,7 @@ def export_progress(
     crawler = ExhaustiveCrawler(settings)
     crawler.rebuild_progress()
     path = settings.curated / "city_year_progress.parquet"
-    frame = pl.read_parquet(path) if path.exists() else pl.DataFrame()
+    frame = read_parquet_snapshot(path) if path.exists() else pl.DataFrame()
     if city and frame.height:
         city_row = crawler.resolve_city(city)
         frame = frame.filter(pl.col("city_id") == city_row["city_id"])

@@ -7,6 +7,7 @@ import polars as pl
 from openpyxl.utils import column_index_from_string
 from rapidfuzz import fuzz
 
+from policydb.parquet_store import atomic_write_parquet, read_parquet_snapshot
 from policydb.settings import Settings
 from policydb.transform.normalization import clean_text, normalize_title, stable_id
 
@@ -35,7 +36,7 @@ def build_t4_match_candidates(settings: Settings | None = None) -> dict:
             "*T4_2023年城市需求支持政策.parquet"
         )
     )
-    staging = pl.read_parquet(path).filter(
+    staging = read_parquet_snapshot(path).filter(
         pl.col("source_column").is_in(
             [column_index_from_string(value) for value in ("B", "C", "AB")]
         )
@@ -45,10 +46,10 @@ def build_t4_match_candidates(settings: Settings | None = None) -> dict:
         by_row.setdefault(cell["source_row"], {})[cell["source_column_letter"]] = cell[
             "cell_value"
         ]
-    records = pl.read_parquet(settings.curated / "records.parquet").filter(
+    records = read_parquet_snapshot(settings.curated / "records.parquet").filter(
         pl.col("source_sheet") == "T1 房地产政策目录"
     )
-    linked_features = pl.read_parquet(settings.curated / "policy_features.parquet").filter(
+    linked_features = read_parquet_snapshot(settings.curated / "policy_features.parquet").filter(
         pl.col("record_id").is_not_null()
     )
     linked_by_row: dict[int, str] = {}
@@ -143,7 +144,7 @@ def build_t4_match_candidates(settings: Settings | None = None) -> dict:
         "updated_at": pl.String,
     }
     frame = pl.DataFrame(output, schema=schema).unique(subset=["t4_match_id"])
-    frame.write_parquet(settings.curated / "t4_match_candidates.parquet", compression="zstd")
+    atomic_write_parquet(frame, settings.curated / "t4_match_candidates.parquet")
     return {
         "candidate_count": frame.height,
         "approved_existing_count": frame.filter(pl.col("review_status") == "approved").height,

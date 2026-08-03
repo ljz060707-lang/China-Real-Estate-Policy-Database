@@ -2,15 +2,14 @@ from __future__ import annotations
 
 import importlib.util
 
-import polars as pl
-
+from policydb.parquet_store import read_parquet_snapshot
 from policydb.settings import Settings
 
 
 def train_transformer(settings: Settings | None = None, *, model_name: str = "hfl/chinese-macbert-base") -> dict:
     settings = settings or Settings.discover()
     gold = settings.root / "data" / "annotations" / "policy_intensity" / "adjudicated_gold.parquet"
-    if not gold.exists() or pl.read_parquet(gold).is_empty():
+    if not gold.exists() or read_parquet_snapshot(gold).is_empty():
         return {
             "status": "blocked_missing_gold",
             "model_name": model_name,
@@ -34,4 +33,3 @@ def train_transformer(settings: Settings | None = None, *, model_name: str = "hf
         "message": "Use an explicit training run with reviewed gold; model download is never triggered by Dashboard import.",
         "research_ready": False,
     }
-

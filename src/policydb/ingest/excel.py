@@ -13,6 +13,7 @@ from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 
 from policydb.classify.rules import classify, infer_direction
+from policydb.parquet_store import atomic_write_parquet
 from policydb.settings import Settings
 from policydb.transform.normalization import (
     clean_text,
@@ -176,7 +177,11 @@ def _write_staging(wb, source: Path, sha: str, batch: str, out: Path) -> dict[st
             if rows
             else pl.DataFrame({"source_sheet_name": pl.Series([], dtype=pl.String)})
         )
-        frame.write_parquet(out / f"{idx:02d}_{slug_sheet(ws.title)}.parquet", compression="zstd")
+        atomic_write_parquet(
+            frame,
+            out / f"{idx:02d}_{slug_sheet(ws.title)}.parquet",
+            {"module": "ingest.excel.staging"},
+        )
         counts[ws.title] = len(rows)
     return counts
 
@@ -399,12 +404,15 @@ def import_excel(path: str | Path, settings: Settings | None = None) -> dict:
     records, geos, terms, legacy = _main_records(wb, raw_copy, sha, batch, now)
     records.extend(_topic_events(wb, raw_copy, batch, now))
     settings.curated.mkdir(parents=True, exist_ok=True)
-    pl.DataFrame(records, infer_schema_length=None).write_parquet(
-        settings.curated / "records.parquet"
+    atomic_write_parquet(
+        pl.DataFrame(records, infer_schema_length=None),
+        settings.curated / "records.parquet",
+        {"module": "ingest.excel"},
+        key_columns=("record_id",),
     )
-    pl.DataFrame(geos).write_parquet(settings.curated / "record_jurisdictions.parquet")
-    pl.DataFrame(terms).write_parquet(settings.curated / "record_terms.parquet")
-    pl.DataFrame(legacy).write_parquet(settings.curated / "legacy_annotations.parquet")
+    atomic_write_parquet(pl.DataFrame(geos), settings.curated / "record_jurisdictions.parquet", {"module": "ingest.excel"})
+    atomic_write_parquet(pl.DataFrame(terms), settings.curated / "record_terms.parquet", {"module": "ingest.excel"})
+    atomic_write_parquet(pl.DataFrame(legacy), settings.curated / "legacy_annotations.parquet", {"module": "ingest.excel"})
     _write_reference_tables(settings, geos, terms, records, wb, batch, now)
     from policydb.transform.collections import build_collection_layer
 
@@ -433,9 +441,11 @@ def import_excel(path: str | Path, settings: Settings | None = None) -> dict:
 
 
 def _empty_or(rows: list[dict], schema: dict[str, pl.DataType], path: Path) -> None:
-    (
-        pl.DataFrame(rows, infer_schema_length=None) if rows else pl.DataFrame(schema=schema)
-    ).write_parquet(path)
+    atomic_write_parquet(
+        pl.DataFrame(rows, infer_schema_length=None) if rows else pl.DataFrame(schema=schema),
+        path,
+        {"module": "ingest.excel.reference"},
+    )
 
 
 def _write_reference_tables(

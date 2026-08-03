@@ -1,0 +1,42 @@
+# Non-sensitive deployment configuration for the independent Windows task.
+# Secrets are resolved by the existing Settings/SecretStore/environment path.
+task_name: CRPD-All-Cities-Since-2018
+repo_root: D:/Codex/projects/Documents-Codex/2026-07-13/text-20260705-xlsx-text-data-raw/policy-database
+data_root: D:/Data Set/CRPD
+automation_output_root: D:/Data Set/CRPD/outputs/all_cities_since_2018
+control_stop_file: D:/Data Set/CRPD/control/STOP_FULL_SYNC
+python_relative_path: .venv/Scripts/python.exe
+scope: all
+discovery_mode: SEARCH_AND_AI
+source_roles: required_registry_roles
+backfill_from: 2018-01-01
+backfill_to: today
+lookback_days: 30
+cycle_max_slots: 20
+cycle_max_sources: 20
+cycle_max_documents_per_source: 1000
+top_k: 3
+concurrency: 1
+discovery_concurrency: 1
+crawl_concurrency: 1
+max_ai_calls_per_cycle: 40
+max_search_calls_per_cycle: 100
+max_http_calls_per_cycle: 50000
+budget_tokens_per_cycle: 5000000
+budget_usd_per_cycle: null
+rate_limit_per_minute: 20
+max_consecutive_failures: 3
+cycle_delay_seconds: 300
+provider_retry_delay_seconds: 900
+max_no_progress_cycles: 3
+stalled_after_hours: 6
+start_when_available: true
+allow_on_battery: true
+do_not_stop_on_battery: true
+execution_time_limit: null
+restart_count: 3
+restart_delay_minutes: 15
+secrets:
+  source: existing_settings_secret_store_or_user_environment
+  api_key_in_command_line: false
+  api_key_in_yaml: false

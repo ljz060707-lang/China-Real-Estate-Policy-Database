@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 
 import polars as pl
 
+from policydb.parquet_store import read_parquet_snapshot
 from policydb.settings import Settings
 from policydb.source_slots import audit_525
 
@@ -74,7 +75,7 @@ def supervisor_status(
     settings = settings or Settings.discover()
     now = datetime.now(UTC)
     shards_path = settings.curated / "crawl_shards.parquet"
-    shards = pl.read_parquet(shards_path) if shards_path.exists() else pl.DataFrame()
+    shards = read_parquet_snapshot(shards_path) if shards_path.exists() else pl.DataFrame()
     status_counts = Counter(
         str(value) for value in shards["status"].to_list()
     ) if shards.height else Counter()

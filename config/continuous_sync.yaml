@@ -1,0 +1,34 @@
+# Non-sensitive defaults for the continuous Bronze/Silver workflow.
+layers:
+  bronze: enabled
+  silver: enabled
+  gold: disabled_placeholder
+
+date_window:
+  start_date: "2018-01-01"
+  end_date: "today"
+
+fast_bulk_ingest:
+  mode: FAST_BULK_INGEST
+  max_minutes_per_source: 10
+  max_list_pages_per_source: 30
+  max_documents_per_source: 300
+  max_document_retries: 2
+  max_attachment_attempts: 1
+  source_concurrency: 2
+  document_concurrency: 6
+  city_round_robin: true
+  max_http_calls: 1000
+  max_ai_calls: 0
+  max_search_calls: 0
+  discover_missing: false
+  apply: false
+  resume: true
+  gold_enabled: false
+
+completeness_score:
+  city_role_coverage: 0.30
+  temporal_coverage: 0.25
+  document_field_completeness: 0.20
+  crawl_completion: 0.15
+  freshness: 0.10

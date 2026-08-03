@@ -11,6 +11,7 @@ import yaml
 
 from policydb.crawl.models import RegisteredSource
 from policydb.crawl.registry import materialize_registry_parquet, save_registry_atomic
+from policydb.parquet_store import atomic_write_parquet, read_parquet_snapshot
 from policydb.settings import Settings
 from policydb.transform.normalization import normalize_url, stable_id
 
@@ -100,7 +101,7 @@ def bootstrap_sources_from_excel(
     urls_by_domain: dict[str, set[str]] = {}
     provenance: dict[str, set[str]] = {}
     for parquet in (settings.root / "data" / "staging" / "excel").glob("*.parquet"):
-        frame = pl.read_parquet(parquet)
+        frame = read_parquet_snapshot(parquet)
         sheet = frame["source_sheet_name"][0]
         columns = mappings.get(sheet)
         if not columns:
@@ -147,7 +148,7 @@ def bootstrap_sources_from_excel(
     )
     materialize_registry_parquet(registered, settings)
     source_by_domain = {source["domain"]: source for source in sources}
-    records = pl.read_parquet(settings.curated / "records.parquet")
+    records = read_parquet_snapshot(settings.curated / "records.parquet")
     policy_sources = []
     for record in records.iter_rows(named=True):
         url = normalize_url(record.get("primary_source_url"))
@@ -185,8 +186,11 @@ def bootstrap_sources_from_excel(
         "created_at": pl.String,
         "updated_at": pl.String,
     }
-    pl.DataFrame(policy_sources, schema=policy_source_schema).write_parquet(
-        settings.curated / "policy_sources.parquet", compression="zstd"
+    atomic_write_parquet(
+        pl.DataFrame(policy_sources, schema=policy_source_schema),
+        settings.curated / "policy_sources.parquet",
+        {"module": "sources"},
+        key_columns=("policy_source_id",),
     )
     return {
         "source_count": len(sources),

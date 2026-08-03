@@ -9,7 +9,9 @@ from urllib.parse import urlsplit
 
 import polars as pl
 
+from policydb.autopilot_checkpoints import STATUS_PRIORITY, GlobalSlotCheckpointStore
 from policydb.crawl.registry import load_registry
+from policydb.parquet_store import atomic_write_parquet, read_parquet_snapshot
 from policydb.settings import Settings
 from policydb.source_discovery import REQUIRED_ROLES, is_reusable_source_entry
 from policydb.source_slots import audit_525, slot_paths
@@ -35,6 +37,13 @@ _PRIORITY = {
     "blocked_network": 6,
     "blocked_parser": 7,
     "blocked_pagination": 8,
+    "enabled": 0,
+    "verified": 0,
+    "human_review": 3,
+    "completed": 2,
+    "retry_wait": 1,
+    "failed_recoverable": 1,
+    "claimed": 0,
 }
 _PARSER_OK = {"ok", "verified", "list_detected", "pagination_detected"}
 _DIRECT_ROUTES = {"direct", "direct_ok", "curl_fallback_ok"}
@@ -155,8 +164,8 @@ def build_slot_work_queue(settings: Settings | None = None) -> pl.DataFrame:
     """Build exactly one auditable row per required slot from current Parquet and registry."""
     settings = settings or Settings.discover()
     slot_path, candidate_path = slot_paths(settings)
-    slots = pl.read_parquet(slot_path)
-    candidates = pl.read_parquet(candidate_path) if candidate_path.exists() else pl.DataFrame()
+    slots = read_parquet_snapshot(slot_path)
+    candidates = read_parquet_snapshot(candidate_path) if candidate_path.exists() else pl.DataFrame()
     registry = _registry_by_slot(settings)
     candidates_by_slot: dict[str, list[dict]] = defaultdict(list)
     if candidates.height:
@@ -236,6 +245,65 @@ def build_slot_work_queue(settings: Settings | None = None) -> pl.DataFrame:
                 "work_status": status,
             }
         )
+    checkpoint_store = GlobalSlotCheckpointStore(settings.outputs / "autopilot")
+    checkpoint_records = checkpoint_store.snapshot()
+    legacy = checkpoint_store.backfill_from_run_dirs(settings.outputs / "autopilot", apply=False)
+    for item in legacy.get("proposals", []):
+        slot_id = str(item.get("slot_id") or "")
+        current = checkpoint_records.get(slot_id)
+        if current is None or STATUS_PRIORITY.get(str(item.get("status") or "").upper(), 0) > STATUS_PRIORITY.get(str(current.get("status") or "").upper(), 0):
+            checkpoint_records[slot_id] = item
+    checkpoint_labels = {
+        "CLAIMED": "claimed",
+        "COMPLETED": "completed",
+        "HUMAN_REVIEW": "human_review",
+        "RETRY_WAIT": "retry_wait",
+        "FAILED_RECOVERABLE": "failed_recoverable",
+        "VERIFIED": "verified",
+        "ENABLED": "enabled",
+    }
+    checkpoint_actions = {
+        "CLAIMED": "slot_claimed_by_active_batch",
+        "COMPLETED": "hold_completed_checkpoint",
+        "HUMAN_REVIEW": "retain_human_review_until_decision",
+        "RETRY_WAIT": "wait_until_next_retry_at",
+        "FAILED_RECOVERABLE": "retry_recoverable_failure",
+        "VERIFIED": "hold_verified_checkpoint",
+        "ENABLED": "hold_enabled_checkpoint",
+    }
+    for row in rows:
+        slot_id = str(row["slot_id"])
+        checkpoint = checkpoint_records.get(slot_id)
+        checkpoint_status = str((checkpoint or {}).get("status") or "").upper()
+        row["checkpoint_status"] = checkpoint_status or None
+        row["checkpoint_run_id"] = (checkpoint or {}).get("run_id")
+        row["checkpoint_terminal_outcome"] = (checkpoint or {}).get("terminal_outcome")
+        if not checkpoint_status:
+            continue
+        base_status = (
+            "ENABLED"
+            if row["work_status"] == "verified_enabled"
+            else "VERIFIED"
+            if int(row.get("verified_candidate_count") or 0) > 0
+            else "UNRESOLVED"
+        )
+        if checkpoint_status == "CLAIMED":
+            row["failure_gates"] = json.dumps(
+                list(dict.fromkeys(json.loads(row["failure_gates"]) + ["checkpoint_claimed"])),
+                ensure_ascii=False,
+            )
+            continue
+        if STATUS_PRIORITY.get(checkpoint_status, 0) >= STATUS_PRIORITY.get(base_status, 0):
+            label = checkpoint_labels.get(checkpoint_status)
+            if label:
+                row["work_status"] = label
+                row["recommended_action"] = checkpoint_actions.get(checkpoint_status, row["recommended_action"])
+                row["requires_human_review"] = checkpoint_status == "HUMAN_REVIEW"
+                row["priority"] = _PRIORITY.get(label, row["priority"])
+                row["failure_gates"] = json.dumps(
+                    list(dict.fromkeys(json.loads(row["failure_gates"]) + [f"checkpoint_{label}"])),
+                    ensure_ascii=False,
+                )
     frame = pl.DataFrame(rows, infer_schema_length=None).sort(["priority", "province_name", "city_name", "source_role", "slot_id"])
     if frame.height != 525 or frame["city_id"].n_unique() != 105 or frame["slot_id"].n_unique() != 525:
         raise ValueError(f"invalid source completion queue shape: rows={frame.height}, cities={frame['city_id'].n_unique()}")
@@ -318,7 +386,7 @@ def create_source_completion_run(settings: Settings | None = None, *, run_id: st
     queue = build_slot_work_queue(settings)
     batch = select_batch(queue, max_slots=max_slots, max_cities=max_cities)
     human = _human_review_frame(queue)
-    queue.write_parquet(run_dir / "slot_work_queue.parquet", compression="zstd")
+    atomic_write_parquet(queue, run_dir / "slot_work_queue.parquet", {"run_id": run_id, "job_id": "source-completion-queue"})
     queue.write_excel(run_dir / "slot_work_queue.xlsx", autofit=True)
     _write_json(run_dir / "slot_work_queue.json", queue.to_dicts())
     human.write_excel(run_dir / "HUMAN_REVIEW_QUEUE.xlsx", autofit=True)

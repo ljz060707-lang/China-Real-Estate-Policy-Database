@@ -8,6 +8,7 @@ from pathlib import Path
 import polars as pl
 import yaml
 
+from policydb.parquet_store import atomic_write_parquet, read_parquet_snapshot
 from policydb.settings import Settings
 
 
@@ -68,7 +69,7 @@ def _read_staging_cells(settings: Settings) -> pl.DataFrame:
     files = sorted((settings.root / "data" / "staging" / "excel").glob("*.parquet"))
     if not files:
         raise FileNotFoundError("No Excel staging Parquet files found")
-    return pl.concat([pl.read_parquet(path) for path in files], how="vertical_relaxed")
+    return pl.concat([read_parquet_snapshot(path) for path in files], how="vertical_relaxed")
 
 
 def _build_cell_catalog(
@@ -250,21 +251,15 @@ def build_collection_layer(settings: Settings | None = None) -> dict:
         )
 
     cell_catalog = _build_cell_catalog(staging, source_mappings)
-    records = pl.read_parquet(settings.curated / "records.parquet")
+    records = read_parquet_snapshot(settings.curated / "records.parquet")
     record_rows = _record_collection_rows(records, source_rows, config, taxonomy)
     record_collections = pl.DataFrame(record_rows, infer_schema_length=None).sort(
         "record_id", "collection_code", "subcollection_code"
     )
     settings.curated.mkdir(parents=True, exist_ok=True)
-    source_mappings.write_parquet(
-        settings.curated / "source_sheet_collections.parquet", compression="zstd"
-    )
-    cell_catalog.write_parquet(
-        settings.curated / "staging_cell_catalog.parquet", compression="zstd"
-    )
-    record_collections.write_parquet(
-        settings.curated / "record_collections.parquet", compression="zstd"
-    )
+    atomic_write_parquet(source_mappings, settings.curated / "source_sheet_collections.parquet")
+    atomic_write_parquet(cell_catalog, settings.curated / "staging_cell_catalog.parquet")
+    atomic_write_parquet(record_collections, settings.curated / "record_collections.parquet")
 
     classified_records = record_collections["record_id"].n_unique()
     subclassified_records = record_collections.filter(

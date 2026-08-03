@@ -18,6 +18,7 @@ from policydb.coverage import build_city_source_month_coverage
 from policydb.coverage_audit import run_coverage_audit
 from policydb.crawl.health import disable_unhealthy, enable_recommended, evaluate_sources
 from policydb.crawl.pipeline import CrawlPipeline
+from policydb.crawl.reconcile import reconcile_run_status
 from policydb.dedup_audit import materialize_policy_identity
 from policydb.enrich.glm import GLMEnricher
 from policydb.exhaustive import ExhaustiveCrawler, export_progress
@@ -47,6 +48,7 @@ from policydb.network import (
     probe_direct,
     probe_proxy,
 )
+from policydb.parquet_store import atomic_write_parquet, read_parquet_snapshot
 from policydb.policy_pools import materialize_policy_pools
 from policydb.query.database import build_database
 from policydb.recovery import recover_review_sources
@@ -171,6 +173,28 @@ def ai_verify(
     typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
 
 
+@ai_app.command("queue-dry-run")
+def ai_queue_dry_run(
+    run_id: str | None = typer.Option(None, "--run-id"),
+):
+    """Report hard-eligible AI documents without opening a paid API call."""
+    settings = Settings.discover()
+    enricher = GLMEnricher(settings, api_key=None)
+    eligible = enricher._pending_versions(run_id=run_id, require_archive=True)
+    checks_path = settings.curated / "archive_integrity_checks.parquet"
+    checks = __import__("polars").read_parquet(checks_path) if checks_path.exists() else None
+    result = {
+        "run_id": run_id,
+        "eligible_documents": eligible.height,
+        "eligible_document_version_ids": eligible["document_version_id"].to_list() if eligible.height else [],
+        "archive_integrity_available": checks is not None,
+        "api_call_started": False,
+        "api_key_configured": bool(settings.siliconflow_api_key),
+        "gate": "archived_hash_verified_nonempty_text",
+    }
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+
+
 @ai_app.command("deduplicate")
 def ai_deduplicate():
     result = materialize_policy_identity()
@@ -220,7 +244,7 @@ def archive_audit():
         raise typer.Exit(1)
     import polars as pl
 
-    frame = pl.read_parquet(path)
+    frame = read_parquet_snapshot(path)
     result = {
         "checked": frame.height,
         "archived": frame.filter(pl.col("archive_status") == "archived").height,
@@ -562,12 +586,45 @@ def sources_verify_candidates(
 @sources_app.command("probe-candidates")
 def sources_probe_candidates(
     city: str | None = typer.Option(None, "--city"),
+    source_id: str | None = typer.Option(None, "--source-id"),
+    candidate_id: str | None = typer.Option(None, "--candidate-id"),
+    slot_id: str | None = typer.Option(None, "--slot-id"),
     limit: int | None = typer.Option(None, "--limit", min=1),
+    rounds: int = typer.Option(2, "--rounds", min=2, max=10),
 ):
     """Run real network and list-parser probes, then apply verification gates."""
     typer.echo(
         json.dumps(
-            probe_candidates(city=city, limit=limit),
+            probe_candidates(
+                city=city,
+                source_id=source_id,
+                candidate_id=candidate_id,
+                slot_id=slot_id,
+                limit=limit,
+                rounds=rounds,
+            ),
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+
+
+@sources_app.command("seed-registry-entries")
+def sources_seed_registry_entries(
+    city: str | None = typer.Option(None, "--city"),
+    source_id: str | None = typer.Option(None, "--source-id"),
+    slot_id: str | None = typer.Option(None, "--slot-id"),
+    apply: bool = typer.Option(False, "--apply/--dry-run"),
+):
+    """Seed only formal registry entries; dry-run is the default."""
+    typer.echo(
+        json.dumps(
+            seed_candidates_from_registry(
+                city=city,
+                source_id=source_id,
+                slot_id=slot_id,
+                write=apply,
+            ),
             ensure_ascii=False,
             indent=2,
         )
@@ -678,7 +735,7 @@ def sources_export_candidates(
     frame = list_candidates(city=city, status=status)
     output.parent.mkdir(parents=True, exist_ok=True)
     if output.suffix.lower() == ".parquet":
-        frame.write_parquet(output, compression="zstd")
+        atomic_write_parquet(frame, output, {"job_id": "cli-export-candidates"})
     elif output.suffix.lower() == ".xlsx":
         frame.write_excel(output, autofit=True)
     else:
@@ -1099,6 +1156,22 @@ def crawl_audit(scope: str = typer.Option("large-cities-105", "--scope")):
     typer.echo(json.dumps(CrawlPipeline().audit(), ensure_ascii=False, indent=2))
 
 
+@crawl_app.command("reconcile-run-status")
+def crawl_reconcile_run_status(
+    run_id: str | None = typer.Option(None, "--run-id"),
+    apply: bool = typer.Option(False, "--apply/--dry-run"),
+):
+    """Reconcile only terminal-checkpoint runs; dry-run is the default."""
+    typer.echo(
+        json.dumps(
+            reconcile_run_status(run_id=run_id, apply=apply),
+            ensure_ascii=False,
+            indent=2,
+            default=str,
+        )
+    )
+
+
 def _job_mode(
     mode: str,
     from_: str,
@@ -1254,7 +1327,12 @@ def _execute_exhaustive_postprocess(
         for run_id in run_ids
     }
     if archive:
-        postprocess["archive"] = archive_document_versions(crawler.settings)
+        # Archive only the document versions attached to the current crawl
+        # runs.  A global archive rebuild remains an explicit archive command.
+        postprocess["archive"] = {
+            run_id: archive_document_versions(crawler.settings, run_id=run_id)
+            for run_id in run_ids
+        }
     if run_ai:
         enricher = GLMEnricher(crawler.settings)
         ai_rows: dict[str, dict] = {}
@@ -1271,7 +1349,19 @@ def _execute_exhaustive_postprocess(
             ai_rows[run_id] = {"classify": classified, "verify": verified}
         postprocess["ai"] = ai_rows
         postprocess["taxonomy"] = materialize_action_classifications(crawler.settings)
-        postprocess["dedup"] = materialize_policy_identity(crawler.settings)
+        dedup_rows: dict[str, dict] = {}
+        for run_id in run_ids:
+            try:
+                dedup_rows[run_id] = materialize_policy_identity(
+                    crawler.settings, run_id=run_id
+                )
+            except TypeError as exc:
+                # Preserve compatibility with injected legacy test doubles;
+                # production implementation always accepts run_id.
+                if "run_id" not in str(exc):
+                    raise
+                dedup_rows[run_id] = materialize_policy_identity(crawler.settings)
+        postprocess["dedup"] = dedup_rows
         postprocess["route_pools"] = materialize_policy_pools(crawler.settings)
         postprocess["confidence"] = materialize_field_confidence(crawler.settings)
         postprocess["coverage"] = build_city_source_month_coverage(crawler.settings)

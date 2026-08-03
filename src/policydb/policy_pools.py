@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 import polars as pl
 
 from policydb.intensity.storage import atomic_write_parquet
+from policydb.parquet_store import read_parquet_snapshot
 from policydb.settings import Settings
 
 VALID_PRIMARY = {"D", "S", "F", "H", "G"}
@@ -12,13 +13,13 @@ VALID_PRIMARY = {"D", "S", "F", "H", "G"}
 
 def materialize_policy_pools(settings: Settings | None = None) -> dict:
     settings = settings or Settings.discover()
-    records = pl.read_parquet(settings.curated / "records.parquet")
+    records = read_parquet_snapshot(settings.curated / "records.parquet")
     entities_path = settings.curated / "policy_entities.parquet"
-    entities = pl.read_parquet(entities_path) if entities_path.exists() else pl.DataFrame()
+    entities = read_parquet_snapshot(entities_path) if entities_path.exists() else pl.DataFrame()
     actions_path = settings.curated / "policy_actions.parquet"
     classes_path = settings.curated / "policy_classifications.parquet"
-    actions = pl.read_parquet(actions_path) if actions_path.exists() else pl.DataFrame()
-    classes = pl.read_parquet(classes_path) if classes_path.exists() else pl.DataFrame()
+    actions = read_parquet_snapshot(actions_path) if actions_path.exists() else pl.DataFrame()
+    classes = read_parquet_snapshot(classes_path) if classes_path.exists() else pl.DataFrame()
     entity_lookup = (
         dict(zip(entities["record_id"], entities["policy_entity_id"], strict=False))
         if entities.height
@@ -129,4 +130,3 @@ def materialize_policy_pools(settings: Settings | None = None) -> dict:
         "second_automatic_review": review.filter(pl.col("pool_status") == "second_automatic_review").height,
         "manual_review_required": review.filter(pl.col("pool_status") == "manual_review_required").height,
     }
-

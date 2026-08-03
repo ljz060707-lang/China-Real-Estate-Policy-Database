@@ -7,6 +7,7 @@ import polars as pl
 
 from policydb.coverage import build_source_matrix
 from policydb.crawl.registry import load_registry
+from policydb.parquet_store import atomic_write_parquet
 from policydb.settings import Settings
 
 
@@ -71,8 +72,8 @@ def export_source_audit(output: Path, settings: Settings | None = None) -> dict:
     matrix = build_source_matrix(settings)
     unresolved = unresolved_sources(settings)
     if output.suffix.lower() == ".parquet":
-        matrix.write_parquet(output, compression="zstd")
-        unresolved.write_parquet(output.with_name(output.stem + "_unresolved.parquet"), compression="zstd")
+        atomic_write_parquet(matrix, output, {"job_id": "source-quality-matrix"})
+        atomic_write_parquet(unresolved, output.with_name(output.stem + "_unresolved.parquet"), {"job_id": "source-quality-unresolved"})
     else:
         matrix.write_csv(output)
         unresolved.write_csv(output.with_name(output.stem + "_unresolved.csv"))
@@ -81,4 +82,3 @@ def export_source_audit(output: Path, settings: Settings | None = None) -> dict:
         json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     return {**summary, "matrix_rows": matrix.height, "output": str(output)}
-

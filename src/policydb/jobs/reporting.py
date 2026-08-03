@@ -4,9 +4,8 @@ import csv
 import json
 from pathlib import Path
 
-import polars as pl
-
 from policydb.jobs.models import JobState
+from policydb.parquet_store import read_parquet_snapshot
 from policydb.settings import Settings
 
 REPORT_TABLES = (
@@ -44,7 +43,7 @@ def _write_result_csv(path: Path, name: str, result: dict) -> None:
     table_name = RESULT_PATH_MAP.get(name)
     source = result.get("table_paths", {}).get(table_name) if table_name else None
     if source and Path(source).exists():
-        pl.scan_parquet(source).sink_csv(path)
+        read_parquet_snapshot(Path(source)).write_csv(path)
         return
     preview = result.get("previews", {}).get(name, [])
     _write_csv(path, preview)
