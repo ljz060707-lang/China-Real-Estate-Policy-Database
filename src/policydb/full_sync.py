@@ -46,6 +46,7 @@ from policydb.source_slots import (
     upsert_candidates,
     verify_candidates,
 )
+from policydb.test_evidence import parse_pytest_report_file
 from policydb.transform.normalization import stable_id
 
 # The values are kept as strings because they are persisted in Parquet and
@@ -1247,6 +1248,15 @@ def load_test_evidence(settings: Settings, path: Path | None = None) -> dict[str
         evidence = json.loads(candidate.read_text(encoding="utf-8-sig"))
     except (OSError, json.JSONDecodeError):
         return {"test_result": "unknown", "overall_status": "unknown", "test_evidence_path": str(candidate)}
+    if not isinstance(evidence, dict):
+        return {"test_result": "unknown", "overall_status": "unknown", "test_evidence_path": str(candidate)}
+    # A detailed pytest report carries process stdout/stderr and a JUnit path.
+    # Recompute the tri-state from those immutable artifacts so malformed JUnit
+    # does not erase a reliable pytest exit code or terminal summary.
+    if any(key in evidence for key in ("stdout", "stderr", "junit", "junit_path", "exit_code")):
+        parsed = parse_pytest_report_file(candidate)
+        parsed.update({key: value for key, value in evidence.items() if key not in parsed})
+        evidence = parsed
     result = str(evidence.get("overall_status") or evidence.get("test_result") or "unknown").lower()
     evidence["test_result"] = "passed" if result in {"passed", "pass", "success"} else "failed" if result in {"failed", "fail", "error"} else "unknown"
     evidence["test_evidence_path"] = str(candidate)

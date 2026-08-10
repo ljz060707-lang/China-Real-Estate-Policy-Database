@@ -10,21 +10,103 @@ from pathlib import Path
 from policydb.config.preferences import PreferencesStore
 from policydb.settings import Settings
 
+# These are logical names, not a second path configuration.  Their concrete
+# locations are always resolved from Settings (or an explicit migration target)
+# by ``storage_directories`` below.  Keep the tuple for callers that imported
+# the old public constant.
 RUNTIME_DIRECTORIES = (
+    "database",
+    "curated",
+    "raw",
+    "archive",
     "archive/pdf",
     "archive/html",
     "archive/text",
     "archive/attachments",
-    "curated",
     "research",
-    "database",
-    "manifests",
-    "logs",
     "outputs",
+    "logs",
+    "automation",
+    "control",
+    "runtime",
+    "runtime/dashboard",
+    "cache",
+    "temp",
+    "test_artifacts",
+    "dashboard",
+    "backups",
+    "manifests",
     "jobs",
     "quarantine",
-    "backups",
 )
+
+
+def storage_directories(
+    settings: Settings | None = None, *, target: Path | None = None
+) -> dict[str, Path]:
+    """Return the concrete storage layout without creating directories.
+
+    Settings remains the only source of path truth.  ``target`` is intentionally
+    an explicit migration destination and therefore derives the same relative
+    layout below that data root.  The function is read-only and safe to call
+    from checks, tests, and CLI planning commands.
+    """
+
+    settings = settings or Settings.discover()
+    data_root = Path(target or settings.data_root)
+    return {
+        "database": data_root / "database",
+        "curated": data_root / "curated",
+        "raw": data_root / "raw",
+        "archive": data_root / "archive",
+        "research": data_root / "research",
+        "outputs": data_root / "outputs",
+        "logs": data_root / "logs",
+        "automation": data_root / "automation",
+        "control": data_root / "control",
+        "runtime": data_root / "runtime",
+        "runtime/dashboard": data_root / "runtime" / "dashboard",
+        "cache": data_root / "cache",
+        "temp": data_root / "temp",
+        "test_artifacts": data_root / "test_artifacts",
+        "dashboard": data_root / "dashboard",
+        "backups": data_root / "backups",
+        "manifests": data_root / "manifests",
+        "jobs": data_root / "jobs",
+        "quarantine": data_root / "quarantine",
+        "archive/pdf": data_root / "archive" / "pdf",
+        "archive/html": data_root / "archive" / "html",
+        "archive/text": data_root / "archive" / "text",
+        "archive/attachments": data_root / "archive" / "attachments",
+    }
+
+
+def _migration_sources(settings: Settings, target: Path) -> list[tuple[Path, Path]]:
+    """List known repository-local sources that can be copied into the target.
+
+    This is deliberately conservative: it only describes the legacy locations
+    already handled by this migration module and never treats the target as a
+    source.  The migration remains copy+hash+atomic and never deletes sources.
+    """
+
+    directories = storage_directories(settings, target=target)
+    candidates = (
+        (settings.root / "data" / "curated", directories["curated"]),
+        (settings.root / "data" / "research", directories["research"]),
+        (settings.root / "data" / "raw", directories["raw"]),
+        (settings.root / "data" / "archive", directories["archive"]),
+        (settings.root / "database", directories["database"]),
+        (settings.root / "outputs", directories["outputs"]),
+        (settings.root / "logs", directories["logs"]),
+    )
+    seen: set[tuple[str, str]] = set()
+    result: list[tuple[Path, Path]] = []
+    for source, destination in candidates:
+        key = (str(source.resolve()), str(destination.resolve()))
+        if key not in seen:
+            result.append((source, destination))
+            seen.add(key)
+    return result
 
 
 def _sha256(path: Path) -> str:
@@ -38,16 +120,13 @@ def _sha256(path: Path) -> str:
 def storage_plan(settings: Settings | None = None, *, target: Path | None = None) -> dict:
     settings = settings or Settings.discover()
     target = Path(target or settings.data_root)
-    mappings = [
-        (settings.root / "data" / "curated", target / "curated"),
-        (settings.root / "data" / "research", target / "research"),
-        (settings.root / "database", target / "database"),
-        (settings.root / "outputs", target / "outputs"),
-        (target / "raw", target / "archive"),
-    ]
+    directories = storage_directories(settings, target=target)
+    mappings = _migration_sources(settings, target)
     return {
         "target": str(target),
         "target_exists": target.exists(),
+        "directories": {name: str(path) for name, path in directories.items()},
+        "runtime_directories": [str(directories[name]) for name in RUNTIME_DIRECTORIES],
         "source_mappings": [
             {
                 "source": str(source),
@@ -78,12 +157,11 @@ def migrate_storage(
     if target.drive and not Path(target.drive + "\\").exists():
         raise FileNotFoundError(f"CRPD data drive is unavailable: {target.drive}")
     target.mkdir(parents=True, exist_ok=True)
-    for relative in RUNTIME_DIRECTORIES:
-        (target / relative).mkdir(parents=True, exist_ok=True)
+    directories = storage_directories(settings, target=target)
+    for directory in directories.values():
+        directory.mkdir(parents=True, exist_ok=True)
     copied = verified = skipped = 0
-    for mapping in plan["source_mappings"]:
-        source = Path(mapping["source"])
-        destination = Path(mapping["target"])
+    for source, destination in _migration_sources(settings, target):
         if not source.exists() or source.resolve() == destination.resolve():
             continue
         for item in source.rglob("*"):
@@ -138,16 +216,21 @@ def migrate_storage(
 def verify_storage(settings: Settings | None = None, *, target: Path | None = None) -> dict:
     settings = settings or Settings.discover()
     target = Path(target or settings.data_root)
-    missing = [relative for relative in RUNTIME_DIRECTORIES if not (target / relative).is_dir()]
+    directories = storage_directories(settings, target=target)
+    missing = [name for name in RUNTIME_DIRECTORIES if not directories[name].is_dir()]
     database = target / "database" / "policydb.duckdb"
     result = {
         "target": str(target),
         "available": target.exists(),
         "missing_directories": missing,
+        "directories": {name: str(path) for name, path in directories.items()},
+        "directory_status": {
+            name: {"path": str(path), "exists": path.is_dir()}
+            for name, path in directories.items()
+        },
         "database_exists": database.exists(),
         "configured_data_root": str(settings.data_root),
         "configured_database": str(settings.database),
         "passed": target.exists() and not missing,
     }
     return result
-

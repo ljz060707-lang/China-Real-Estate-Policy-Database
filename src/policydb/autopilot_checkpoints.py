@@ -53,6 +53,7 @@ def is_slot_claimable(
     *,
     now: datetime | None = None,
     active_slot_ids: set[str] | None = None,
+    research_mode: bool = False,
 ) -> bool:
     """Single claimable predicate shared by planning, run, resume and workers."""
     now = now or datetime.now(UTC)
@@ -71,9 +72,21 @@ def is_slot_claimable(
     status = str(slot.get("status") or slot.get("work_status") or "").upper()
     if status in TERMINAL_SLOT_STATUSES or status in {"HUMAN_REVIEW", "VERIFIED", "ENABLED"}:
         return False
-    if status == "RETRY_WAIT" and (_parse_time(slot.get("next_retry_at")) or now + timedelta(seconds=1)) > now:
-        return False
-    if status in {"HUMAN_REVIEW", "CANDIDATE_FAILED_AMBIGUOUS", "BLOCKED_ROLE_CONFLICT"} or str(slot.get("manual_review_status") or "").lower() in {"human_review", "pending_human_review", "approved"}:
+    if status == "RETRY_WAIT":
+        # The materialized slot queue may carry only the status while the
+        # authoritative retry deadline lives in the append-only checkpoint.
+        # Prefer the row value when present, then fall back to the checkpoint;
+        # otherwise a retry_wait row would remain blocked forever after resume.
+        retry_at = _parse_time(slot.get("next_retry_at")) or _parse_time((checkpoint or {}).get("next_retry_at"))
+        if (retry_at or now + timedelta(seconds=1)) > now:
+            return False
+    if status in {
+        "HUMAN_REVIEW",
+        "CANDIDATE_FAILED_AMBIGUOUS",
+        "BLOCKED_ROLE_CONFLICT",
+    } or (
+        status == "NO_CANDIDATE_MANUAL_RESEARCH" and not research_mode
+    ) or str(slot.get("manual_review_status") or "").lower() in {"human_review", "pending_human_review", "approved"}:
         return False
     if checkpoint:
         checkpoint_status = str(checkpoint.get("status") or "").upper()
@@ -173,6 +186,7 @@ class GlobalSlotCheckpointStore:
         run_id: str,
         lease_seconds: int = 1800,
         now: datetime | None = None,
+        research_mode: bool = False,
     ) -> tuple[bool, dict[str, Any]]:
         now = now or datetime.now(UTC)
         slot_id = str(slot.get("slot_id") or "")
@@ -182,7 +196,7 @@ class GlobalSlotCheckpointStore:
         with _exclusive_file_lock(self.lock_path):
             events = self._read_events()
             latest = self._latest(events).get(slot_id)
-            if not is_slot_claimable(slot, latest, now=now):
+            if not is_slot_claimable(slot, latest, now=now, research_mode=research_mode):
                 if latest and str(latest.get("status")) == "CLAIMED" and str(latest.get("run_id")) == run_id:
                     return True, {**latest, "reason": "same_run_claim_reused"}
                 return False, {"reason": "already_claimed_or_completed", "slot_id": slot_id, "checkpoint": latest}
@@ -243,6 +257,90 @@ class GlobalSlotCheckpointStore:
                 "idempotency_key": f"{slot_id}:{status}:{fingerprint}",
             }
             return self._append_unlocked(event)
+
+    def requeue_zero_yield_run(
+        self,
+        run_dir: Path,
+        *,
+        repair_run_id: str,
+    ) -> dict[str, Any]:
+        """Append recoverable requeue events for a zero-yield historical run.
+
+        This is an append-only checkpoint repair.  It is deliberately narrow:
+        only slots whose run summary records no formal application, no probe,
+        no human-review item and no strict yield, and whose latest checkpoint
+        is the old zero-yield ``COMPLETED`` outcome, are requeued.  Existing
+        run history remains untouched.
+        """
+
+        summary_path = Path(run_dir) / "run_summary.json"
+        if not summary_path.exists():
+            return {"status": "NO_RUN_SUMMARY", "requeued": 0, "slots": []}
+        try:
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            return {"status": "INVALID_RUN_SUMMARY", "error_type": type(exc).__name__, "requeued": 0, "slots": []}
+        candidates = [
+            item
+            for item in summary.get("slot_results", [])
+            if str(item.get("slot_id") or "")
+            and int(item.get("applied_candidates") or 0) == 0
+            and int(item.get("probed_candidates") or 0) == 0
+            and int(item.get("human_review") or 0) == 0
+        ]
+        if not candidates:
+            return {"status": "NO_ZERO_YIELD_SLOTS", "requeued": 0, "slots": []}
+        source_run_id = str(summary.get("run_dir") or Path(run_dir).name)
+        source_run_id = source_run_id.replace("\\", "/").rstrip("/").split("/")[-1]
+        requeued: list[str] = []
+        skipped: list[dict[str, Any]] = []
+        timestamp = utc_now()
+        with _exclusive_file_lock(self.lock_path):
+            latest = self._latest(self._read_events())
+            for item in candidates:
+                slot_id = str(item["slot_id"])
+                previous = latest.get(slot_id) or {}
+                previous_status = str(previous.get("status") or "").upper()
+                if previous_status != "COMPLETED" or str(previous.get("terminal_outcome") or "") != "deterministic_probe_completed_without_verified_candidate":
+                    skipped.append({"slot_id": slot_id, "reason": "latest_checkpoint_not_zero_yield_completed", "status": previous_status})
+                    continue
+                idempotency_key = f"{slot_id}:REQUEUE:{source_run_id}"
+                if any(
+                    event.get("idempotency_key") == idempotency_key
+                    for event in self._read_events()
+                ):
+                    skipped.append({"slot_id": slot_id, "reason": "requeue_already_recorded"})
+                    continue
+                event = {
+                    "event": "CHECKPOINT_REQUEUE_REQUESTED",
+                    "slot_id": slot_id,
+                    "work_fingerprint": previous.get("work_fingerprint"),
+                    "status": "FAILED_RECOVERABLE",
+                    "run_id": repair_run_id,
+                    "source_run_id": source_run_id,
+                    "requeue_from_status": previous_status,
+                    "terminal_outcome": "evidence_enrichment_requeue",
+                    "reason_code": "historical_zero_yield_prefilter_block",
+                    "claimed_at": None,
+                    "lease_until": None,
+                    "next_retry_at": None,
+                    "ai_call_persisted": bool(previous.get("ai_call_persisted")),
+                    "evidence_ids": previous.get("evidence_ids") or [],
+                    "updated_at": timestamp,
+                    "idempotency_key": idempotency_key,
+                }
+                self._append_unlocked(event)
+                latest[slot_id] = event
+                requeued.append(slot_id)
+        return {
+            "status": "REQUEUED" if requeued else "NO_ELIGIBLE_ZERO_YIELD_SLOTS",
+            "source_run_id": source_run_id,
+            "repair_run_id": repair_run_id,
+            "requeued": len(requeued),
+            "slots": requeued,
+            "skipped": skipped,
+        }
+
     def backfill_from_run_dirs(
         self,
         outputs_root: Path,

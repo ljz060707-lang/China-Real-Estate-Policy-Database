@@ -37,6 +37,10 @@ class RegisteredSource(BaseModel):
     last_health_at: datetime | None = None
     last_error: str | None = None
     city_ids: list[str] = Field(default_factory=list)
+    # ``city_ids`` remains the registered operational scope.  A centralized
+    # authority may additionally declare an explicit reviewed coverage scope;
+    # it is never inferred from province names.
+    coverage_city_ids: list[str] = Field(default_factory=list)
     province_codes: list[str] = Field(default_factory=list)
     scope_type: Literal[
         "national", "provincial", "municipal", "county", "multi_region", "unknown"
@@ -93,13 +97,21 @@ class RegisteredSource(BaseModel):
     last_success_at: datetime | None = None
     last_scan_at: datetime | None = None
     consecutive_failures: int = 0
+    source_bundle_id: str | None = None
+    authority_level: str | None = None
+    authority_name: str | None = None
+    jurisdiction_mapping_id: str | None = None
+    approval_status: str | None = None
+    substitute_for_role: str | None = None
+    substitute_reason: str | None = None
+    notes: str | None = None
 
     @field_validator("agency_type", mode="before")
     @classmethod
     def normalize_legacy_agency_type(cls, value: object) -> object:
         return AGENCY_TYPE_ALIASES.get(str(value or "unknown"), value or "secondary_source")
 
-    @field_validator("city_ids", "province_codes", mode="before")
+    @field_validator("city_ids", "coverage_city_ids", "province_codes", mode="before")
     @classmethod
     def normalize_list_fields(cls, value: object) -> list[str]:
         if value in (None, ""):

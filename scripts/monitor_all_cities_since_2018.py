@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DATA_ROOT = Path(os.environ.get("CRPD_DATA_ROOT", r"D:\Data Set\CRPD"))
+DATA_ROOT = Path(os.environ.get("CRPD_DATA_ROOT", r"E:\Data Set\CRPD"))
 AUTOMATION_ROOT = DATA_ROOT / "outputs" / "all_cities_since_2018"
 STOP_FILE = DATA_ROOT / "control" / "STOP_FULL_SYNC"
 TASK_NAME = "CRPD-All-Cities-Since-2018"

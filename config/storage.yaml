@@ -1,0 +1,4 @@
+# The only production storage setting is the non-sensitive external data root.
+# All database, curated, raw, runtime, cache, temporary, dashboard and backup
+# paths are derived by policydb.settings.Settings.
+data_root: 'E:\Data Set\CRPD'

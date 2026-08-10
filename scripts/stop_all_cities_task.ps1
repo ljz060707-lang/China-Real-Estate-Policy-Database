@@ -9,7 +9,7 @@ $Utf8 = New-Object System.Text.UTF8Encoding($false)
 [Console]::OutputEncoding = $Utf8
 $OutputEncoding = $Utf8
 $ErrorActionPreference = "Stop"
-$dataRoot = "D:\Data Set\CRPD"
+$dataRoot = "E:\Data Set\CRPD"
 $stopFile = Join-Path $dataRoot "control\STOP_FULL_SYNC"
 $lockPath = Join-Path $dataRoot "jobs\all_cities_since_2018.lock"
 New-Item -ItemType Directory -Force -Path (Split-Path $stopFile -Parent) | Out-Null

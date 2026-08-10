@@ -21,6 +21,14 @@ from policydb.crawl.dedup import canonicalize_url
 from policydb.parquet_store import atomic_write_parquet, read_parquet_snapshot
 from policydb.settings import Settings
 from policydb.source_completion import build_slot_work_queue
+from policydb.source_completion_checkpoint import (
+    render_next_batch_command,
+    render_report_markdown,
+)
+from policydb.source_discovery import (
+    build_source_discovery_queries,
+    build_source_discovery_query_specs,
+)
 from policydb.source_slots import audit_525, probe_candidates, upsert_candidates
 from policydb.transform.normalization import stable_id
 
@@ -164,16 +172,15 @@ def build_ai_plan(settings: Settings, *, city: str | None = None, city_id: str |
 
 
 def _queries(row: dict) -> list[str]:
-    city = str(row["city_name"])
-    role = str(row["source_role"])
-    labels = {
-        "municipal_government": "人民政府 政策",
-        "government_gazette": "政府公报",
-        "housing_department": "住房和城乡建设局 政策",
-        "provident_fund_center": "住房公积金管理中心 政策",
-        "natural_resources_department": "自然资源和规划局 政策",
-    }
-    return [f"{city} {labels.get(role, role)} 官网", f"site:gov.cn {city} {labels.get(role, role)} 栏目"]
+    return build_source_discovery_queries(row, str(row["source_role"]), max_queries=8)
+
+
+def _query_specs(row: dict) -> list[dict[str, object]]:
+    return build_source_discovery_query_specs(
+        row,
+        str(row["source_role"]),
+        max_queries=8,
+    )
 
 
 def _assessment_prompt(row: dict, queries: list[str], search_rows: list[dict[str, Any]] | None = None) -> tuple[str, str]:
@@ -440,6 +447,7 @@ def _run_ai_batch_v2(
     output: Path | None,
     max_slots: int,
     max_ai_calls: int,
+    max_ai_attempts: int | None,
     max_search_calls: int | None,
     concurrency: int,
     dry_run: bool,
@@ -461,6 +469,11 @@ def _run_ai_batch_v2(
     rows per slot can become formal candidates.  The LLM is never given a
     write path to verification or enablement.
     """
+    if max_ai_attempts is None:
+        max_ai_attempts = 3
+    if max_ai_attempts < 1:
+        raise ValueError('max_ai_attempts must be positive when AI is enabled')
+    max_ai_attempts = min(3, max_ai_attempts)
     if apply and dry_run:
         raise ValueError("--apply and --dry-run are mutually exclusive")
     if max_slots < 1 or max_slots > 50 or max_ai_calls < 0 or concurrency > 4:
@@ -554,7 +567,7 @@ def _run_ai_batch_v2(
             return search_call_callback(event)
         return None
 
-    def search_queries(queries: list[str]) -> list[dict[str, Any]]:
+    def search_queries(queries: list[str], query_levels: dict[str, int] | None = None) -> list[dict[str, Any]]:
         found: list[dict[str, Any]] = []
         seen: set[str] = set()
         for query in queries:
@@ -572,19 +585,21 @@ def _run_ai_batch_v2(
                 url = canonicalize_url(str(item.get("url") or "")) if item.get("url") else ""
                 if not url or url in seen:
                     if item.get("error_type"):
-                        search_evidence.append({"query": query, **item, "evidence_type": "provider_error"})
+                        search_evidence.append({"query": query, "discovery_level": (query_levels or {}).get(query), **item, "evidence_type": "provider_error"})
                     continue
                 seen.add(url)
                 item["url"] = url
                 found.append(item)
-                search_evidence.append({"query": query, **item, "evidence_type": "search_result"})
+                search_evidence.append({"query": query, "discovery_level": (query_levels or {}).get(query), **item, "evidence_type": "search_result"})
         return found
 
     for row in plan.iter_rows(named=True):
-        queries = _queries(row)
+        query_specs = _query_specs(row)
+        queries = [str(item["query"]) for item in query_specs]
+        query_levels = {str(item["query"]): int(item["discovery_level"]) for item in query_specs}
         search_rows: list[dict[str, Any]] = []
         if not dry_run and effective_mode in {"SEARCH_ONLY", "SEARCH_AND_AI"}:
-            search_rows = search_queries(queries)
+            search_rows = search_queries(queries, query_levels)
         context = {
             "stage": "source_discovery",
             "schema": "SourceAIAssessment",
@@ -593,6 +608,7 @@ def _run_ai_batch_v2(
             "city": row["city_name"],
             "role": row["source_role"],
             "queries": queries,
+            "query_levels": query_levels,
             "search_result_count": len(search_rows),
         }
         prompt_hash = _sha(_assessment_prompt(row, queries, search_rows))
@@ -617,6 +633,7 @@ def _run_ai_batch_v2(
             "cache_hit": request_hash in cache,
             "search_queries": queries,
             "candidate_urls": [item.get("url") for item in search_rows if item.get("url")],
+            "discovery_levels": query_levels,
         }
         assessment: SourceAIAssessment | None = None
         trace = None
@@ -634,7 +651,7 @@ def _run_ai_batch_v2(
             else:
                 system, user = _assessment_prompt(row, queries, search_rows)
                 try:
-                    assessment, trace, error_type = _call_ai(provider, model, system, user, audit=audit, audit_payload=request, attempt_callback=ai_attempt)
+                    assessment, trace, error_type = _call_ai(provider, model, system, user, audit=audit, audit_payload=request, max_attempts=max_ai_attempts, attempt_callback=ai_attempt)
                 except AICallBudgetExceeded:
                     raise
                 request_action = getattr(audit, "last_reservation_action", "claimed")
@@ -772,7 +789,10 @@ def _run_ai_batch_v2(
     _json(run_dir / "secret_scan.json", {"status": "pending", "keys_redacted": True})
     _json(run_dir / "github_publish_result.json", {"status": "not_requested"})
     _json(run_dir / "blockers.json", {"go_no_go": "BLOCKED", "blockers": ["AI_RESULTS_REQUIRE_DETERMINISTIC_GATES"], "full_run_started": False, "full_ai_started": False})
-    (run_dir / "NEXT_AI_BATCH_COMMAND.ps1").write_text("$ErrorActionPreference='Stop'\n$env:CRPD_DATA_ROOT='D:\\Data Set\\CRPD'\n.\\.venv\\Scripts\\python.exe -m policydb.source_completion_ai_workflow batch --discovery-mode SEARCH_AND_AI --max-slots 50 --max-ai-calls 100 --max-search-calls 100 --concurrency 4 --apply --resume --output '" + str(run_dir) + "'\n", encoding="utf-8")
+    (run_dir / "NEXT_AI_BATCH_COMMAND.ps1").write_text(
+        render_next_batch_command(max_slots=20, max_ai_calls=20, concurrency=2),
+        encoding="utf-8",
+    )
 
     provider_operational = any(record.get("status") == "response_completed" and not record.get("cache_hit") for record in audit_records)
     report = {
@@ -805,12 +825,54 @@ def _run_ai_batch_v2(
         "audit_existing": audit_existing,
     }
     _json(run_dir / "run_summary.json", report)
-    (run_dir / "AI_SOURCE_COMPLETION_REPORT.md").write_text("# AI来源补齐有限批次报告\n\n" + json.dumps(report, ensure_ascii=False, indent=2) + "\n\nAI结果不能直接写入 verified 或 enabled；所有 URL 仍需确定性门禁。\n", encoding="utf-8")
+    (run_dir / "AI_SOURCE_COMPLETION_REPORT.md").write_text(
+        render_report_markdown(report),
+        encoding="utf-8",
+    )
     return report
 
 
+def run_ai_batch_with_attempt_budget(
+    settings: Settings,
+    *,
+    output: Path,
+    max_slots: int,
+    max_ai_calls: int,
+    max_ai_attempts: int,
+    max_search_calls: int | None,
+    concurrency: int,
+    dry_run: bool,
+    apply: bool,
+    resume: bool,
+    slot_id: str | None,
+    global_audit_root: Path | None,
+    discovery_mode: str,
+) -> dict:
+    return _run_ai_batch_v2(
+        settings,
+        output=output,
+        max_slots=max_slots,
+        max_ai_calls=max_ai_calls,
+        max_ai_attempts=max_ai_attempts,
+        max_search_calls=max_search_calls,
+        concurrency=concurrency,
+        dry_run=dry_run,
+        apply=apply,
+        resume=resume,
+        city=None,
+        city_id=None,
+        source_role=None,
+        slot_id=slot_id,
+        global_audit_root=global_audit_root,
+        discovery_mode=discovery_mode,
+        audit_existing=False,
+        ai_call_callback=None,
+        search_call_callback=None,
+    )
+
+
 def run_ai_batch(settings: Settings, *, output: Path | None = None, max_slots: int = 50, max_ai_calls: int = 100, max_search_calls: int | None = None, concurrency: int = 4, dry_run: bool = True, apply: bool = False, resume: bool = False, city: str | None = None, city_id: str | None = None, source_role: str | None = None, slot_id: str | None = None, global_audit_root: Path | None = None, discovery_mode: str = "AUTO", audit_existing: bool = False, ai_call_callback: Callable[[dict[str, Any]], Any] | None = None, search_call_callback: Callable[[dict[str, Any]], Any] | None = None) -> dict:
-    return _run_ai_batch_v2(settings, output=output, max_slots=max_slots, max_ai_calls=max_ai_calls, max_search_calls=max_search_calls, concurrency=concurrency, dry_run=dry_run, apply=apply, resume=resume, city=city, city_id=city_id, source_role=source_role, slot_id=slot_id, global_audit_root=global_audit_root, discovery_mode=discovery_mode, audit_existing=audit_existing, ai_call_callback=ai_call_callback, search_call_callback=search_call_callback)
+    return _run_ai_batch_v2(settings, output=output, max_slots=max_slots, max_ai_calls=max_ai_calls, max_ai_attempts=3, max_search_calls=max_search_calls, concurrency=concurrency, dry_run=dry_run, apply=apply, resume=resume, city=city, city_id=city_id, source_role=source_role, slot_id=slot_id, global_audit_root=global_audit_root, discovery_mode=discovery_mode, audit_existing=audit_existing, ai_call_callback=ai_call_callback, search_call_callback=search_call_callback)
     if apply and dry_run:
         raise ValueError("--apply and --dry-run are mutually exclusive")
     if max_slots > 50 or max_ai_calls > 100 or concurrency > 4:
@@ -987,7 +1049,10 @@ def run_ai_batch(settings: Settings, *, output: Path | None = None, max_slots: i
     _json(run_dir / "secret_scan.json", {"status": "pending", "scan_scope": "repository source and staged files", "keys_redacted": True})
     _json(run_dir / "github_publish_result.json", {"status": "pending"})
     _json(run_dir / "blockers.json", {"go_no_go": "BLOCKED", "blockers": ([] if provider else ["AI_PROVIDER_UNAVAILABLE"]), "full_run_started": False, "full_ai_started": False})
-    (run_dir / "NEXT_AI_BATCH_COMMAND.ps1").write_text("$ErrorActionPreference='Stop'\n$env:CRPD_DATA_ROOT='D:\\Data Set\\CRPD'\n.\\.venv\\Scripts\\python.exe -m policydb.source_completion_ai_workflow batch --max-slots 50 --max-ai-calls 100 --concurrency 4 --apply --output '" + str(run_dir) + "'\n", encoding="utf-8")
+    (run_dir / "NEXT_AI_BATCH_COMMAND.ps1").write_text(
+        render_next_batch_command(max_slots=20, max_ai_calls=20, concurrency=2),
+        encoding="utf-8",
+    )
     report = {
         "run_dir": str(run_dir),
         "planned_slots": plan.height,
@@ -1010,7 +1075,10 @@ def run_ai_batch(settings: Settings, *, output: Path | None = None, max_slots: i
         "concurrency_cap": concurrency,
     }
     _json(run_dir / "run_summary.json", report)
-    (run_dir / "AI_SOURCE_COMPLETION_REPORT.md").write_text("# AI来源补齐有限批次报告\n\n" + json.dumps(report, ensure_ascii=False, indent=2) + "\n\nAI结果永不直接写入verified；所有URL仍需确定性验证。\n", encoding="utf-8")
+    (run_dir / "AI_SOURCE_COMPLETION_REPORT.md").write_text(
+        render_report_markdown(report),
+        encoding="utf-8",
+    )
     return report
 
 

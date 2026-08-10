@@ -1,7 +1,7 @@
 pdf_pipeline:
   # Non-sensitive runtime configuration.  Raw and curated data stay outside Git.
-  inventory_root: "D:/Data Set/CRPD"
-  archive_root: "D:/Data Set/CRPD/raw/pdf"
+  inventory_root: "E:/Data Set/CRPD"
+  archive_root: "E:/Data Set/CRPD/raw/pdf"
   enabled: true
   discover_during_html_crawl: true
   download_during_fast_ingest: true

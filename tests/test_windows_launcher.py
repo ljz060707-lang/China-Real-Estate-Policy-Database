@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+import os
+import subprocess
 from pathlib import Path
 
 from app.setup_wizard import initial_setup_status, needs_initial_setup
@@ -14,6 +17,7 @@ def test_windows_launcher_files_exist():
         "首次安装.bat",
         "start_policydb.cmd",
         "scripts/launch_dashboard.ps1",
+        "scripts/dashboard_runtime.ps1",
         "scripts/stop_dashboard.ps1",
         "scripts/first_setup.ps1",
         "scripts/create_desktop_shortcut.ps1",
@@ -47,6 +51,74 @@ def test_launcher_uses_health_check_and_persistent_state():
     assert '"dashboard.process.json"' in content
     assert "--server.fileWatcherType=none" in content
     assert "--runner.fastReruns=false" in content
+    assert "Ensure-DashboardRuntime" in content
+
+
+def test_dashboard_runtime_resolver_targets_external_data_root(tmp_path):
+    data_root = tmp_path / "CRPD"
+    environment = os.environ.copy()
+    environment.pop("POLICYDB_ROOT", None)
+    environment["CRPD_DATA_ROOT"] = str(data_root)
+    result = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(ROOT / "scripts" / "dashboard_runtime.ps1"),
+            "-Json",
+        ],
+        cwd=ROOT,
+        env=environment,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8-sig",
+    )
+    payload = json.loads(result.stdout)
+    expected = data_root / "runtime" / "dashboard"
+    assert Path(payload["write_root"]) == expected
+    assert Path(payload["legacy_root"]) == ROOT / ".runtime"
+    assert not expected.exists()
+
+
+def test_dashboard_runtime_resolver_falls_back_per_file(tmp_path):
+    data_root = tmp_path / "CRPD"
+    new_runtime = data_root / "runtime" / "dashboard"
+    new_runtime.mkdir(parents=True)
+    project_root = tmp_path / "project"
+    legacy_runtime = project_root / ".runtime"
+    legacy_runtime.mkdir(parents=True)
+    (legacy_runtime / "dashboard.pid").write_text("12345", encoding="ascii")
+    environment = os.environ.copy()
+    environment["CRPD_DATA_ROOT"] = str(data_root)
+    environment["POLICYDB_ROOT"] = str(project_root)
+    command = (
+        f". '{ROOT / 'scripts' / 'dashboard_runtime.ps1'}'; "
+        "Get-DashboardRuntimePath 'dashboard.pid'"
+    )
+    result = subprocess.run(
+        ["powershell.exe", "-NoProfile", "-Command", command],
+        cwd=ROOT,
+        env=environment,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8-sig",
+    )
+
+    expected = legacy_runtime / "dashboard.pid"
+    assert Path(result.stdout.strip()) == expected
+
+
+def test_dashboard_control_scripts_share_runtime_resolver():
+    for name in ("check_dashboard.ps1", "stop_dashboard.ps1", "launch_dashboard.ps1"):
+        content = (ROOT / "scripts" / name).read_text(encoding="utf-8-sig")
+        assert "dashboard_runtime.ps1" in content
+    assert "Get-DashboardRuntimePath" in (
+        ROOT / "scripts" / "check_dashboard.ps1"
+    ).read_text(encoding="utf-8-sig")
 
 
 def test_windows_command_entries_use_crlf():
@@ -88,5 +160,5 @@ def test_setup_wizard_detects_missing_and_complete_state(tmp_path):
 def test_setup_wizard_preserves_cli_dashboard_import_order():
     dashboard = (ROOT / "app/dashboard.py").read_text(encoding="utf-8")
     guard = dashboard.index("if needs_initial_setup(ROOT):")
-    database_open = dashboard.index("db = open_database()")
-    assert guard < database_open
+    settings_open = dashboard.index("settings = Settings.discover(ROOT)")
+    assert guard < settings_open

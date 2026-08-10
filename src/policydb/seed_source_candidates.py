@@ -39,7 +39,7 @@ CANDIDATE_KINDS = {
 
 _CONTENT_PATH = re.compile(
     r"(?:\.(?:s?html?|jhtml|aspx?)(?:$|[?#])|"
-    r"/(?:art|article|content|detail|info|news|notice|policy)/|"
+    r"/(?:art|article|content|detail|gi_news|info|news|notice|policy)/|"
     r"/t?20\d{2}(?:[-_/]?\d{2})|"
     r"[?&](?:id|articleid|infoid|docid|contentid)=)",
     re.IGNORECASE,

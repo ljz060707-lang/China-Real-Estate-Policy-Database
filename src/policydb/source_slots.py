@@ -35,6 +35,12 @@ from policydb.source_discovery import (
     is_reusable_source_entry,
     load_source_requirements,
 )
+from policydb.source_jurisdiction import (
+    is_clear_detail_url,
+    load_jurisdiction_mappings,
+    mapping_for_candidate,
+    source_covers_city,
+)
 from policydb.transform.normalization import stable_id
 
 SLOT_STATUSES = {"unresolved", "candidate", "verified", "enabled", "rejected"}
@@ -72,6 +78,29 @@ COVERAGE_STATUS_NOTES = {
 
 def _atomic_parquet(frame: pl.DataFrame, path: Path) -> None:
     atomic_write_parquet(frame, path, {"module": "source_slots"})
+
+
+EXCLUDED_REVIEW_PREFIX = "excluded_"
+
+
+def _active_candidates(
+    frame: pl.DataFrame,
+) -> pl.DataFrame:
+    """Exclude curated-invalid candidates from operational calculations."""
+    if (
+        frame.is_empty()
+        or "manual_review_status" not in frame.columns
+    ):
+        return frame
+
+    return frame.filter(
+        ~pl.col("manual_review_status")
+        .fill_null("")
+        .cast(pl.String)
+        .str.starts_with(
+            EXCLUDED_REVIEW_PREFIX
+        )
+    )
 
 
 def _normalize_excel_core_properties(path: Path) -> None:
@@ -238,6 +267,24 @@ def _candidate_evidence_ids(row: dict, registered: object | None) -> list[str]:
             values.append(f"{key}:{value[:240]}")
     if registered is not None:
         values.append(f"registry:{getattr(registered, 'source_id', '')}")
+    for key in ("jurisdiction_evidence_id", "jurisdiction_mapping_id"):
+        value = str(row.get(key) or "").strip()
+        if value:
+            values.append(value if key == "jurisdiction_evidence_id" else f"jurisdiction_mapping:{value}")
+    for key in (
+        "page_response_sha256",
+        "enrichment_probe_hash",
+        "page_final_url",
+        "page_city_evidence",
+        "page_role_evidence",
+        "page_agency_evidence",
+        "page_entry_type_evidence",
+        "page_pagination_evidence",
+        "page_redirect_chain_json",
+    ):
+        value = str(row.get(key) or "").strip()
+        if value:
+            values.append(f"{key}:{value}")
     for item in _probe_evidence_rows(row):
         digest = str(item.get("response_sha256") or "")
         if digest:
@@ -268,6 +315,8 @@ def evaluate_candidate_gates(
     proposal_id: str | None = None,
     checked_at: str | None = None,
     historical: bool = False,
+    settings: Settings | None = None,
+    jurisdiction_mappings: list[object] | None = None,
 ) -> tuple[dict, list[dict]]:
     """Evaluate the source admission gates without consulting AI or mutating data."""
     checked_at = checked_at or datetime.now(UTC).isoformat()
@@ -283,6 +332,13 @@ def evaluate_candidate_gates(
     if not source_id and "source_id=" in evidence_text:
         source_id = evidence_text.split("source_id=", 1)[1].split()[0].split(";", 1)[0]
     registered = registry_by_id.get(source_id)
+    mapping_decision = mapping_for_candidate(
+        row,
+        slot,
+        settings=settings,
+        mappings=jurisdiction_mappings,
+    )
+    mapping_pass = mapping_decision.get("status") == "PASS"
     canonical = canonicalize_url(candidate_url) if candidate_url else ""
     final_url = str(row.get("final_url") or "")
     final_host = (urlsplit(final_url).hostname or "").lower()
@@ -303,22 +359,51 @@ def evaluate_candidate_gates(
     date_observed = _publication_date_observed(row)
     article_links_observed = _article_links_observed(row)
     city_name = str(slot.get("city_name") or row.get("city_name") or "")
-    city_haystack = " ".join(
-        str(row.get(field) or "")
-        for field in ("site_name", "department_name", "city_match_evidence", "candidate_url", "canonical_url")
-    )
     city_tokens = _city_tokens(city_name)
-    registry_city_ok = bool(registered and city_id in getattr(registered, "city_ids", []))
+    registry_city_ok = bool(registered and source_covers_city(registered, city_id))
     city_evidence = str(row.get("city_match_evidence") or "")
     city_explicit_wrong = bool(city_evidence) and city_id not in city_evidence and not any(
         token in city_evidence for token in city_tokens
     )
-    city_ok = registry_city_ok or any(token in city_haystack for token in city_tokens)
+    city_haystack = " ".join(
+        str(row.get(field) or "")
+        for field in (
+            "site_name",
+            "department_name",
+            "city_match_evidence",
+            "candidate_url",
+            "canonical_url",
+            "final_url",
+            "page_title",
+            "page_heading",
+            "breadcrumb",
+            "page_text_excerpt",
+            "institution_evidence",
+        )
+    ).lower()
+    explicit_candidate_city_ok = bool(
+        any(token.lower() in city_haystack for token in city_tokens)
+        or (city_id and city_id.lower() in city_evidence.lower())
+        or (any(token.lower() in city_evidence.lower() for token in city_tokens) and "title_only" not in city_evidence.lower())
+    )
+    city_ok = registry_city_ok or explicit_candidate_city_ok or mapping_pass
+    if mapping_decision.get("status") == "FAIL":
+        city_explicit_wrong = True
     role = source_role
     role_terms = ROLE_ALIASES.get(role, (ROLE_TERMS.get(role, ""),))
     role_haystack = " ".join(
         str(row.get(field) or "")
-        for field in ("site_name", "department_name", "role_match_evidence")
+        for field in (
+            "site_name",
+            "department_name",
+            "role_match_evidence",
+            "discovery_evidence_text",
+            "page_title",
+            "page_heading",
+            "breadcrumb",
+            "page_text_excerpt",
+            "institution_evidence",
+        )
     )
     registry_role_ok = bool(
         registered
@@ -342,14 +427,18 @@ def evaluate_candidate_gates(
             or any(term and term.lower() in role_evidence for term in role_terms)
         )
     )
-    role_ok = registry_role_ok or gazette_role_ok or any(
+    role_ok = mapping_pass or registry_role_ok or gazette_role_ok or any(
         term and term in role_haystack for term in role_terms
     ) or role_evidence_ok
     official = _official_domain(canonical)
     redirected_official = not final_host or _official_domain(final_url)
+    probe_reclassified_entry_ok = False
+    if str(row.get("reclassification_method") or "") == "deterministic_probe_reclassification":
+        probe_reclassified_entry_ok, _ = _probe_reclassification_ready(row)
+    entry_boundary_ok = is_reusable_source_entry(canonical) or probe_reclassified_entry_ok
     entry_ok = bool(
         canonical
-        and is_reusable_source_entry(canonical)
+        and entry_boundary_ok
         and page_type not in {"policy_detail", "content_page", "policy_content_page"}
         and candidate_kind != "policy_content_evidence"
         and not str(canonical).lower().split("?", 1)[0].endswith(
@@ -374,7 +463,15 @@ def evaluate_candidate_gates(
         and redirected_official
     )
     duplicate_flag = row.get("duplicate_or_existing_source")
-    duplicate_ok = not bool(duplicate_flag) and duplicate_count <= 1
+    duplicate_scope = str(row.get("duplicate_scope") or "")
+    duplicate_merge_allowed = duplicate_scope in {
+        "same_source_bundle",
+        "same_source_slot",
+        "approved_cross_city_mapping",
+    }
+    duplicate_ok = (not bool(duplicate_flag) and duplicate_count <= 1) or (
+        duplicate_merge_allowed and mapping_pass
+    )
     gates: list[dict] = []
 
     def add(
@@ -405,6 +502,10 @@ def evaluate_candidate_gates(
         )
 
     evidence_ids = _candidate_evidence_ids(row, registered)
+    mapping_evidence_id = str(mapping_decision.get("evidence_id") or "")
+    if mapping_evidence_id:
+        evidence_ids.append(mapping_evidence_id)
+        evidence_ids = list(dict.fromkeys(evidence_ids))
     add(
         "reachable",
         "PASS" if canonical and urlsplit(canonical).scheme in {"http", "https"} and urlsplit(canonical).hostname else "FAIL",
@@ -431,15 +532,31 @@ def evaluate_candidate_gates(
         city_status, city_reason = "FAIL", "city_mismatch"
     else:
         city_status, city_reason = "UNKNOWN", "city_evidence_missing"
-    add("city_match", city_status, {"city_id": city_id, "city_name": city_name, "registry_city_match": registry_city_ok}, "candidate must have explicit city evidence or a registry city match", city_reason, evidence_ids)
+    add("city_match", city_status, {"city_id": city_id, "city_name": city_name, "registry_city_match": registry_city_ok, "explicit_candidate_city_match": explicit_candidate_city_ok, "jurisdiction_mapping": mapping_decision}, "candidate must have explicit city evidence, a registry city match, or an approved jurisdiction mapping", city_reason if city_reason != "city_match" or not mapping_pass else "centralized_authority_city_coverage", evidence_ids)
     if role_ok:
         role_status, role_reason = "PASS", "source_role_match"
     elif registered or row.get("role_match_evidence"):
         role_status, role_reason = "FAIL", "source_role_mismatch"
     else:
         role_status, role_reason = "UNKNOWN", "source_role_evidence_missing"
-    add("source_role_match", role_status, {"source_role": source_role, "registry_role_match": registry_role_ok}, "candidate institution must match the required source role", role_reason, evidence_ids)
-    add("reusable_list_entry", "PASS" if entry_ok else "FAIL", {"page_type": page_type, "candidate_kind": candidate_kind, "entry_eligible": bool(row.get("entry_eligible"))}, "URL must be a reusable list/homepage entry, never a detail page or PDF", "reusable_entry" if entry_ok else "detail_or_pdf_not_reusable", evidence_ids)
+    add("source_role_match", role_status, {"source_role": source_role, "registry_role_match": registry_role_ok, "jurisdiction_mapping": mapping_decision}, "candidate institution must match the required source role", role_reason, evidence_ids)
+    add(
+        "reusable_list_entry",
+        "PASS" if entry_ok else "FAIL",
+        {
+            "page_type": page_type,
+            "candidate_kind": candidate_kind,
+            "entry_eligible": bool(row.get("entry_eligible")),
+            "probe_reclassified_entry": probe_reclassified_entry_ok,
+        },
+        "URL must be a reusable list/homepage entry, never a detail page or PDF",
+        "reusable_entry_after_probe_reclassification"
+        if entry_ok and probe_reclassified_entry_ok and not is_reusable_source_entry(canonical)
+        else "reusable_entry"
+        if entry_ok
+        else "detail_or_pdf_not_reusable",
+        evidence_ids,
+    )
     if parser_ok:
         parser_status_value, parser_reason = "PASS", "parser_ready"
     elif parser_status in {"", "pending"} and not direct_evidence_present:
@@ -517,6 +634,10 @@ def evaluate_candidate_gates(
         "reason_codes": reason_codes,
         "last_checked_at": row.get("last_checked_at") or checked_at,
         "historical": historical,
+        "jurisdiction_mapping_id": mapping_decision.get("mapping_id"),
+        "jurisdiction_evidence_id": mapping_decision.get("evidence_id"),
+        "source_bundle_id": row.get("source_bundle_id") or mapping_decision.get("source_bundle_id"),
+        "duplicate_scope": duplicate_scope or "canonical_url",
     }
     return result, gates
 
@@ -572,7 +693,7 @@ def _dynamic_human_question(failed_gates: list[str], reason_codes: list[str]) ->
     if "city_match" in gates:
         return "Can you confirm the official city jurisdiction for this URL and provide explicit city evidence?"
     if "source_role_match" in gates:
-        return "Can you confirm that this institution is the required source role, or identify the correct successor institution?"
+        return "Can you confirm the city jurisdiction and that this institution is the required source role, or identify the correct successor institution?"
     if "reusable_list_entry" in gates:
         return "This result appears to be a detail, PDF, or policy-content page. Is there an official reusable list or homepage entry?"
     if "direct_healthy" in gates or "reachable" in gates:
@@ -628,6 +749,20 @@ def build_human_review_rows(
                 "source_role": source.get("source_role"),
                 "candidate_url": source.get("candidate_url") or source.get("canonical_url"),
                 "candidate_title": source.get("candidate_title"),
+                "page_title": source.get("page_title"),
+                "page_heading": source.get("page_heading"),
+                "breadcrumb": source.get("breadcrumb"),
+                "page_text_excerpt": source.get("page_text_excerpt"),
+                "institution_evidence": source.get("institution_evidence"),
+                "page_city_evidence": source.get("page_city_evidence"),
+                "page_role_evidence": source.get("page_role_evidence"),
+                "page_agency_evidence": source.get("page_agency_evidence"),
+                "page_entry_type_evidence": source.get("page_entry_type_evidence"),
+                "page_pagination_evidence": source.get("page_pagination_evidence"),
+                "page_final_url": source.get("page_final_url"),
+                "page_http_status": source.get("page_http_status"),
+                "page_redirect_chain_json": source.get("page_redirect_chain_json"),
+                "page_response_sha256": source.get("page_response_sha256"),
                 "probe_status": probe_status,
                 "direct_healthy": direct_healthy,
                 "parser_ready": parser_ready,
@@ -681,6 +816,9 @@ def build_requirement_slots(settings: Settings | None = None) -> dict:
         if candidate_path.exists()
         else pl.DataFrame()
     )
+    existing_candidates = _active_candidates(
+        existing_candidates
+    )
     registry = load_registry(settings)
     now = datetime.now(UTC).isoformat()
     rows: list[dict] = []
@@ -696,7 +834,7 @@ def build_requirement_slots(settings: Settings | None = None) -> dict:
             registered = [
                 source
                 for source in registry
-                if str(city["city_id"]) in source.city_ids
+                if source_covers_city(source, str(city["city_id"]))
                 and (source.agency_type == role or source.source_role == role)
             ]
             verified_count = (
@@ -857,10 +995,21 @@ def upsert_candidates(
         page_type, derived_kind, derived_entry_eligible = _classify_registered_candidate(
             canonical, role
         )
+        reclassified = str(row.get("reclassification_method") or "") == "deterministic_probe_reclassification"
+        prefilter_rejected = str(row.get("prefilter_status") or "").startswith("rejected")
         candidate_kind = str(row.get("candidate_kind") or derived_kind)
-        if page_type != "site_or_column_entry":
-            candidate_kind = derived_kind
-        entry_eligible = derived_entry_eligible
+        if prefilter_rejected:
+            page_type = str(row.get("page_type") or "rejected_deterministic_prefilter")
+            candidate_kind = str(row.get("candidate_kind") or "rejected_deterministic_prefilter")
+            entry_eligible = False
+        elif reclassified and row.get("page_type") and row.get("entry_eligible") is True:
+            page_type = str(row.get("page_type"))
+            candidate_kind = str(row.get("candidate_kind") or "official_list_entry_candidate")
+            entry_eligible = True
+        else:
+            if page_type != "site_or_column_entry":
+                candidate_kind = derived_kind
+            entry_eligible = derived_entry_eligible
         source_id = row.get("source_id")
         candidate_id = str(
             row.get("candidate_id")
@@ -879,6 +1028,36 @@ def upsert_candidates(
                 "domain": domain,
                 "site_name": row.get("site_name"),
                 "department_name": row.get("department_name"),
+                "candidate_title": row.get("candidate_title"),
+                "candidate_snippet": row.get("candidate_snippet"),
+                "page_title": row.get("page_title"),
+                "page_heading": row.get("page_heading"),
+                "breadcrumb": row.get("breadcrumb"),
+                "page_text_excerpt": row.get("page_text_excerpt"),
+                "institution_evidence": row.get("institution_evidence"),
+                # Preserve semantic page evidence aliases produced by
+                # enrichment or supplied by a prior audit.  These fields are
+                # evidence only; strict verification still reads the live
+                # probe fields below.
+                "page_city_evidence": row.get("page_city_evidence"),
+                "page_role_evidence": row.get("page_role_evidence"),
+                "page_agency_evidence": row.get("page_agency_evidence"),
+                "page_entry_type_evidence": row.get("page_entry_type_evidence"),
+                "page_pagination_evidence": row.get("page_pagination_evidence"),
+                "page_redirect_chain_json": row.get("page_redirect_chain_json"),
+                "page_same_domain_links_json": row.get("page_same_domain_links_json"),
+                "page_same_domain_link_count": row.get("page_same_domain_link_count"),
+                "page_content_type": row.get("page_content_type"),
+                "page_final_url": row.get("page_final_url"),
+                "page_http_status": row.get("page_http_status"),
+                "page_network_route": row.get("page_network_route"),
+                "page_response_sha256": row.get("page_response_sha256"),
+                "evidence_enrichment_status": row.get("evidence_enrichment_status"),
+                "evidence_enrichment_attempts": int(row.get("evidence_enrichment_attempts") or 0),
+                "evidence_enrichment_error": row.get("evidence_enrichment_error"),
+                "evidence_enrichment_run_id": row.get("evidence_enrichment_run_id"),
+                "evidence_enrichment_url": row.get("evidence_enrichment_url"),
+                "enrichment_probe_hash": row.get("enrichment_probe_hash"),
                 "discovery_method": row.get("discovery_method", "registry_or_seed"),
                 "discovery_evidence_url": row.get("discovery_evidence_url"),
                 "discovery_evidence_text": row.get("discovery_evidence_text"),
@@ -913,6 +1092,11 @@ def upsert_candidates(
                 "candidate_kind": candidate_kind,
                 "page_type": page_type,
                 "entry_eligible": entry_eligible,
+                "initial_candidate_kind": row.get("initial_candidate_kind") or row.get("candidate_kind") or derived_kind,
+                "initial_page_type": row.get("initial_page_type") or row.get("page_type") or page_type,
+                "initial_entry_eligible": row.get("initial_entry_eligible") if row.get("initial_entry_eligible") is not None else row.get("entry_eligible", derived_entry_eligible),
+                "reclassification_method": row.get("reclassification_method"),
+                "reclassification_evidence_json": row.get("reclassification_evidence_json"),
                 "role_assignment_method": row.get("role_assignment_method"),
                 "substitute_for_role": row.get("substitute_for_role"),
                 "substitute_reason": row.get("substitute_reason"),
@@ -922,6 +1106,23 @@ def upsert_candidates(
                 "registry_source_evidence": row.get("registry_source_evidence"),
                 "registry_verification_status": row.get("registry_verification_status"),
                 "registry_health_evidence": row.get("registry_health_evidence"),
+                "source_bundle_id": row.get("source_bundle_id"),
+                "homepage_url": row.get("homepage_url"),
+                "list_page_urls": row.get("list_page_urls"),
+                "jurisdiction_mapping_id": row.get("jurisdiction_mapping_id"),
+                "jurisdiction_evidence_id": row.get("jurisdiction_evidence_id"),
+                "jurisdiction_mapping_status": row.get("jurisdiction_mapping_status"),
+                "jurisdiction_mapping_reason_code": row.get("jurisdiction_mapping_reason_code"),
+                "authority_level": row.get("authority_level"),
+                "authority_name": row.get("authority_name"),
+                "approval_status": row.get("approval_status"),
+                "prefilter_status": row.get("prefilter_status"),
+                "prefilter_reasons": row.get("prefilter_reasons"),
+                "prefilter_reason_codes": row.get("prefilter_reason_codes"),
+                "deterministic_score": row.get("deterministic_score"),
+                "deterministic_score_reasons": row.get("deterministic_score_reasons"),
+                "duplicate_scope": row.get("duplicate_scope"),
+                "merged_candidate_ids": row.get("merged_candidate_ids"),
                 "generation_batch_id": row.get("generation_batch_id"),
                 "is_seed_derived": bool(row.get("is_seed_derived", False)),
                 "has_seed_evidence": bool(row.get("has_seed_evidence", False)),
@@ -1019,11 +1220,25 @@ def upsert_candidates(
                     "discovery_evidence_url"
                 )
                 merged["first_seen_at"] = previous.get("first_seen_at")
+            previous_review_status = str(
+                previous.get(
+                    "manual_review_status"
+                )
+                or ""
+            )
             if (
                 not authoritative_review
-                and previous.get("manual_review_status") in {"approved", "verified"}
+                and (
+                    previous_review_status
+                    in {"approved", "verified"}
+                    or previous_review_status.startswith(
+                        EXCLUDED_REVIEW_PREFIX
+                    )
+                )
             ):
-                merged["manual_review_status"] = previous["manual_review_status"]
+                merged["manual_review_status"] = (
+                    previous_review_status
+                )
             existing_by_id[candidate_id] = merged
         incoming = pl.DataFrame(
             list(existing_by_id.values()), infer_schema_length=None
@@ -1079,7 +1294,10 @@ def seed_candidates_from_registry(
         )
         if role is None:
             continue
-        for city_id in source.city_ids:
+        for city_id in {
+            *(str(value) for value in source.city_ids),
+            *(str(value) for value in getattr(source, "coverage_city_ids", []) or []),
+        }:
             city_id = str(city_id)
             if city_ids is not None and city_id not in city_ids:
                 continue
@@ -1563,7 +1781,12 @@ def _probe_candidates_v2(
                 )
             except Exception as exc:
                 evidence.append(
-                    {"round": round_number, "checked_at": datetime.now(UTC).isoformat(), "error_type": type(exc).__name__}
+                    {
+                        "round": round_number,
+                        "checked_at": datetime.now(UTC).isoformat(),
+                        "error_type": type(exc).__name__,
+                        "error_message": str(exc)[:1000],
+                    }
                 )
         if last is None:
             failed += 1
@@ -1607,6 +1830,14 @@ def _probe_candidates_v2(
             parser_verified += int(parser_ok)
         checked.append(row)
     upsert_candidates(checked, settings, authoritative_review=True)
+    reclassifications = [
+        reclassify_candidate_after_probe(
+            str(row["candidate_id"]),
+            settings=settings,
+            run_id=f"{datetime.now(UTC):%Y%m%dT%H%M%SZ}",
+        )
+        for row in checked
+    ]
     verification = verify_candidates(
         city=city,
         source_id=source_id,
@@ -1618,7 +1849,116 @@ def _probe_candidates_v2(
     return {
         "checked": len(checked), "healthy": healthy, "parser_verified": parser_verified,
         "failed": failed, "verification": verification,
+        "reclassified": sum(bool(item.get("reclassified")) for item in reclassifications),
+        "reclassification_results": reclassifications,
         "filters": {"city": city, "source_id": source_id, "candidate_id": candidate_id, "slot_id": slot_id},
+    }
+
+
+def _probe_reclassification_ready(row: dict) -> tuple[bool, list[str]]:
+    """Check every deterministic prerequisite for probe-driven list reclassification."""
+
+    reasons: list[str] = []
+    if int(row.get("health_probe_success_count") or 0) < 2:
+        reasons.append("health_success_lt_2")
+    if int(row.get("http_status") or 0) != 200:
+        reasons.append("http_status_not_200")
+    if str(row.get("network_route") or "").lower() not in _DIRECT_ROUTES:
+        reasons.append("network_route_not_direct")
+    if not _official_domain(str(row.get("canonical_url") or "")):
+        reasons.append("official_domain_missing")
+    if not _official_domain(str(row.get("final_url") or row.get("canonical_url") or "")):
+        reasons.append("final_official_domain_missing")
+    if str(row.get("parser_status") or "").lower() not in _PARSER_READY:
+        reasons.append("parser_not_ready")
+    if str(row.get("pagination_strategy") or "").lower() not in _PAGINATION_READY:
+        reasons.append("pagination_not_ready")
+    if row.get("publication_date_available") is not True:
+        reasons.append("publication_date_unavailable")
+    if row.get("article_link_extraction_ready") is not True:
+        reasons.append("article_links_not_ready")
+    if (_probe_observed_detail_count(row) or 0) <= 0:
+        reasons.append("detail_link_count_not_positive")
+    if is_clear_detail_url(str(row.get("canonical_url") or "")):
+        reasons.append("candidate_url_is_detail_page")
+    evidence = _probe_evidence_rows(row)
+    if len(evidence) < 2:
+        reasons.append("probe_evidence_rows_lt_2")
+    for item in evidence[-2:]:
+        if int(item.get("status_code") or 0) != 200:
+            reasons.append("probe_http_not_200")
+        if str(item.get("network_route") or "").lower() not in _DIRECT_ROUTES:
+            reasons.append("probe_route_not_direct")
+        if not bool(item.get("parser_ok")):
+            reasons.append("probe_parser_not_ok")
+        if bool(item.get("js_shell")):
+            reasons.append("probe_js_empty_shell")
+    return not reasons, list(dict.fromkeys(reasons))
+
+
+def reclassify_candidate_after_probe(
+    candidate_id: str,
+    *,
+    settings: Settings | None = None,
+    run_id: str = "deterministic_probe_reclassification",
+) -> dict[str, Any]:
+    """Promote only probe-proven list evidence while preserving initial labels."""
+
+    settings = settings or Settings.discover()
+    frame = list_candidates(candidate_id=candidate_id, settings=settings)
+    if frame.height != 1:
+        return {"candidate_id": candidate_id, "reclassified": False, "reason_code": "candidate_not_found"}
+    current = frame.row(0, named=True)
+    ready, reasons = _probe_reclassification_ready(current)
+    if not ready:
+        return {
+            "candidate_id": candidate_id,
+            "reclassified": False,
+            "reason_code": "probe_reclassification_gate_failed",
+            "reasons": reasons,
+        }
+    evidence = {
+        "run_id": run_id,
+        "candidate_id": candidate_id,
+        "conditions": {
+            "health_success_count": current.get("health_probe_success_count"),
+            "http_status": current.get("http_status"),
+            "network_route": current.get("network_route"),
+            "parser_status": current.get("parser_status"),
+            "pagination_strategy": current.get("pagination_strategy"),
+            "publication_date_available": current.get("publication_date_available"),
+            "article_link_extraction_ready": current.get("article_link_extraction_ready"),
+            "detail_link_count": _probe_observed_detail_count(current),
+        },
+        "probe_evidence": _probe_evidence_rows(current),
+    }
+    update = dict(current)
+    update.update(
+        {
+            "candidate_id": candidate_id,
+            "candidate_url": current.get("candidate_url") or current.get("canonical_url"),
+            "initial_page_type": current.get("initial_page_type") or current.get("page_type"),
+            "initial_candidate_kind": current.get("initial_candidate_kind") or current.get("candidate_kind"),
+            "initial_entry_eligible": current.get("initial_entry_eligible") if current.get("initial_entry_eligible") is not None else current.get("entry_eligible"),
+            "page_type": "verified_list_entry",
+            "candidate_kind": "official_list_entry_candidate",
+            "entry_eligible": True,
+            "reclassification_method": "deterministic_probe_reclassification",
+            "reclassification_evidence_json": json.dumps(evidence, ensure_ascii=False, default=str),
+            "manual_review_status": "pending_verify",
+            "updated_at": datetime.now(UTC).isoformat(),
+        }
+    )
+    upsert_candidates([update], settings)
+    return {
+        "candidate_id": candidate_id,
+        "reclassified": True,
+        "method": "deterministic_probe_reclassification",
+        "initial_page_type": update["initial_page_type"],
+        "initial_candidate_kind": update["initial_candidate_kind"],
+        "page_type": "verified_list_entry",
+        "candidate_kind": "official_list_entry_candidate",
+        "entry_eligible": True,
     }
 
 
@@ -1983,6 +2323,13 @@ def verify_candidates(
 ) -> dict:
     """Apply deterministic evidence gates and persist an auditable gate result."""
     settings = settings or Settings.discover()
+
+    # Duplicate consistency must be calculated against the complete
+    # candidate universe, not the currently filtered verification batch.
+    all_candidates = _active_candidates(
+        list_candidates(settings=settings)
+    )
+
     frame = list_candidates(
         city=city,
         source_id=source_id,
@@ -1990,6 +2337,7 @@ def verify_candidates(
         slot_id=slot_id,
         settings=settings,
     )
+    frame = _active_candidates(frame)
     if candidate_ids is not None:
         frame = frame.filter(pl.col("candidate_id").is_in([str(item) for item in candidate_ids]))
     if frame.is_empty():
@@ -1999,22 +2347,64 @@ def verify_candidates(
     )
     frame = frame.join(slots, on=["slot_id", "source_role"], how="left")
     registry_by_id = {source.source_id: source for source in load_registry(settings)}
-    duplicate_counts: dict[str, int] = {}
-    for row in frame.iter_rows(named=True):
-        key = str(row.get("canonical_url") or "")
-        duplicate_counts[key] = duplicate_counts.get(key, 0) + 1
+    jurisdiction_mappings = load_jurisdiction_mappings(settings)
+    # Multiple discoveries of the same canonical URL inside one slot are
+    # repeated evidence, not a cross-role conflict. The same URL assigned
+    # to multiple slots remains a deterministic duplicate rejection.
+    canonical_slot_sets: dict[str, set[str]] = {}
+    canonical_rows: dict[str, list[dict]] = {}
+
+    for item in all_candidates.iter_rows(named=True):
+        key = str(item.get("canonical_url") or "")
+        item_slot = str(item.get("slot_id") or "")
+
+        if key and item_slot:
+            canonical_slot_sets.setdefault(
+                key,
+                set(),
+            ).add(item_slot)
+            canonical_rows.setdefault(key, []).append(item)
     verified_rows: list[dict] = []
     candidate_results: list[dict] = []
     gate_results: list[dict] = []
     effective_run_id = run_id or "deterministic_verify"
     for row in frame.iter_rows(named=True):
+        canonical_key = str(row.get("canonical_url") or "")
+        same_url_rows = canonical_rows.get(canonical_key, [])
+        duplicate_count = max(1, len(canonical_slot_sets.get(canonical_key, set())))
+        if duplicate_count > 1:
+            current_mapping = mapping_for_candidate(
+                row,
+                row,
+                settings=settings,
+                mappings=jurisdiction_mappings,
+            )
+            current_bundle = str(row.get("source_bundle_id") or current_mapping.get("source_bundle_id") or "")
+            approved_cross_city = bool(
+                current_mapping.get("status") == "PASS"
+                and current_bundle
+                and all(
+                    mapping_for_candidate(
+                        item,
+                        item,
+                        settings=settings,
+                        mappings=jurisdiction_mappings,
+                    ).get("status") == "PASS"
+                    and str(item.get("source_bundle_id") or current_bundle) == current_bundle
+                    for item in same_url_rows
+                )
+            )
+            if approved_cross_city:
+                duplicate_count = 1
         result, gates = evaluate_candidate_gates(
             row,
             slot=row,
             registry_by_id=registry_by_id,
-            duplicate_count=duplicate_counts.get(str(row.get("canonical_url") or ""), 1),
+            duplicate_count=duplicate_count,
             run_id=effective_run_id,
             checked_at=str(row.get("last_checked_at") or datetime.now(UTC).isoformat()),
+            settings=settings,
+            jurisdiction_mappings=jurisdiction_mappings,
         )
         candidate_results.append(result)
         gate_results.extend(gates)
@@ -2051,6 +2441,10 @@ def verify_candidates(
                 "verification_summary_json": json.dumps(result, ensure_ascii=False, default=str),
                 "verification_checked_at": result["last_checked_at"],
                 "last_checked_at": result["last_checked_at"],
+                "source_bundle_id": result.get("source_bundle_id") or row.get("source_bundle_id"),
+                "jurisdiction_mapping_id": result.get("jurisdiction_mapping_id") or row.get("jurisdiction_mapping_id"),
+                "jurisdiction_evidence_id": result.get("jurisdiction_evidence_id") or row.get("jurisdiction_evidence_id"),
+                "duplicate_scope": result.get("duplicate_scope") or row.get("duplicate_scope"),
             }
         )
         row.pop("city_name", None)
@@ -2280,7 +2674,10 @@ def promote_candidate(
     row = frame.row(0, named=True)
     if not bool(row.get("is_verified")):
         raise ValueError("candidate must pass deterministic verification first")
-    if not is_reusable_source_entry(str(row["canonical_url"])):
+    probe_reclassified_entry_ok = False
+    if str(row.get("reclassification_method") or "") == "deterministic_probe_reclassification":
+        probe_reclassified_entry_ok, _ = _probe_reclassification_ready(row)
+    if not (is_reusable_source_entry(str(row["canonical_url"])) or probe_reclassified_entry_ok):
         raise ValueError("candidate is a content/detail page, not a reusable source entry")
     if str(row.get("health_status") or "").lower() not in {
         "healthy", "ok", "direct_ok", "proxy_ok", "curl_fallback_ok"
@@ -2296,6 +2693,20 @@ def promote_candidate(
     parsed = urlsplit(canonical)
     role = str(row["source_role"])
     city_id = str(row["city_id"])
+    mapping_decision = mapping_for_candidate(
+        row,
+        {"city_id": city_id, "source_role": role},
+        settings=settings,
+        mappings=load_jurisdiction_mappings(settings),
+    )
+    mapping_obj = next(
+        (
+            item
+            for item in load_jurisdiction_mappings(settings)
+            if item.mapping_id == mapping_decision.get("mapping_id")
+        ),
+        None,
+    )
     source_id = stable_id(city_id, role, parsed.hostname or canonical, prefix="SRC")
     sources = load_registry(settings)
     existing_index = next(
@@ -2303,6 +2714,13 @@ def promote_candidate(
         None,
     )
     now = datetime.now(UTC)
+    mapping_list_urls = list(mapping_obj.list_page_urls) if mapping_obj else []
+    list_urls = list(dict.fromkeys(
+        mapping_list_urls
+        + ([active_entry_url] if active_entry_url not in mapping_list_urls and active_entry_url != (mapping_obj.homepage_url if mapping_obj else None) else [])
+    ))
+    if not list_urls:
+        list_urls = [active_entry_url]
     source = RegisteredSource(
         source_id=source_id,
         source_name=str(row.get("site_name") or row.get("department_name") or source_id),
@@ -2312,13 +2730,14 @@ def promote_candidate(
         agency_type=role,
         official_status="official",
         seed_urls=[],
-        list_page_urls=[active_entry_url],
-        homepage_url=f"{parsed.scheme}://{parsed.netloc}/",
+        list_page_urls=list_urls,
+        homepage_url=(mapping_obj.homepage_url if mapping_obj and mapping_obj.homepage_url else f"{parsed.scheme}://{parsed.netloc}/"),
         parser_adapter="generic_government",
         crawl_enabled=False,
         recommended_enabled=False,
         source_health_score=100.0,
         city_ids=[city_id],
+        coverage_city_ids=[city_id],
         scope_type="municipal",
         required_level="required",
         verified_at=now,
@@ -2340,6 +2759,12 @@ def promote_candidate(
             row.get("pagination_evidence") or row.get("pagination_strategy")
         ),
         historical_entry_urls=[],
+        source_bundle_id=row.get("source_bundle_id") or mapping_decision.get("source_bundle_id"),
+        authority_level=(mapping_obj.authority_level if mapping_obj else None),
+        authority_name=(mapping_obj.authority_name if mapping_obj else None),
+        jurisdiction_mapping_id=mapping_decision.get("mapping_id"),
+        approval_status=(mapping_obj.approval_status if mapping_obj else None),
+        notes=(mapping_obj.notes if mapping_obj else None),
     )
     if existing_index is None:
         sources.append(source)
@@ -2363,7 +2788,7 @@ def promote_candidate(
                 # previous entries remain auditable history instead of being
                 # allowed to make the next crawl fail before it reaches the
                 # replacement URL.
-                "list_page_urls": [active_entry_url],
+                "list_page_urls": list(dict.fromkeys(list_urls)),
                 "historical_entry_urls": sorted(set(previous_history + previous_entries)),
                 "crawl_enabled": previous.crawl_enabled,
                 "recommended_enabled": previous.recommended_enabled,
@@ -2452,7 +2877,7 @@ def enable_verified_sources(
     enabled: list[str] = []
     rejected: list[dict] = []
     for source in load_registry(settings):
-        if source.crawl_enabled or (city_id and city_id not in source.city_ids):
+        if source.crawl_enabled or (city_id and not source_covers_city(source, city_id)):
             continue
         try:
             enable_source_strict(source.source_id, settings=settings)
@@ -2497,7 +2922,7 @@ def enable_source_strict(
     candidates = list_candidates(settings=settings)
     candidate_ok = any(
         bool(row.get("is_verified"))
-        and str(row.get("city_id")) in source.city_ids
+        and source_covers_city(source, str(row.get("city_id")))
         and str(row.get("source_role")) == role
         and str(row.get("domain") or "").lower() == source.domain.lower()
         and str(row.get("parser_status") or "").lower()
@@ -2535,7 +2960,10 @@ def reconcile_registry(
     updated: list[RegisteredSource] = []
     for source in sources:
         role = source.agency_type if source.agency_type in REQUIRED_ROLES else source.source_role
-        valid = any((city_id, role, source.domain.lower()) in valid_keys for city_id in source.city_ids)
+        valid = any((city_id, role, source.domain.lower()) in valid_keys for city_id in {
+            *(str(value) for value in source.city_ids),
+            *(str(value) for value in getattr(source, "coverage_city_ids", []) or []),
+        })
         if source.crawl_enabled and role in REQUIRED_ROLES and not valid:
             invalid_ids.append(source.source_id)
             source = source.model_copy(

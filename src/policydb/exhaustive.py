@@ -178,7 +178,7 @@ def completion_status(row: dict) -> str:
         return "partial_archive"
     return (
         "confirmed_zero"
-        if int(row.get("unique_candidate_count", 0)) == 0
+        if int(row.get("unique_candidate_count", 0) or 0) == 0
         else "complete_policy_found"
     )
 
@@ -487,9 +487,9 @@ class ExhaustiveCrawler:
             )
             run_ids.append(str(run_plan["run_id"]))
             run_metrics[str(run_plan["run_id"])] = {
-                "fetched": int(run_result.get("fetched", 0)),
-                "ai_pending_count": int(run_result.get("fetched", 0)),
-                "dedup_pending_count": int(run_result.get("fetched", 0)),
+                "fetched": int(run_result.get("fetched", 0) or 0),
+                "ai_pending_count": int(run_result.get("fetched", 0) or 0),
+                "dedup_pending_count": int(run_result.get("fetched", 0) or 0),
                 "archive_missing_count": 0,
             }
             scans_path = self.settings.curated / "crawl_discovery_scans.parquet"
@@ -531,17 +531,17 @@ class ExhaustiveCrawler:
                 ),
                 "page_cap_hit": "max_pages" in stop_reasons,
                 "global_safety_limit_hit": False,
-                "network_error_count": int(run_result.get("failed", 0)),
+                        "network_error_count": int(run_result.get("failed", 0) or 0),
                 "parser_error_count": 0,
-                "retryable_errors": int(run_result.get("failed", 0)),
+                        "retryable_errors": int(run_result.get("failed", 0) or 0),
                 "pending_fetch": max(
                     0,
                     max(
                         0,
                         int(run_plan["item_count"]) - unknown - rejected,
                     )
-                    - int(run_result.get("fetched", 0))
-                    - int(run_result.get("failed", 0)),
+                            - int(run_result.get("fetched", 0) or 0)
+                            - int(run_result.get("failed", 0) or 0),
                 ),
                 "date_unknown_count": unknown,
                 "archive_missing_count": 0,
@@ -565,14 +565,14 @@ class ExhaustiveCrawler:
                         "candidate_cap_hit": metrics["candidate_cap_hit"],
                         "fetch_cap_hit": metrics["fetch_cap_hit"],
                         "page_cap_hit": metrics["page_cap_hit"],
-                        "fetch_attempted": int(run_result.get("fetched", 0))
-                        + int(run_result.get("failed", 0)),
-                        "fetched": int(run_result.get("fetched", 0)),
-                        "failed": int(run_result.get("failed", 0)),
+                        "fetch_attempted": int(run_result.get("fetched", 0) or 0)
+                        + int(run_result.get("failed", 0) or 0),
+                        "fetched": int(run_result.get("fetched", 0) or 0),
+                        "failed": int(run_result.get("failed", 0) or 0),
                         "retryable_errors": metrics["retryable_errors"],
-                        "document_versions": int(run_result.get("fetched", 0)),
-                        "ai_pending_count": int(run_result.get("fetched", 0)),
-                        "dedup_pending_count": int(run_result.get("fetched", 0)),
+                        "document_versions": int(run_result.get("fetched", 0) or 0),
+                        "ai_pending_count": int(run_result.get("fetched", 0) or 0),
+                        "dedup_pending_count": int(run_result.get("fetched", 0) or 0),
                         "date_unknown_count": unknown,
                         "cross_period_rejected_count": rejected,
                         "checkpoint": run_plan["run_id"],
@@ -617,7 +617,7 @@ class ExhaustiveCrawler:
                         "cross_period_rejected_count": rejected,
                         "network_status": (
                             "partial_network"
-                            if int(run_result.get("failed", 0))
+                            if int(run_result.get("failed", 0) or 0)
                             else "direct_ok"
                         ),
                         "evidence_json": update[0, "completion_evidence_json"],
@@ -731,8 +731,8 @@ class ExhaustiveCrawler:
         for row in frame.iter_rows(named=True):
             metrics = run_metrics.get(str(row.get("checkpoint") or ""))
             if metrics:
-                row["ai_pending_count"] = int(metrics.get("ai_pending_count", 0))
-                row["dedup_pending_count"] = int(metrics.get("dedup_pending_count", 0))
+                row["ai_pending_count"] = int(metrics.get("ai_pending_count", 0) or 0)
+                row["dedup_pending_count"] = int(metrics.get("dedup_pending_count", 0) or 0)
                 row["archive_missing_count"] = int(
                     metrics.get("archive_missing_count", row.get("archive_missing_count", 0))
                 )
@@ -771,13 +771,13 @@ class ExhaustiveCrawler:
                     **row,
                     "source_missing": source_missing,
                     "source_verified": bool(row.get("source_verified", False)),
-                    "network_error_count": int(row.get("failed", 0)),
-                    "parser_error_count": int(row.get("permanent_errors", 0)),
+                    "network_error_count": int(row.get("failed", 0) or 0),
+                    "parser_error_count": int(row.get("permanent_errors", 0) or 0),
                     "pending_fetch": max(
                         0,
-                        int(row.get("unique_candidate_count", 0))
-                        - int(row.get("fetched", 0))
-                        - int(row.get("failed", 0)),
+                        int(row.get("unique_candidate_count", 0) or 0)
+                        - int(row.get("fetched", 0) or 0)
+                        - int(row.get("failed", 0) or 0),
                     ),
                 }
                 row["source_verified"] = metrics["source_verified"]
@@ -789,7 +789,10 @@ class ExhaustiveCrawler:
             return {"city_year_rows": 0}
         rows: list[dict] = []
         grouped = (
-            shards.with_columns(
+            shards.filter(
+                pl.col("city_id").is_not_null()
+                & pl.col("start_date").is_not_null()
+            ).with_columns(
                 pl.col("start_date").str.slice(0, 4).cast(pl.Int32).alias("year")
             ).group_by(["city_id", "city_name", "province_name", "year"])
             if shards.height

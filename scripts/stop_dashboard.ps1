@@ -1,10 +1,13 @@
 ﻿$ErrorActionPreference = "Stop"
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$Runtime = Join-Path $Root ".runtime"
-$PidFile = Join-Path $Runtime "dashboard.pid"
-$PortFile = Join-Path $Runtime "dashboard.port"
-$StartedFile = Join-Path $Runtime "dashboard.started"
-$ProcessFile = Join-Path $Runtime "dashboard.process.json"
+$runtimeResolver = Join-Path $PSScriptRoot "dashboard_runtime.ps1"
+if (-not (Test-Path -LiteralPath $runtimeResolver)) { throw "dashboard_runtime.ps1 not found" }
+. $runtimeResolver
+$Runtime = Get-DashboardRuntimeDirectory
+$PidFile = Get-DashboardRuntimePath "dashboard.pid"
+$PortFile = Get-DashboardRuntimePath "dashboard.port"
+$StartedFile = Get-DashboardRuntimePath "dashboard.started"
+$ProcessFile = Get-DashboardRuntimePath "dashboard.process.json"
 
 function Test-DashboardHealth {
     param([int]$HealthPort)

@@ -270,14 +270,14 @@ def coverage_build():
 
 @storage_app.command("plan-migration")
 def storage_plan_migration(
-    target: Annotated[Path, typer.Option("--target")] = Path(r"D:\Data Set\CRPD"),
+    target: Annotated[Path, typer.Option("--target")] = Path(r"E:\Data Set\CRPD"),
 ):
     typer.echo(json.dumps(storage_plan(target=target), ensure_ascii=False, indent=2))
 
 
 @storage_app.command("migrate")
 def storage_migrate(
-    target: Annotated[Path, typer.Option("--target")] = Path(r"D:\Data Set\CRPD"),
+    target: Annotated[Path, typer.Option("--target")] = Path(r"E:\Data Set\CRPD"),
     confirm: bool = typer.Option(False, "--confirm"),
 ):
     typer.echo(json.dumps(migrate_storage(target=target, confirm=confirm), ensure_ascii=False, indent=2))
@@ -285,7 +285,7 @@ def storage_migrate(
 
 @storage_app.command("verify")
 def storage_verify(
-    target: Annotated[Path, typer.Option("--target")] = Path(r"D:\Data Set\CRPD"),
+    target: Annotated[Path, typer.Option("--target")] = Path(r"E:\Data Set\CRPD"),
 ):
     result = verify_storage(target=target)
     typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
@@ -789,7 +789,6 @@ def sources_audit_525(
     build_requirement_slots()
     if seed_registry:
         seed_candidates_from_registry()
-    ExhaustiveCrawler().rebuild_progress()
     typer.echo(json.dumps(audit_525(), ensure_ascii=False, indent=2))
 
 

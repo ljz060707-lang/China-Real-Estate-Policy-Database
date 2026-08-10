@@ -1,0 +1,674 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+import polars as pl
+
+from policydb.ai_audit import AIAuditStore
+from policydb.autopilot import AutopilotConfig, AutopilotStateStore, _atomic_json, utc_now
+from policydb.autopilot_checkpoints import (
+    STATUS_PRIORITY,
+    GlobalSlotCheckpointStore,
+    is_slot_claimable,
+)
+from policydb.crawl.dedup import canonicalize_url
+from policydb.parquet_store import atomic_write_parquet, read_parquet_snapshot
+from policydb.settings import Settings
+from policydb.source_completion import build_slot_work_queue
+from policydb.source_completion_ai_workflow import run_ai_batch
+from policydb.source_slots import (
+    audit_525,
+    build_human_review_rows,
+    build_verification_summary,
+    enable_source_strict,
+    probe_candidates,
+    promote_verified_candidates,
+    upsert_candidates,
+    verify_candidates,
+)
+from policydb.transform.normalization import stable_id
+
+EXIT_BATCH_SUCCESS = 0
+EXIT_GO_BLOCKED = 10
+EXIT_PROVIDER_BLOCKED = 20
+EXIT_STOP = 21
+EXIT_ERROR = 1
+
+
+def _iso(value: Any) -> str | None:
+    if not value:
+        return None
+    return str(value).replace("Z", "+00:00")
+
+
+def _future_retry(value: Any) -> bool:
+    raw = _iso(value)
+    if not raw:
+        return False
+    try:
+        return datetime.fromisoformat(raw) > datetime.now(UTC)
+    except ValueError:
+        return False
+
+
+def _verified(row: dict[str, Any]) -> bool:
+    return any(bool(row.get(key)) for key in ("is_verified", "verified", "best_candidate_verified")) or any(
+        int(row.get(key) or 0) > 0
+        for key in ("verified_candidate_count", "verified_slots", "slots_with_verified_candidate")
+    ) or str(row.get("work_status") or "").lower() in {"verified", "verified_enabled"}
+
+
+def _enabled(row: dict[str, Any]) -> bool:
+    return bool(row.get("is_enabled")) or int(row.get("enabled_source_count") or 0) > 0 or str(row.get("work_status") or "").lower() in {"enabled", "verified_enabled"}
+
+
+def _human_review(row: dict[str, Any]) -> bool:
+    values = {str(row.get(key) or "").lower() for key in ("state", "status", "work_status", "manual_review_status")}
+    return bool(values & {"human_review", "pending_human_review", "candidate_failed_ambiguous", "blocked_role_conflict", "no_candidate_manual_research"})
+
+
+def _active_claim(row: dict[str, Any]) -> bool:
+    values = {str(row.get(key) or "").lower() for key in ("claim_status", "batch_status", "active_batch_status")}
+    return bool(row.get("active_batch_id") or row.get("claimed_by") or row.get("claim_batch_id") or "active" in values or "claimed" in values)
+
+
+def _priority(row: dict[str, Any]) -> int:
+    if int(row.get("health_probe_success_count") or 0) >= 2 or str(row.get("work_status") or "") == "candidate_ready_for_probe":
+        return 0
+    if int(row.get("candidate_count") or 0) > 0 or row.get("best_candidate_id"):
+        return 1
+    if str(row.get("coverage_status") or "") == "content_evidence_only":
+        return 2
+    return 3
+
+
+def select_source_slots(
+    queue: pl.DataFrame,
+    *,
+    max_slots: int,
+    excluded_slot_ids: set[str] | None = None,
+    active_claimed_ids: set[str] | None = None,
+    completed_slot_ids: set[str] | None = None,
+    checkpoint_records: dict[str, dict[str, Any]] | None = None,
+    now: datetime | None = None,
+) -> pl.DataFrame:
+    """Select only unresolved, claimable slots in the required priority order."""
+    excluded = excluded_slot_ids or set()
+    active = active_claimed_ids or set()
+    completed = completed_slot_ids or set()
+    checkpoint_records = checkpoint_records or {}
+    rows = []
+    for row in queue.iter_rows(named=True):
+        slot_id = str(row.get("slot_id") or "")
+        if not slot_id or slot_id in excluded or slot_id in active or slot_id in completed:
+            continue
+        if not is_slot_claimable(row, checkpoint_records.get(slot_id), now=now, active_slot_ids=active):
+            continue
+        rows.append({**row, "_priority": _priority(row)})
+    rows.sort(key=lambda row: (row["_priority"], str(row.get("province_name") or ""), str(row.get("city_name") or ""), str(row.get("source_role") or ""), str(row.get("slot_id") or "")))
+    if not rows:
+        return queue.head(0)
+    return pl.from_dicts([{key: value for key, value in row.items() if key != "_priority"} for row in rows[:max_slots]], schema=queue.schema)
+
+
+def select_top_candidates(frame: pl.DataFrame, *, max_candidates: int = 3) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """Keep all search evidence but return at most Top-N rows for formal work."""
+    if frame.is_empty() or "candidate_url" not in frame.columns:
+        return frame, frame
+    rows = frame.to_dicts()
+    rows.sort(key=lambda row: (0 if ".gov.cn" in str(row.get("candidate_url") or "").lower() else 1, -float(row.get("ai_confidence") or 0), str(row.get("candidate_url") or "")))
+    selected = rows[:max_candidates]
+    selected_ids = {str(row.get("proposal_id")) for row in selected}
+    selected_frame = pl.from_dicts(selected, schema=frame.schema) if selected else frame.head(0)
+    evidence_rows = [{**row, "selection_status": "selected_top3" if str(row.get("proposal_id")) in selected_ids else "search_evidence_only", "selection_rank": index + 1 if str(row.get("proposal_id")) in selected_ids else None} for index, row in enumerate(rows)]
+    evidence_frame = pl.from_dicts(evidence_rows, infer_schema_length=None) if evidence_rows else frame.head(0)
+    return selected_frame, evidence_frame
+
+
+def usage_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
+    completed = [row for row in records if row.get("status") == "response_completed" and not row.get("cache_hit")]
+    values = [row.get("total_tokens") for row in completed]
+    tokens = sum(int(value) for value in values) if completed and all(value is not None for value in values) else None
+    costs = [row.get("estimated_cost_usd") for row in completed]
+    cost = (
+        sum(float(value) for value in costs)
+        if tokens is not None and completed and all(value is not None for value in costs)
+        else None
+    )
+    return {"tokens": tokens, "cost": cost, "usage_status": "available" if tokens is not None else "unavailable", "cost_status": "available" if cost is not None else "unavailable"}
+
+
+def exit_code_for(*, batch_success: bool, go_status: str, provider_blocked: bool = False, stopped: bool = False) -> int:
+    if stopped:
+        return EXIT_STOP
+    if provider_blocked:
+        return EXIT_PROVIDER_BLOCKED
+    if not batch_success:
+        return EXIT_ERROR
+    return EXIT_BATCH_SUCCESS if go_status == "GO" else EXIT_GO_BLOCKED
+
+
+def build_go_gate(
+    audit: dict[str, Any],
+    *,
+    test_evidence: dict[str, Any] | None = None,
+    active_writer: bool = False,
+) -> dict[str, Any]:
+    """Build the full-crawl gate; unknown tests do not block source batches."""
+    evidence = test_evidence or {
+        "test_commit_sha": None,
+        "test_timestamp": None,
+        "test_result": "unknown",
+        "test_suite": None,
+    }
+    test_result = str(evidence.get("test_result") or "unknown").lower()
+    if test_result not in {"passed", "failed", "unknown"}:
+        test_result = "unknown"
+    checks = {
+        "required_slots": int(audit.get("required_slots", 0)) == 525,
+        "verified_slots": int(audit.get("slots_verified", audit.get("verified_slots", 0))) == 525,
+        "enabled_slots": int(audit.get("slots_enabled", audit.get("enabled_slots", 0))) == 525,
+        "direct_healthy_slots": int(audit.get("slots_direct_healthy", 0)) == 525,
+        "parser_ready_slots": int(audit.get("slots_parser_ready", 0)) == 525,
+        "unresolved_slots": int(audit.get("slots_unresolved", 1)) == 0,
+        "enabled_unverified_slots": int(audit.get("enabled_unverified_slots", 1)) == 0,
+        "full_tests_passed": test_result == "passed",
+        "no_active_writer_conflict": not active_writer,
+        "network_policy_valid": True,
+        "archive_ai_gates_valid": True,
+    }
+    return {
+        "status": "GO" if all(checks.values()) else "BLOCKED",
+        "checks": checks,
+        "audit": audit,
+        "test_commit_sha": evidence.get("test_commit_sha"),
+        "test_timestamp": evidence.get("test_timestamp"),
+        "test_result": test_result,
+        "test_suite": evidence.get("test_suite"),
+        "evaluated_at": utc_now(),
+    }
+
+
+class BoundedAutopilotController:
+    """Single bounded batch controller; full crawl is never entered here."""
+
+    def __init__(self, settings: Settings | None = None, *, config: AutopilotConfig | None = None, output: Path | None = None, run_id: str | None = None):
+        self.settings = settings or Settings.discover()
+        self.config = config or AutopilotConfig.load(root=self.settings.root)
+        self.run_id = run_id or datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+        self.run_dir = output or self.settings.outputs / "autopilot" / self.run_id
+        self.store = AutopilotStateStore(self.run_dir)
+        self.checkpoints = GlobalSlotCheckpointStore(self.settings.outputs / "autopilot")
+
+    def _state(self) -> dict[str, Any]:
+        return self.store.read() or {
+            "job_id": f"AUTOPILOT_{self.run_id}", "run_id": self.run_id, "status": "SOURCE_COMPLETION",
+            "provider_status": "configured" if self.settings.siliconflow_api_key else "not_configured", "api_balance_status": "unknown",
+            "current_batch": None, "current_slot": None, "current_step": "idle", "ai_calls": 0, "ai_attempts": 0,
+            "candidates": 0, "probes": 0, "human_review": 0, "retries": 0, "verified": None, "enabled": None, "unresolved": None,
+            "tokens": None, "cost": None, "usage_status": "unavailable", "full_tests_status": "unknown",
+            "test_commit_sha": None, "test_timestamp": None, "test_result": "unknown", "test_suite": None,
+            "latest_error": None, "last_progress_at": utc_now(), "last_heartbeat_at": utc_now(), "created_at": utc_now(),
+        }
+
+    def _write_progress(self, *, event_type: str, step: str, slot_id: str | None = None, reason_code: str = "", **updates: Any) -> None:
+        state = self._state()
+        timestamp = utc_now()
+        state.update({"current_slot": slot_id, "current_step": step, "last_progress_at": timestamp, "last_heartbeat_at": timestamp, **updates})
+        current_batch = state.get("current_batch")
+        if event_type == "batch_claimed" and not isinstance(current_batch, dict):
+            current_batch = {"run_id": self.run_id, "status": "RUNNING"}
+        if isinstance(current_batch, dict):
+            current_batch.update({"current_slot": slot_id, "current_step": step, "last_progress_at": timestamp, "last_heartbeat_at": timestamp})
+            for key in (
+                "ai_calls", "ai_attempts", "candidates", "probes", "human_review", "retries",
+                "verified", "enabled", "unresolved", "tokens", "cost", "usage_status", "cost_status",
+                "provider_status", "api_balance_status", "latest_error",
+            ):
+                if key in updates:
+                    current_batch[key] = updates[key]
+            if "current_batch" not in updates:
+                state["current_batch"] = current_batch
+        self.store.write(state)
+        event = {"job_id": state.get("job_id"), "run_id": self.run_id, "slot_id": slot_id, "event_type": event_type, "reason_code": reason_code or step, "timestamp": timestamp, "idempotency_key": hashlib.sha256(json.dumps([self.run_id, event_type, slot_id, step], sort_keys=True).encode()).hexdigest(), **updates}
+        with self.store.events_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(event, ensure_ascii=False, default=str) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+
+    def _claim_document(self) -> dict[str, Any]:
+        path = self.run_dir / "slot_claims.json"
+        if not path.exists():
+            return {"run_id": self.run_id, "claimed": [], "completed": []}
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def _checkpoint_records(self) -> dict[str, dict[str, Any]]:
+        records = self.checkpoints.snapshot()
+        legacy = self.checkpoints.backfill_from_run_dirs(self.settings.outputs / "autopilot", apply=False).get("proposals", [])
+        for item in legacy:
+            slot_id = str(item["slot_id"])
+            current = records.get(slot_id)
+            if current is None or STATUS_PRIORITY.get(str(item.get("status") or "").upper(), 0) > STATUS_PRIORITY.get(str(current.get("status") or "").upper(), 0):
+                records[slot_id] = item
+        return records
+
+    def _claims(self) -> set[str]:
+        return {str(value) for value in self._claim_document().get("completed", [])}
+
+    def _claim_batch_slots(self, queue: pl.DataFrame, *, max_slots: int) -> tuple[pl.DataFrame, list[dict[str, Any]]]:
+        records = self._checkpoint_records()
+        candidates = select_source_slots(
+            queue,
+            max_slots=queue.height,
+            active_claimed_ids=self._active_claimed_ids(),
+            checkpoint_records=records,
+        )
+        selected: list[dict[str, Any]] = []
+        conflicts: list[dict[str, Any]] = []
+        for row in candidates.iter_rows(named=True):
+            claimed, evidence = self.checkpoints.claim(row, run_id=self.run_id)
+            if claimed:
+                selected.append(row)
+            else:
+                conflicts.append({"slot_id": row.get("slot_id"), **evidence})
+            if len(selected) >= max_slots:
+                break
+        return (pl.from_dicts(selected, schema=queue.schema) if selected else queue.head(0)), conflicts
+
+    def _write_claims(self, slot_ids: list[str], *, completed: set[str] | None = None) -> None:
+        _atomic_json(
+            self.run_dir / "slot_claims.json",
+            {
+                "run_id": self.run_id,
+                "claimed": slot_ids,
+                "completed": sorted(completed or set()),
+                "updated_at": utc_now(),
+            },
+        )
+
+    def _mark_completed(self, slot_id: str) -> None:
+        document = self._claim_document()
+        completed = {str(value) for value in document.get("completed", [])}
+        completed.add(slot_id)
+        document["completed"] = sorted(completed)
+        document["updated_at"] = utc_now()
+        _atomic_json(self.run_dir / "slot_claims.json", document)
+
+    def _active_claimed_ids(self) -> set[str]:
+        active: set[str] = set()
+        now = datetime.now(UTC)
+        for slot_id, checkpoint in self._checkpoint_records().items():
+            if str(checkpoint.get("status") or "").upper() != "CLAIMED":
+                continue
+            lease = _iso(checkpoint.get("lease_until"))
+            try:
+                lease_time = datetime.fromisoformat(lease) if lease else None
+            except ValueError:
+                lease_time = None
+            if lease_time and lease_time > now and str(checkpoint.get("run_id")) != self.run_id:
+                active.add(slot_id)
+        return active
+
+    def run(self, *, apply: bool = False, resume: bool = False) -> dict[str, Any]:
+        if self.store.stop_requested():
+            return {"status": "STOPPED", "exit_code": EXIT_STOP, "run_dir": str(self.run_dir)}
+        queue = build_slot_work_queue(self.settings)
+        checkpoint_records = self._checkpoint_records()
+        completed = self._claims() if resume else set()
+        batch_cap = min(self.config.max_slots_per_batch, self.config.max_ai_calls_per_batch)
+        claim_conflicts: list[dict[str, Any]] = []
+        if apply:
+            selected, claim_conflicts = self._claim_batch_slots(queue, max_slots=batch_cap)
+        else:
+            selected = select_source_slots(
+                queue,
+                max_slots=batch_cap,
+                active_claimed_ids=self._active_claimed_ids(),
+                completed_slot_ids=completed,
+                checkpoint_records=checkpoint_records,
+            )
+        slot_ids = [str(value) for value in selected.get_column("slot_id").to_list()] if selected.height else []
+        selected_rows = {str(row["slot_id"]): row for row in selected.iter_rows(named=True)}
+        if not apply:
+            return {
+                "status": "PLANNED",
+                "exit_code": EXIT_BATCH_SUCCESS,
+                "planned_slots": len(slot_ids),
+                "slot_ids": slot_ids,
+                "run_dir": str(self.run_dir),
+            }
+        before_audit = audit_525(self.settings)
+        self._write_claims(slot_ids, completed=completed)
+        self._write_progress(event_type="batch_claimed", step="batch_claimed", reason_code="bounded_batch_claimed", claimed_slots=len(slot_ids), checkpoint_conflicts=claim_conflicts)
+        if not slot_ids:
+            result = {"status": "BATCH_COMPLETED", "exit_code": EXIT_BATCH_SUCCESS, "planned_slots": 0, "human_review": 0, "run_dir": str(self.run_dir)}
+            self._write_progress(event_type="batch_completed", step="batch_completed", reason_code="no_claimable_slots", current_batch=result, human_review=0)
+            return result
+        all_evidence: list[pl.DataFrame] = []
+        all_selected: list[dict[str, Any]] = []
+        all_verification: list[dict[str, Any]] = []
+        all_candidate_results: list[dict[str, Any]] = []
+        slot_verification_summaries: list[dict[str, Any]] = []
+        all_strict_rejections: list[dict[str, Any]] = []
+        all_review: list[dict[str, Any]] = []
+        slot_results: list[dict[str, Any]] = []
+        ai_records: list[dict[str, Any]] = []
+        ai_calls = 0
+        ai_attempts = 0
+        reused_ai_calls = 0
+        prevented_duplicate_calls = 0
+        applied = 0
+        probed = 0
+        candidate_total = 0
+        for slot_id in slot_ids:
+            if self.store.stop_requested():
+                self._write_progress(event_type="batch_completed", step="stopped", slot_id=slot_id, reason_code="stop_requested")
+                return {"status": "STOPPED", "exit_code": EXIT_STOP, "run_dir": str(self.run_dir)}
+            self._write_progress(event_type="slot_claimed", step="slot_claimed", slot_id=slot_id, reason_code="slot_claimed")
+            slot_applied = 0
+            slot_probed = 0
+            slot_dir = self.run_dir / "slot_runs" / slot_id
+            self._write_progress(event_type="ai_request_started", step="ai_request_started", slot_id=slot_id, reason_code="provider_request_started", ai_attempts=ai_attempts)
+            slot_result = run_ai_batch(self.settings, output=slot_dir, max_slots=1, max_ai_calls=2, concurrency=1, dry_run=False, apply=False, resume=resume, slot_id=slot_id, global_audit_root=self.checkpoints.root)
+            ai_calls += int(slot_result.get("ai_calls") or 0)
+            reused_ai_calls += int(slot_result.get("reused_ai_calls") or 0)
+            prevented_duplicate_calls += int(slot_result.get("prevented_duplicate_calls") or 0)
+            ai_attempts += int(slot_result.get("ai_attempts") or slot_result.get("ai_calls") or 0)
+            audit_records = AIAuditStore(slot_dir).records()
+            ai_records.extend(audit_records)
+            self._write_progress(event_type="ai_request_completed", step="ai_request_completed", slot_id=slot_id, reason_code="response_completed" if any(row.get("status") == "response_completed" for row in audit_records) else "response_failed", ai_calls=ai_calls, ai_attempts=ai_attempts, provider_status="operational" if any(row.get("status") == "response_completed" for row in audit_records) else "configured", api_balance_status="call_succeeded" if any(row.get("status") == "response_completed" for row in audit_records) else "unknown")
+            self._write_progress(event_type="search_started", step="search_started", slot_id=slot_id, reason_code="search_provider_evidence")
+            proposal_path = slot_dir / "candidate_proposals.parquet"
+            proposals = read_parquet_snapshot(proposal_path) if proposal_path.exists() else pl.DataFrame()
+            candidate_total += int(proposals.height)
+            selected_frame, evidence_frame = select_top_candidates(proposals, max_candidates=self.config.max_candidates_per_slot)
+            if not evidence_frame.is_empty():
+                all_evidence.append(evidence_frame)
+            self._write_progress(event_type="search_completed", step="search_completed", slot_id=slot_id, reason_code="search_evidence_saved", candidates=candidate_total)
+            self._write_progress(event_type="candidates_ranked", step="candidates_ranked", slot_id=slot_id, reason_code="top3_selected", ranked_candidates=min(3, int(proposals.height)))
+            selected_items = selected_frame.to_dicts()
+            selected_candidate_ids: list[str] = []
+            for rank, item in enumerate(selected_items, 1):
+                url = canonicalize_url(str(item["candidate_url"]))
+                candidate_kind = "official_entry_candidate" if ".gov.cn" in url.lower() else "search_result_pending_review"
+                candidate_id = stable_id(slot_id, url, candidate_kind, prefix="SRCCAND")
+                item.update({"candidate_id": candidate_id, "selection_rank": rank, "selection_status": "selected_top3"})
+                selected_candidate_ids.append(candidate_id)
+                all_selected.append(item)
+                upsert_candidates([{"candidate_id": candidate_id, "city_id": item["city_id"], "source_role": item["source_role"], "candidate_url": url, "discovery_method": "ai_assisted_search", "discovery_evidence_url": url, "site_name": item.get("candidate_title"), "department_name": item.get("candidate_title"), "discovery_evidence_text": " ".join(str(value or "").strip() for value in (item.get("candidate_title"), item.get("candidate_snippet")) if str(value or "").strip())[:2000] or None, "city_match_evidence": item.get("candidate_title"), "role_match_evidence": item.get("candidate_title"), "official_domain_evidence": "search provider evidence; deterministic gate pending", "is_verified": False, "is_enabled": False, "manual_review_status": "pending_probe", "generation_batch_id": self.run_id}], self.settings)
+                applied += 1
+                slot_applied += 1
+            self._write_progress(event_type="probe_started", step="probe_started", slot_id=slot_id, reason_code="top3_only", applied_candidates=slot_applied)
+            from policydb.crawl.fetcher import RespectfulFetcher
+
+            probe_fetcher = RespectfulFetcher(
+                user_agent=self.settings.user_agent,
+                timeout=self.settings.request_timeout,
+                connect_timeout=self.settings.connect_timeout,
+                retries=self.settings.max_retries,
+                rate_limit=self.settings.default_rate_limit,
+                check_robots=self.settings.respect_robots,
+            )
+            for item in selected_items:
+                url = str(item.get("candidate_url") or "")
+                if ".gov.cn" not in url.lower():
+                    continue
+                candidate_id = stable_id(slot_id, canonicalize_url(url), "official_entry_candidate", prefix="SRCCAND")
+                try:
+                    probe_candidates(
+                        candidate_id=candidate_id,
+                        rounds=2,
+                        settings=self.settings,
+                        fetcher=probe_fetcher,
+                    )
+                    probed += 1
+                    slot_probed += 1
+                except Exception as exc:
+                    probed += 1
+                    slot_probed += 1
+                    self._write_progress(
+                        event_type="probe_failed",
+                        step="probe_failed",
+                        slot_id=slot_id,
+                        reason_code=type(exc).__name__,
+                        candidate_id=candidate_id,
+                        error_message=str(exc)[:1000],
+                    )
+            self._write_progress(event_type="probe_completed", step="probe_completed", slot_id=slot_id, reason_code="probe_rounds_2", probes=probed)
+            verification_result = verify_candidates(
+                slot_id=slot_id,
+                candidate_ids=selected_candidate_ids,
+                run_id=self.run_id,
+                settings=self.settings,
+            )
+            candidate_results = list(verification_result.get("candidate_results") or [])
+            proposal_by_candidate = {
+                str(item.get("candidate_id")): item.get("proposal_id")
+                for item in all_selected
+                if str(item.get("slot_id")) == slot_id
+            }
+            if not candidate_results:
+                candidate_results = [
+                    {
+                        "candidate_id": candidate_id,
+                        "proposal_id": proposal_by_candidate.get(candidate_id),
+                        "slot_id": slot_id,
+                        "candidate_url": next((str(item.get("candidate_url") or "") for item in all_selected if item.get("candidate_id") == candidate_id), ""),
+                        "status": "UNKNOWN",
+                        "verified": False,
+                        "strict_enabled": False,
+                        "failed_gates": ["strict_admission_ready"],
+                        "reason_codes": ["verification_evidence_missing"],
+                        "last_checked_at": utc_now(),
+                    }
+                    for candidate_id in selected_candidate_ids
+                ]
+            for result in candidate_results:
+                result["proposal_id"] = result.get("proposal_id") or proposal_by_candidate.get(str(result.get("candidate_id")))
+            all_candidate_results.extend(candidate_results)
+            all_verification.extend(list(verification_result.get("gate_results") or []))
+            slot_verification_summaries.append({"slot_id": slot_id, **{key: value for key, value in verification_result.items() if key != "gate_results"}})
+            live_audit = audit_525(self.settings)
+            self._write_progress(
+                event_type="verify_completed",
+                step="verify_completed",
+                slot_id=slot_id,
+                reason_code="deterministic_verify_after_probe",
+                verified_candidates=int(verification_result.get("verified") or 0),
+                verified=int(live_audit.get("slots_verified") or 0),
+                enabled=int(live_audit.get("slots_enabled") or 0),
+                unresolved=int(live_audit.get("slots_unresolved") or 0),
+            )
+            promoted = promote_verified_candidates(slot_id=slot_id, settings=self.settings)
+            strict_enabled = 0
+            strict_rejections: list[dict[str, object]] = list(verification_result.get("rejected") or [])
+            for source_id in promoted.get("source_ids", []):
+                try:
+                    enable_source_strict(str(source_id), settings=self.settings)
+                    strict_enabled += 1
+                except ValueError as exc:
+                    strict_rejections.append({"source_id": str(source_id), "reason": str(exc), "current_status": "REJECTED"})
+            all_strict_rejections.extend({"slot_id": slot_id, **item} for item in strict_rejections)
+            self._write_progress(
+                event_type="strict_enable_completed",
+                step="strict_enable_completed",
+                slot_id=slot_id,
+                reason_code="strict_enable_gate_retained",
+                strict_enabled=strict_enabled,
+            )
+            refreshed_metadata = [
+                {
+                    **item,
+                    "candidate_id": item.get("candidate_id") or stable_id(
+                        slot_id,
+                        canonicalize_url(str(item.get("candidate_url") or "")),
+                        "official_entry_candidate" if ".gov.cn" in str(item.get("candidate_url") or "").lower() else "search_result_pending_review",
+                        prefix="SRCCAND",
+                    ),
+                }
+                for item in all_selected
+                if str(item.get("slot_id")) == slot_id
+            ]
+            slot_review = build_human_review_rows(
+                refreshed_metadata,
+                candidate_results,
+                run_id=self.run_id,
+            )
+            all_review.extend(slot_review)
+            self._write_progress(
+                event_type="review_queue_refreshed",
+                step="review_queue_refreshed",
+                slot_id=slot_id,
+                reason_code="post_probe_verification_refresh",
+                human_review=len(all_review),
+                candidates=candidate_total,
+                probes=probed,
+                verified=int(live_audit.get("slots_verified") or 0),
+                enabled=int(live_audit.get("slots_enabled") or 0),
+                unresolved=int(live_audit.get("slots_unresolved") or 0),
+            )
+            slot_row = selected_rows[slot_id]
+            verified_count = int(verification_result.get("verified") or 0)
+            if strict_enabled > 0:
+                terminal_status = "ENABLED"
+                terminal_outcome = "strict_source_enabled"
+            elif verified_count > 0:
+                terminal_status = "VERIFIED"
+                terminal_outcome = "strict_candidate_verified"
+            elif slot_review:
+                terminal_status = "HUMAN_REVIEW"
+                terminal_outcome = "top3_requires_human_decision"
+            else:
+                terminal_status = "COMPLETED"
+                terminal_outcome = "deterministic_probe_completed_without_verified_candidate"
+            self.checkpoints.terminal(
+                slot_row,
+                status=terminal_status,
+                run_id=self.run_id,
+                terminal_outcome=terminal_outcome,
+                ai_call_persisted=any(record.get("status") == "response_completed" for record in audit_records),
+                evidence_ids=[str(item.get("candidate_id")) for item in selected_frame.to_dicts() if item.get("candidate_id")],
+            )
+            slot_results.append(
+                {
+                    "slot_id": slot_id,
+                    "candidate_proposals": int(proposals.height),
+                    "applied_candidates": slot_applied,
+                    "probed_candidates": slot_probed,
+                    "human_review": len(slot_review),
+                    "completed": True,
+                }
+            )
+            self._mark_completed(slot_id)
+        evidence = pl.concat(all_evidence, how="diagonal_relaxed") if all_evidence else pl.DataFrame()
+        if not evidence.is_empty():
+            atomic_write_parquet(evidence, self.run_dir / "search_evidence.parquet", {"run_id": self.run_id, "job_id": "autopilot-search-evidence"})
+            atomic_write_parquet(evidence, self.run_dir / "candidate_proposals.parquet", {"run_id": self.run_id, "job_id": "autopilot-candidate-proposals"})
+        selected_frame = pl.from_dicts(all_selected, infer_schema_length=None) if all_selected else pl.DataFrame()
+        if not selected_frame.is_empty():
+            atomic_write_parquet(selected_frame, self.run_dir / "applied_candidates.parquet", {"run_id": self.run_id, "job_id": "autopilot-applied-candidates"})
+        verification = pl.from_dicts(all_verification, infer_schema_length=None) if all_verification else pl.DataFrame()
+        if not verification.is_empty():
+            atomic_write_parquet(verification, self.run_dir / "deterministic_verification.parquet", {"run_id": self.run_id, "job_id": "autopilot-verification"})
+        verification_summary = build_verification_summary(all_candidate_results, all_verification)
+        verification_summary["slot_summaries"] = slot_verification_summaries
+        _atomic_json(self.run_dir / "verification_summary.json", verification_summary)
+        if all_strict_rejections:
+            atomic_write_parquet(
+                pl.from_dicts(all_strict_rejections, infer_schema_length=None),
+                self.run_dir / "strict_rejections.parquet",
+                {"run_id": self.run_id, "job_id": "autopilot-strict-rejections"},
+            )
+        review = pl.from_dicts(all_review, infer_schema_length=None) if all_review else pl.DataFrame()
+        if not review.is_empty():
+            review.write_excel(self.run_dir / "HUMAN_REVIEW_QUEUE.xlsx", autofit=True)
+        usage = usage_summary(ai_records)
+        audit = audit_525(self.settings)
+        current = self._state()
+        test_evidence = {
+            "test_commit_sha": current.get("test_commit_sha"),
+            "test_timestamp": current.get("test_timestamp"),
+            "test_result": current.get("test_result", "unknown"),
+            "test_suite": current.get("test_suite"),
+        }
+        gate = build_go_gate(audit, test_evidence=test_evidence)
+        provider_completed = any(row.get("status") == "response_completed" for row in ai_records)
+        provider_blocked = ai_attempts > 0 and not provider_completed
+        provider_status = "operational" if provider_completed else ("blocked" if provider_blocked else "configured")
+        exit_code = exit_code_for(
+            batch_success=not provider_blocked,
+            go_status=gate["status"],
+            provider_blocked=provider_blocked,
+        )
+        report = {
+            "run_dir": str(self.run_dir),
+            "planned_slots": len(slot_ids),
+            "slot_ids": slot_ids,
+            "slot_results": slot_results,
+            "checkpoint_conflicts": claim_conflicts,
+            "ai_calls": ai_calls,
+            "ai_attempts": ai_attempts,
+            "reused_ai_calls": reused_ai_calls,
+            "prevented_duplicate_calls": prevented_duplicate_calls,
+            "persisted_ai_calls": len(
+                [row for row in ai_records if row.get("status") == "response_completed" and not row.get("cache_hit")]
+            ),
+            "candidate_proposals": int(evidence.height),
+            "applied_candidates": applied,
+            "probed_candidates": probed,
+            "human_review": int(review.height),
+            "strict_verified_added": max(0, int(audit.get("slots_verified") or 0) - int(before_audit.get("slots_verified") or 0)),
+            "strict_enabled_added": max(0, int(audit.get("slots_enabled") or 0) - int(before_audit.get("slots_enabled") or 0)),
+            "provider_status": provider_status,
+            "api_balance_status": "call_succeeded" if provider_completed else "unknown",
+            "tokens": usage["tokens"],
+            "cost": usage["cost"],
+            "usage_status": usage["usage_status"],
+            "cost_status": usage["cost_status"],
+            "full_tests_status": gate["test_result"],
+            "test_commit_sha": gate["test_commit_sha"],
+            "test_timestamp": gate["test_timestamp"],
+            "test_result": gate["test_result"],
+            "test_suite": gate["test_suite"],
+            "go_gate": gate["status"],
+            "exit_code": exit_code,
+            "full_run_started": False,
+        }
+        self._write_progress(
+            event_type="batch_completed",
+            step="batch_completed",
+            reason_code="bounded_batch_success",
+            current_batch=report,
+            ai_calls=ai_calls,
+            ai_attempts=ai_attempts,
+            reused_ai_calls=reused_ai_calls,
+            prevented_duplicate_calls=prevented_duplicate_calls,
+            candidates=int(evidence.height),
+            probes=probed,
+            human_review=int(review.height),
+            provider_status=report["provider_status"],
+            api_balance_status=report["api_balance_status"],
+            tokens=usage["tokens"],
+            cost=usage["cost"],
+            usage_status=usage["usage_status"],
+            cost_status=usage["cost_status"],
+            full_tests_status=gate["test_result"],
+        )
+        self._write_progress(event_type="go_gate_evaluated", step="go_gate_evaluated", reason_code="source_completion_does_not_require_full_tests", verified=audit.get("slots_verified"), enabled=audit.get("slots_enabled"), unresolved=audit.get("slots_unresolved"))
+        if gate["status"] != "GO":
+            self._write_progress(
+                event_type="go_gate_blocked",
+                step="go_gate_blocked",
+                reason_code="provider_blocked" if provider_blocked else "525_gate_not_satisfied",
+                status="PROVIDER_BLOCKED" if provider_blocked else "GO_BLOCKED",
+            )
+        _atomic_json(self.run_dir / "go_no_go.json", gate)
+        _atomic_json(self.run_dir / "run_summary.json", report)
+        _atomic_json(self.run_dir / "usage_summary.json", usage)
+        final_status = "PROVIDER_BLOCKED" if exit_code == EXIT_PROVIDER_BLOCKED else ("GO_BLOCKED" if gate["status"] != "GO" else "BATCH_COMPLETED")
+        return {"status": final_status, **report}

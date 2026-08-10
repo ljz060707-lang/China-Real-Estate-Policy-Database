@@ -39,6 +39,7 @@ Mode = Literal[
 ]
 
 GLOBAL_STATES = {
+    'INTERRUPTED_RECOVERABLE',
     "SOURCE_COMPLETION",
     "SOURCE_GATE_CHECK",
     "FULL_CRAWL_READY",
@@ -78,6 +79,7 @@ SLOT_STATES = {
 }
 
 DEFAULT_CONFIG: dict[str, Any] = {
+    'research_retry_cooldown_seconds': 3600,
     "provider": "siliconflow",
     "model": "",
     "max_slots_per_batch": 20,
@@ -145,6 +147,7 @@ class AutopilotConfig:
     max_search_queries_per_slot: int = 10
     max_retry_attempts: int = 3
     retry_backoff_seconds: tuple[int, ...] = (60, 300, 1800)
+    research_retry_cooldown_seconds: int = 3600
     auto_transition_to_full_crawl: bool = False
     require_525_slots: bool = True
     stop_on_test_failure: bool = True
@@ -176,6 +179,8 @@ class AutopilotConfig:
             raise ValueError("concurrency must be between 1 and 4")
         if self.per_domain_concurrency != 1:
             raise ValueError("per_domain_concurrency must remain 1 for government traffic")
+        if self.research_retry_cooldown_seconds < 0:
+            raise ValueError('research_retry_cooldown_seconds cannot be negative')
         if self.probe_rounds < 2:
             raise ValueError("probe_rounds must be at least 2")
         if self.max_candidates_per_slot < 1:

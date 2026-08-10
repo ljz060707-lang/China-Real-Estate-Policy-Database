@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import hashlib
 import re
@@ -38,9 +38,48 @@ ROLE_TERMS = {
     "urban_renewal_or_expropriation_department": "城市更新 征收",
 }
 
+# Keep role vocabulary in one place.  These are discovery synonyms only;
+# they are not jurisdiction or verification evidence on their own.
+ROLE_SYNONYMS = {
+    "municipal_government": (
+        "人民政府",
+        "市政府",
+        "政府信息公开",
+        "政务公开",
+    ),
+    "government_gazette": (
+        "政府公报",
+        "人民政府公报",
+        "政务公报",
+        "政府公报历史",
+    ),
+    "housing_department": (
+        "\u4f4f\u623f\u548c\u57ce\u4e61\u5efa\u8bbe",
+        "\u4f4f\u623f\u57ce\u4e61\u5efa\u8bbe",
+        "住房和城乡建设局",
+        "住建局",
+        "住房城乡建设局",
+        "城乡建设局",
+        "住房保障和房产管理局",
+    ),
+    "provident_fund_center": (
+        "\u4f4f\u623f\u516c\u79ef\u91d1",
+        "住房公积金管理中心",
+        "住房公积金中心",
+        "公积金中心",
+        "住房公积金管理局",
+    ),
+    "natural_resources_department": (
+        "自然资源和规划局",
+        "自然资源局",
+        "规划和自然资源局",
+        "国土资源局",
+    ),
+}
+
 _CONTENT_ENTRY_PATTERN = re.compile(
     r"(?:\.(?:s?html?|jhtml|aspx?)(?:$|[?#])|"
-    r"/(?:art|article|content|detail|info|news|notice)/|"
+    r"/(?:art|article|content|detail|gi_news|info|news|notice)/|"
     r"/t?20\d{2}(?:[-_/]?\d{2})|"
     r"[?&](?:id|articleid|infoid|docid|contentid)=)",
     re.IGNORECASE,
@@ -82,6 +121,129 @@ def load_source_requirements(settings: Settings | None = None) -> dict:
     if not path.exists():
         raise FileNotFoundError(f"City source requirement matrix is missing: {path}")
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+
+
+def _row_terms(city_row: dict, *names: str) -> list[str]:
+    values: list[str] = []
+    for name in names:
+        raw = city_row.get(name)
+        if isinstance(raw, (list, tuple, set)):
+            values.extend(str(item).strip() for item in raw)
+        else:
+            values.extend(item.strip() for item in str(raw or "").replace(",", "|").split("|") if item.strip())
+    return [item for item in dict.fromkeys(values) if item and item.lower() != "none"]
+
+
+_ROLE_ENTRY_TERMS = {
+    "municipal_government": ("政府信息公开", "政府部门", "政策文件", "通知公告"),
+    "government_gazette": ("政府公报", "公报目录", "公报历史", "公报下载"),
+    "housing_department": ("住房城乡建设", "住建局", "政策文件", "通知公告"),
+    "provident_fund_center": ("住房公积金", "公积金中心", "政策法规", "信息公开"),
+    "natural_resources_department": ("自然资源和规划", "自然资源局", "国土资源局", "规划公示"),
+}
+
+
+def build_source_discovery_query_specs(
+    city_row: dict,
+    role: str,
+    *,
+    max_queries: int = 18,
+    min_level: int = 1,
+    existing_query_hashes: set[str] | None = None,
+) -> list[dict[str, object]]:
+    """Build levelled official-discovery queries with aliases and recovery routes.
+
+    Levels 1-2 reuse known evidence and ordinary search.  Levels 3-9 route
+    through portal directories, portal search, provincial/vertical authorities,
+    same-domain expansion, sitemaps/catalogues, historical names and bounded
+    official research.  The AI may rank these queries, but it cannot promote a
+    result past deterministic admission gates.
+    """
+
+    city_full = str(city_row.get("city_name") or "").strip()
+    city_short = str(city_row.get("city_name_short") or "").strip()
+    aliases = _row_terms(city_row, "aliases", "city_aliases", "historical_city_aliases")
+    institution_aliases = _row_terms(
+        city_row,
+        "institution_aliases",
+        "agency_aliases",
+        "historical_institution_names",
+        "matched_historical_alias",
+    )
+    city_terms = list(dict.fromkeys(item for item in (city_full, city_short, *aliases) if item))
+    role_terms = list(dict.fromkeys((ROLE_TERMS.get(role, role), *ROLE_SYNONYMS.get(role, (role,)), *institution_aliases)))
+    entry_terms = _ROLE_ENTRY_TERMS.get(role, ("政策文件", "通知公告", "信息公开"))
+    primary_city = city_terms[0] if city_terms else "中国"
+    primary_role = role_terms[0] if role_terms else role
+    existing_hashes = existing_query_hashes or set()
+    specs: list[dict[str, object]] = []
+    seen: set[str] = set()
+
+    def add(level: int, query: str, strategy: str) -> None:
+        query = " ".join(str(query).split()).strip()
+        if not query or level < min_level:
+            return
+        query_hash = hashlib.sha256(query.encode("utf-8")).hexdigest()
+        if query_hash in seen or query_hash in existing_hashes:
+            return
+        seen.add(query_hash)
+        specs.append({"query": query, "discovery_level": level, "strategy": strategy, "query_hash": query_hash})
+
+    known_urls = _row_terms(city_row, "best_candidate_url", "active_url", "homepage_url", "list_page_url")
+    for known in known_urls:
+        host = (urlsplit(known).hostname or "").lower()
+        if host.endswith(".gov.cn"):
+            add(1, f"site:{host} {entry_terms[0]}", "reuse_known_official_domain")
+            add(6, f"site:{host} {primary_role} {entry_terms[0]}", "same_domain_policy_expansion")
+            add(7, f"site:{host} sitemap OR robots.txt {entry_terms[0]}", "same_domain_sitemap_catalog")
+
+    for city_term in city_terms[:3] or [primary_city]:
+        add(2, f"{city_term} {primary_role} 官网 政策 通知 site:gov.cn", "ordinary_official_search")
+        add(2, f"{city_term} {primary_role} {entry_terms[0]} site:gov.cn", "ordinary_role_entry_search")
+        add(3, f"{city_term} 政府部门 {primary_role} 网站", "municipal_portal_directory")
+        add(4, f"{city_term} 政务公开 {entry_terms[0]}", "municipal_portal_site_search")
+    add(5, f"site:gov.cn {primary_city} {primary_role} {entry_terms[1] if len(entry_terms) > 1 else entry_terms[0]}", "provincial_vertical_authority")
+    add(5, f"site:gov.cn {primary_city} {role_terms[-1] if role_terms else primary_role} 政策", "provincial_or_historical_authority")
+    add(6, f"{primary_city} {primary_role} 首页 同域名 栏目", "known_homepage_same_domain_links")
+    add(7, f"{primary_city} {primary_role} sitemap 目录 栏目", "sitemap_or_catalog_search")
+    for alias in institution_aliases[:3]:
+        add(8, f"{primary_city} {alias} 旧称 更名 合并 政策", "historical_name_or_redirect")
+    add(8, f"{primary_city} {primary_role} 旧称 更名 合并 政策", "historical_name_or_redirect")
+    add(9, f"{primary_city} {primary_role} 官方入口 研究", "bounded_programmatic_official_research")
+    # Keep at least one query for every available recovery level, then fill
+    # the remaining budget in deterministic order.  A small max budget must
+    # not silently remove the historical-domain and programmatic routes.
+    required: list[dict[str, object]] = []
+    for level in range(1, 10):
+        required_item = next((item for item in specs if int(item["discovery_level"]) == level), None)
+        if required_item is not None:
+            required.append(required_item)
+    required_ids = {str(item["query_hash"]) for item in required}
+    remainder = [item for item in specs if str(item["query_hash"]) not in required_ids]
+    return (required + remainder)[:max_queries]
+
+
+def build_source_discovery_queries(
+    city_row: dict,
+    role: str,
+    *,
+    max_queries: int = 8,
+) -> list[str]:
+    """Build a bounded deterministic query set for one city-role slot.
+
+    The query set deliberately uses aliases and role synonyms to improve
+    recall, but search results still remain evidence until the normal page,
+    city, role, parser, pagination and two-probe gates pass.
+    """
+
+    return [
+        str(item["query"])
+        for item in build_source_discovery_query_specs(
+            city_row,
+            role,
+            max_queries=max_queries,
+        )
+    ]
 
 
 def discover_city_sources(
