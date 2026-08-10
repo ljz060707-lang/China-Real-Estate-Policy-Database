@@ -1,0 +1,28 @@
+version: 1
+description: >-
+  Explicit, auditable exceptions for centralized authorities. Province names
+  never create city coverage automatically. Every mapping still requires the
+  normal official-host, direct-network, parser, pagination and verification gates.
+mappings:
+  - mapping_id: JURIS_HAINAN_GJJ_HAIKOU_001
+    authority_level: provincial_centralized
+    authority_name: 海南省住房公积金管理局
+    source_role: provident_fund_center
+    authority_domain: gjj.hainan.gov.cn
+    source_bundle_id: BUNDLE_HAINAN_GJJ_001
+    homepage_url: http://gjj.hainan.gov.cn/
+    list_page_urls:
+      - http://gjj.hainan.gov.cn/hngjj/zccc/newxxgk_index.shtml
+    covered_city_ids:
+      - CITY_460100
+    approval_status: approved
+    evidence_type: bounded_acceptance_mapping
+    evidence_url: null
+    evidence_text: >-
+      Explicit project mapping for the bounded Haikou provident-fund source
+      bundle; this governance mapping is not a substitute for network or parser evidence.
+    effective_from: null
+    effective_to: null
+    notes: >-
+      Homepage is the authority identity boundary; the policy-information
+      column is the reusable list boundary. Both belong to one source bundle.

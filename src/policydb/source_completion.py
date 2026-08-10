@@ -77,7 +77,10 @@ def _registry_by_slot(settings: Settings) -> dict[tuple[str, str], list[object]]
         role = source.agency_type if source.agency_type in REQUIRED_ROLES else source.source_role
         if role not in REQUIRED_ROLES:
             continue
-        for city_id in source.city_ids:
+        for city_id in {
+            *(str(value) for value in source.city_ids),
+            *(str(value) for value in getattr(source, "coverage_city_ids", []) or []),
+        }:
             result[(str(city_id), role)].append(source)
     return result
 

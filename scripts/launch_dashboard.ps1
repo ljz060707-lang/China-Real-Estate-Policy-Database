@@ -6,7 +6,10 @@
 
 $ErrorActionPreference = "Stop"
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$Runtime = Join-Path $Root ".runtime"
+$runtimeResolver = Join-Path $PSScriptRoot "dashboard_runtime.ps1"
+if (-not (Test-Path -LiteralPath $runtimeResolver)) { throw "dashboard_runtime.ps1 not found" }
+. $runtimeResolver
+$Runtime = Ensure-DashboardRuntime
 $PidFile = Join-Path $Runtime "dashboard.pid"
 $PortFile = Join-Path $Runtime "dashboard.port"
 $StartedFile = Join-Path $Runtime "dashboard.started"
@@ -212,6 +215,18 @@ function Start-BackgroundDashboard {
         -WindowStyle Hidden -PassThru
 }
 
+function Resolve-DashboardListener {
+    param([int]$ListenerPort)
+    try {
+        $connection = Get-NetTCPConnection -State Listen -LocalPort $ListenerPort -ErrorAction Stop |
+            Where-Object { $_.LocalAddress -in @('127.0.0.1', '0.0.0.0', '::1') } |
+            Select-Object -First 1
+        if ($connection) { return Get-Process -Id $connection.OwningProcess -ErrorAction Stop }
+    }
+    catch { return $null }
+    return $null
+}
+
 function Invoke-Launcher {
     Write-LauncherLog "===== launcher start ====="
     Write-LauncherLog "windows=$([Environment]::OSVersion.VersionString) powershell=$($PSVersionTable.PSVersion) root=$Root"
@@ -230,7 +245,10 @@ function Invoke-Launcher {
         throw '检测到环境，但项目依赖不完整。请使用重新修复环境。'
     }
     if (-not (Test-Path -LiteralPath $Dashboard)) { throw "未找到网站入口：$Dashboard" }
-    Write-LauncherLog "database_exists=$(Test-Path (Join-Path $Root 'database\policydb.duckdb')) curated_exists=$(Test-Path (Join-Path $Root 'data\curated'))"
+    $dashboardDataRoot = if ($env:CRPD_DATA_ROOT) { $env:CRPD_DATA_ROOT } else { 'E:\Data Set\CRPD' }
+    $dashboardDatabase = if ($env:POLICYDB_DATABASE) { $env:POLICYDB_DATABASE } else { Join-Path $dashboardDataRoot 'database\policydb.duckdb' }
+    $dashboardCurated = if ($env:POLICYDB_CURATED_ROOT) { $env:POLICYDB_CURATED_ROOT } else { Join-Path $dashboardDataRoot 'curated' }
+    Write-LauncherLog "data_root_exists=$(Test-Path -LiteralPath $dashboardDataRoot) database_exists=$(Test-Path -LiteralPath $dashboardDatabase) curated_exists=$(Test-Path -LiteralPath $dashboardCurated)"
     $existing = Test-ExistingDashboard $python
     if ($existing) {
         Write-LauncherLog "existing dashboard reused pid=$($existing.Pid) port=$($existing.Port)"
@@ -246,6 +264,10 @@ function Invoke-Launcher {
     }
     Remove-Item $OutputLog -Force -ErrorAction SilentlyContinue
     $env:POLICYDB_ROOT = $Root
+    if (-not $env:CRPD_DATA_ROOT) { $env:CRPD_DATA_ROOT = $dashboardDataRoot }
+    if (-not $env:POLICYDB_DATABASE) { $env:POLICYDB_DATABASE = $dashboardDatabase }
+    if (-not $env:POLICYDB_CURATED_ROOT) { $env:POLICYDB_CURATED_ROOT = $dashboardCurated }
+    if (-not $env:POLICYDB_OUTPUT_ROOT) { $env:POLICYDB_OUTPUT_ROOT = Join-Path $dashboardDataRoot 'outputs' }
     $env:POLARS_MAX_THREADS = "2"
     $env:OMP_NUM_THREADS = "1"
     $env:ARROW_NUM_THREADS = "2"
@@ -268,6 +290,17 @@ function Invoke-Launcher {
         $healthy = Test-DashboardHealth $selectedPort
         Write-LauncherLog "health_attempt=$attempt port=$selectedPort healthy=$healthy exited=$($process.HasExited)"
         if ($healthy) {
+            $listener = Resolve-DashboardListener $selectedPort
+            if ($listener -and $listener.Id -ne $process.Id) {
+                Write-StateFile $PidFile ([string]$listener.Id)
+                Write-StateFile $StartedFile ([string]$listener.StartTime.ToUniversalTime().Ticks)
+                $metadata = @{
+                    pid = $listener.Id; port = $selectedPort; started_at = $listener.StartTime.ToUniversalTime().ToString("o")
+                    python_path = $python.python_path; command_signature = "policydb-streamlit-dashboard"
+                } | ConvertTo-Json
+                Write-StateFile $ProcessFile $metadata
+                Write-LauncherLog "listener_process_resolved launcher_pid=$($process.Id) listener_pid=$($listener.Id)"
+            }
             Open-Dashboard $selectedPort
             Write-LauncherLog "launcher exit_code=0"
             return 0

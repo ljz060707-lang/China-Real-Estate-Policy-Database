@@ -5,6 +5,7 @@ from policydb.source_completion_ai_workflow import (
     SourceAIAssessment,
     _ai_status,
     _call_ai,
+    _queries,
     _sha,
     interface_audit,
 )
@@ -15,6 +16,17 @@ def test_structured_ai_schema_is_conservative():
     assert value.recommended_action == "proposed"
     assert value.entry_type_hint == "unknown"
     assert "is_verified" not in interface_audit()
+
+
+def test_generated_query_count_matches_structured_output_limit():
+    row = {
+        "city_name": "南京市",
+        "city_id": "CITY_320100",
+        "source_role": "housing_department",
+    }
+    queries = _queries(row)
+    assert len(queries) <= 8
+    SourceAIAssessment(search_queries=queries)
 
 
 def test_ai_status_never_marks_proposal_verified():

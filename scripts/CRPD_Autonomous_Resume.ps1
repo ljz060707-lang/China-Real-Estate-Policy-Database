@@ -1,0 +1,17 @@
+[CmdletBinding()]
+param(
+    [string]$ProjectRoot = 'D:\Codex\projects\Documents-Codex\2026-07-13\text-20260705-xlsx-text-data-raw\policy-database',
+    [string]$DataRoot = 'E:\Data Set\CRPD',
+    [switch]$StartTask
+)
+
+$ErrorActionPreference = 'Stop'
+$python = Join-Path $ProjectRoot '.venv\Scripts\python.exe'
+$controller = Join-Path $ProjectRoot 'scripts\crpd_autonomous_controller.py'
+$config = Join-Path $ProjectRoot 'config\crpd_autonomous.json'
+& $python $controller resume --project-root $ProjectRoot --data-root $DataRoot --config $config
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+if ($StartTask) {
+    Start-ScheduledTask -TaskName 'CRPD_Autonomous_Database_Completion'
+}
+exit 0

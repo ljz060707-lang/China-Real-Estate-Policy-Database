@@ -16,7 +16,7 @@ def _path(settings: Settings, name: str) -> Path:
 
 
 def _backup_dirs(settings: Settings) -> list[str]:
-    roots = [settings.data_root / "backups", Path(r"D:\Data Set\CRPD\backups")]
+    roots = [settings.backups]
     found: set[str] = set()
     for root in roots:
         if not root.exists():

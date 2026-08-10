@@ -6,7 +6,11 @@ from policydb.config.providers import (
     build_search_provider,
 )
 from policydb.settings import Settings
-from policydb.source_discovery import discover_city_sources, is_reusable_source_entry
+from policydb.source_discovery import (
+    build_source_discovery_queries,
+    discover_city_sources,
+    is_reusable_source_entry,
+)
 
 
 def test_content_pages_are_never_reusable_source_entries():
@@ -63,3 +67,20 @@ def test_discovery_keeps_official_candidate_disabled(tmp_path, monkeypatch):
     )
     assert result["official_candidate_count"] == 1
     assert result["added_disabled_sources"] == 0
+
+
+def test_source_discovery_queries_are_bounded_and_cover_role_synonyms():
+    queries = build_source_discovery_queries(
+        {
+            "city_name": "南京市",
+            "city_name_short": "南京",
+            "aliases": "Nanjing|宁",
+        },
+        "housing_department",
+        max_queries=8,
+    )
+    assert 1 <= len(queries) <= 8
+    assert len(queries) == len(set(queries))
+    assert any("南京市" in query for query in queries)
+    assert any("住建局" in query or "住房和城乡建设局" in query for query in queries)
+    assert any("gov.cn" in query or "官网" in query for query in queries)

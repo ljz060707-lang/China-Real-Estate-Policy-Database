@@ -1,10 +1,10 @@
 # Non-sensitive deployment configuration for the independent Windows task.
 # Secrets are resolved by the existing Settings/SecretStore/environment path.
 task_name: CRPD-All-Cities-Since-2018
-repo_root: D:/Codex/projects/Documents-Codex/2026-07-13/text-20260705-xlsx-text-data-raw/policy-database
-data_root: D:/Data Set/CRPD
-automation_output_root: D:/Data Set/CRPD/outputs/all_cities_since_2018
-control_stop_file: D:/Data Set/CRPD/control/STOP_FULL_SYNC
+repo_root: C:/Users/ljz52/Documents/Codex/2026-07-13/text-20260705-xlsx-text-data-raw/policy-database
+data_root: E:/Data Set/CRPD
+automation_output_root: E:/Data Set/CRPD/outputs/all_cities_since_2018
+control_stop_file: E:/Data Set/CRPD/control/STOP_FULL_SYNC
 python_relative_path: .venv/Scripts/python.exe
 scope: all
 discovery_mode: SEARCH_AND_AI

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+import yaml
 from pydantic import BaseModel
 
 from policydb.config.preferences import PreferencesStore
@@ -25,8 +26,71 @@ def _load_local_env(root: Path) -> None:
 class Settings(BaseModel):
     root: Path
     data_version: str = "0.1.0"
+    data_root_path: Path | None = None
     database_path: Path | None = None
     curated_path: Path | None = None
+    raw_path: Path | None = None
+    research_path: Path | None = None
+    outputs_path: Path | None = None
+    logs_path: Path | None = None
+    automation_path: Path | None = None
+    control_path: Path | None = None
+    runtime_path: Path | None = None
+    cache_path: Path | None = None
+    temp_path: Path | None = None
+    test_artifacts_path: Path | None = None
+    dashboard_path: Path | None = None
+    backups_path: Path | None = None
+    dashboard_runtime_path: Path | None = None
+
+    def _normalise_path(self, value: str | Path) -> Path:
+        path = Path(value).expanduser()
+        return path if path.is_absolute() else (self.root / path)
+
+    def _load_storage_config(self) -> dict:
+        """Read only the project storage config; never create directories here."""
+
+        if os.getenv("POLICYDB_SKIP_STORAGE_CONFIG", "").lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }:
+            return {}
+        path = self.root / "config" / "storage.yaml"
+        if not path.exists():
+            return {}
+        payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        if not isinstance(payload, dict):
+            raise ValueError(f"Storage config must be a mapping: {path}")
+        nested = payload.get("storage")
+        if isinstance(nested, dict):
+            payload = nested
+        return {str(key): value for key, value in payload.items()}
+
+    def _config_value(self, *names: str):
+        config = self._load_storage_config()
+        for name in names:
+            value = config.get(name)
+            if value not in (None, ""):
+                return value
+        return None
+
+    def _resolved_storage_path(
+        self,
+        field: str,
+        environments: tuple[str, ...],
+        config_names: tuple[str, ...],
+    ) -> Path | None:
+        explicit = getattr(self, field)
+        if explicit is not None:
+            return self._normalise_path(explicit)
+        for environment in environments:
+            value = os.getenv(environment)
+            if value:
+                return self._normalise_path(value)
+        configured = self._config_value(*config_names)
+        return self._normalise_path(configured) if configured not in (None, "") else None
 
     def _path_setting(self, preference: str, environment: str) -> Path | None:
         value = os.getenv(environment) or str(self.preferences.get(preference, "")).strip()
@@ -34,8 +98,12 @@ class Settings(BaseModel):
 
     @property
     def data_root(self) -> Path:
-        """External runtime data root; portable/test installs retain the repository fallback."""
-        return self._path_setting("crpd_data_root", "CRPD_DATA_ROOT") or self.root / "data"
+        """Resolve the authoritative data root without creating or touching it."""
+
+        explicit = self._resolved_storage_path(
+            "data_root_path", ("CRPD_DATA_ROOT", "POLICYDB_DATA_ROOT"), ("data_root",)
+        )
+        return explicit or self.root / "data"
 
     @classmethod
     def discover(cls, root: str | Path | None = None) -> Settings:
@@ -46,45 +114,222 @@ class Settings(BaseModel):
         return cls(root=value, data_version=os.getenv("POLICYDB_DATA_VERSION", "0.1.0"))
 
     @property
+    def database_root(self) -> Path:
+        return self.data_root / "database"
+
+    @property
     def database(self) -> Path:
+        resolved = self._resolved_storage_path(
+            "database_path", ("POLICYDB_DATABASE",), ("database", "database_path")
+        )
+        if resolved:
+            return resolved
+        # Preserve the existing repository-local database for portable callers while
+        # making every external/production root derive from data_root/database.
+        legacy = self.root / "database" / "policydb.duckdb"
+        if self.data_root == self.root / "data" and legacy.exists():
+            return legacy
+        return self.database_root / "policydb.duckdb"
+
+    def _derived_path(
+        self,
+        field: str,
+        environments: tuple[str, ...],
+        config_names: tuple[str, ...],
+        directory: str,
+    ) -> Path:
         return (
-            self.database_path
-            or self._path_setting("policydb_database", "POLICYDB_DATABASE")
-            or (
-                self.data_root / "database" / "policydb.duckdb"
-                if self.data_root != self.root / "data"
-                else self.root / "database" / "policydb.duckdb"
-            )
+            self._resolved_storage_path(field, environments, config_names)
+            or self.data_root / directory
+        )
+
+    @property
+    def curated_root(self) -> Path:
+        return self._derived_path(
+            "curated_path", ("POLICYDB_CURATED_ROOT",), ("curated", "curated_root"), "curated"
         )
 
     @property
     def curated(self) -> Path:
-        return (
-            self.curated_path
-            or self._path_setting("policydb_curated_root", "POLICYDB_CURATED_ROOT")
-            or self.data_root / "curated"
+        return self.curated_root
+
+    @property
+    def raw_root(self) -> Path:
+        return self._derived_path(
+            "raw_path", ("POLICYDB_RAW_ROOT",), ("raw", "raw_root"), "raw"
+        )
+
+    @property
+    def raw(self) -> Path:
+        return self.raw_root
+
+    @property
+    def research_root(self) -> Path:
+        return self._derived_path(
+            "research_path",
+            ("POLICYDB_RESEARCH_ROOT",),
+            ("research", "research_root"),
+            "research",
         )
 
     @property
     def research(self) -> Path:
-        return (
-            self._path_setting("policydb_research_root", "POLICYDB_RESEARCH_ROOT")
-            or self.data_root / "research"
-        )
+        return self.research_root
+
+    @property
+    def archive_root(self) -> Path:
+        explicit = os.getenv("CRPD_ARCHIVE_ROOT") or os.getenv("POLICYDB_ARCHIVE_ROOT")
+        if explicit:
+            return self._normalise_path(explicit)
+        configured = self._config_value("archive", "archive_root")
+        if configured not in (None, ""):
+            return self._normalise_path(configured)
+        return self.data_root / "archive"
 
     @property
     def logs(self) -> Path:
-        return self._path_setting("policydb_log_root", "POLICYDB_LOG_ROOT") or self.data_root / "logs"
+        return self.logs_root
+
+    @property
+    def logs_root(self) -> Path:
+        return self._derived_path(
+            "logs_path", ("POLICYDB_LOG_ROOT",), ("logs", "logs_root"), "logs"
+        )
+
+    @property
+    def automation_root(self) -> Path:
+        return self._derived_path(
+            "automation_path",
+            ("POLICYDB_AUTOMATION_ROOT",),
+            ("automation", "automation_root"),
+            "automation",
+        )
+
+    @property
+    def automation(self) -> Path:
+        return self.automation_root
+
+    @property
+    def control_root(self) -> Path:
+        return self._derived_path(
+            "control_path",
+            ("POLICYDB_CONTROL_ROOT",),
+            ("control", "control_root"),
+            "control",
+        )
+
+    @property
+    def control(self) -> Path:
+        return self.control_root
+
+    @property
+    def runtime_root(self) -> Path:
+        return self._derived_path(
+            "runtime_path",
+            ("POLICYDB_RUNTIME_ROOT",),
+            ("runtime", "runtime_root"),
+            "runtime",
+        )
+
+    @property
+    def runtime(self) -> Path:
+        return self.runtime_root
+
+    @property
+    def cache_root(self) -> Path:
+        return self._derived_path(
+            "cache_path", ("POLICYDB_CACHE_ROOT",), ("cache", "cache_root"), "cache"
+        )
+
+    @property
+    def cache(self) -> Path:
+        return self.cache_root
+
+    @property
+    def temp_root(self) -> Path:
+        return self._derived_path(
+            "temp_path", ("POLICYDB_TEMP_ROOT",), ("temp", "temp_root"), "temp"
+        )
+
+    @property
+    def temp(self) -> Path:
+        return self.temp_root
+
+    @property
+    def test_artifacts_root(self) -> Path:
+        return self._derived_path(
+            "test_artifacts_path",
+            ("POLICYDB_TEST_ARTIFACTS_ROOT",),
+            ("test_artifacts", "test_artifacts_root"),
+            "test_artifacts",
+        )
+
+    @property
+    def test_artifacts(self) -> Path:
+        return self.test_artifacts_root
+
+    @property
+    def dashboard_root(self) -> Path:
+        return self._derived_path(
+            "dashboard_path",
+            ("POLICYDB_DASHBOARD_ROOT",),
+            ("dashboard", "dashboard_root"),
+            "dashboard",
+        )
+
+    @property
+    def dashboard(self) -> Path:
+        return self.dashboard_root
+
+    @property
+    def backups_root(self) -> Path:
+        return self._derived_path(
+            "backups_path",
+            ("POLICYDB_BACKUPS_ROOT",),
+            ("backups", "backups_root"),
+            "backups",
+        )
+
+    @property
+    def backups(self) -> Path:
+        return self.backups_root
+
+    @property
+    def dashboard_runtime_root(self) -> Path:
+        resolved = self._resolved_storage_path(
+            "dashboard_runtime_path",
+            ("POLICYDB_DASHBOARD_RUNTIME_ROOT",),
+            ("dashboard_runtime", "dashboard_runtime_root"),
+        )
+        return resolved or self.runtime_root / "dashboard"
+
+    @property
+    def dashboard_runtime(self) -> Path:
+        return self.dashboard_runtime_root
 
     @property
     def outputs(self) -> Path:
-        return (
-            self._path_setting("policydb_output_root", "POLICYDB_OUTPUT_ROOT")
-            or (
-                self.data_root / "outputs"
-                if self.data_root != self.root / "data"
-                else self.root / "outputs"
+        resolved = self.outputs_root
+        legacy = self.root / "outputs"
+        if (
+            self.data_root == self.root / "data"
+            and not self._resolved_storage_path(
+                "outputs_path",
+                ("POLICYDB_OUTPUT_ROOT",),
+                ("outputs", "outputs_root"),
             )
+            and legacy.exists()
+        ):
+            return legacy
+        return resolved
+
+    @property
+    def outputs_root(self) -> Path:
+        return self._derived_path(
+            "outputs_path",
+            ("POLICYDB_OUTPUT_ROOT",),
+            ("outputs", "outputs_root"),
+            "outputs",
         )
 
     @property
@@ -185,18 +430,9 @@ class Settings(BaseModel):
 
     @property
     def policy_archive_root(self) -> Path:
-        explicit = os.getenv("CRPD_ARCHIVE_ROOT") or os.getenv(
-            "POLICYDB_ARCHIVE_ROOT"
-        )
-        if explicit:
-            return Path(explicit)
+        """Legacy property name retained for archive callers."""
         configured = str(self.preferences.get("policy_archive_root", "")).strip()
-        return Path(configured) if configured else self.data_root / "archive"
-
-    @property
-    def archive_root(self) -> Path:
-        """V3 canonical name; keep policy_archive_root for existing callers."""
-        return self.policy_archive_root
+        return self._normalise_path(configured) if configured else self.archive_root
 
     @property
     def glm_api_key(self) -> str | None:

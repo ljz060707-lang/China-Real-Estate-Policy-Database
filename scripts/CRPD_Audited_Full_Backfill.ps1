@@ -1,6 +1,6 @@
 ﻿param(
     [string]$ProjectRoot = "C:\Users\ljz52\Documents\Codex\2026-07-13\text-20260705-xlsx-text-data-raw\policy-database",
-    [string]$DataRoot = "D:\Data Set\CRPD",
+    [string]$DataRoot = "E:\Data Set\CRPD",
     [string]$StartDate = "2018-01-01",
     [string]$EndDate = "today",
 
@@ -12,6 +12,7 @@
     [switch]$DiscoverSources,
     [switch]$ApplyDiscoveredSources,
     [switch]$AllowUnverifiedSources,
+    [switch]$ExistingSourcesOnly,
     [switch]$SkipAI,
     [switch]$PilotOnly
 )
@@ -271,59 +272,64 @@ if (-not $SkipAI) {
     [void](Invoke-PolicyDb -Arguments @("ai", "test") -Stage "03_ai_test")
 }
 
-# 建立来源候选和525槽位
-[void](Invoke-PolicyDb -Arguments @("sources", "audit-525") -Stage "10_source_audit_initial")
-[void](Invoke-PolicyDb -Arguments @("sources", "seed-record-candidates") -Stage "11_seed_candidates")
+if ($ExistingSourcesOnly) {
+    Write-RunLog "ExistingSourcesOnly已启用：跳过来源候选种子、来源发现、候选验证和525完整来源门禁，直接复用当前已启用来源进行历史抓取。"
+}
+else {
+    # 建立来源候选和525槽位
+    [void](Invoke-PolicyDb -Arguments @("sources", "audit-525") -Stage "10_source_audit_initial")
+    [void](Invoke-PolicyDb -Arguments @("sources", "seed-record-candidates") -Stage "11_seed_candidates")
 
-if ($DiscoverSources) {
-    $DiscoverArgs = @("sources", "discover-all")
-    if ($ApplyDiscoveredSources) {
-        $DiscoverArgs += "--apply"
-    }
-    [void](Invoke-PolicyDb `
-        -Arguments $DiscoverArgs `
-        -Stage "12_discover_all" `
-        -ContinueOnError)
-
-    if ($ApplyDiscoveredSources) {
+    if ($DiscoverSources) {
+        $DiscoverArgs = @("sources", "discover-all")
+        if ($ApplyDiscoveredSources) {
+            $DiscoverArgs += "--apply"
+        }
         [void](Invoke-PolicyDb `
-            -Arguments @("sources", "evaluate") `
-            -Stage "13_evaluate_sources" `
+            -Arguments $DiscoverArgs `
+            -Stage "12_discover_all" `
             -ContinueOnError)
 
-        # 命令单次上限100；重复执行不会启用不满足推荐条件的来源。
-        for ($Round = 1; $Round -le 6; $Round++) {
+        if ($ApplyDiscoveredSources) {
             [void](Invoke-PolicyDb `
-                -Arguments @("sources", "enable-recommended", "--limit", "100") `
-                -Stage ("14_enable_recommended_{0:D2}" -f $Round) `
+                -Arguments @("sources", "evaluate") `
+                -Stage "13_evaluate_sources" `
                 -ContinueOnError)
+
+            # 命令单次上限100；重复执行不会启用不满足推荐条件的来源。
+            for ($Round = 1; $Round -le 6; $Round++) {
+                [void](Invoke-PolicyDb `
+                    -Arguments @("sources", "enable-recommended", "--limit", "100") `
+                    -Stage ("14_enable_recommended_{0:D2}" -f $Round) `
+                    -ContinueOnError)
+            }
         }
     }
-}
 
-[void](Invoke-PolicyDb -Arguments @("sources", "verify-candidates") -Stage "15_verify_candidates")
-$AuditResult = Invoke-PolicyDb -Arguments @("sources", "audit-525") -Stage "16_source_audit_final"
-$Audit = ConvertFrom-LastJson -Text $AuditResult.Text
+    [void](Invoke-PolicyDb -Arguments @("sources", "verify-candidates") -Stage "15_verify_candidates")
+    $AuditResult = Invoke-PolicyDb -Arguments @("sources", "audit-525") -Stage "16_source_audit_final"
+    $Audit = ConvertFrom-LastJson -Text $AuditResult.Text
 
-if (-not $Audit) {
-    throw "无法解析sources audit-525输出。"
-}
+    if (-not $Audit) {
+        throw "无法解析sources audit-525输出。"
+    }
 
-$Audit | ConvertTo-Json -Depth 10 |
-    Set-Content -Path (Join-Path $AcceptanceRoot "source_525_pre_backfill.json") -Encoding UTF8
+    $Audit | ConvertTo-Json -Depth 10 |
+        Set-Content -Path (Join-Path $AcceptanceRoot "source_525_pre_backfill.json") -Encoding UTF8
 
-Write-RunLog (
-    "来源槽位：required=$($Audit.required_slots), candidate=$($Audit.slots_with_candidate), " +
-    "verified=$($Audit.slots_with_verified_candidate), enabled=$($Audit.slots_with_enabled_source), " +
-    "verified_pct=$($Audit.verified_coverage_pct)%"
-)
-
-if ([double]$Audit.verified_coverage_pct -lt 100 -and -not $AllowUnverifiedSources) {
-    throw (
-        "当前verified source coverage为$($Audit.verified_coverage_pct)%，不满足可审计全量条件。" +
-        "脚本已停止，避免把部分来源扫描称为全量。人工核验并启用来源后重跑；" +
-        "仅用于先抓已有来源时可显式添加 -AllowUnverifiedSources。"
+    Write-RunLog (
+        "来源槽位：required=$($Audit.required_slots), candidate=$($Audit.slots_with_candidate), " +
+        "verified=$($Audit.slots_with_verified_candidate), enabled=$($Audit.slots_with_enabled_source), " +
+        "verified_pct=$($Audit.verified_coverage_pct)%"
     )
+
+    if ([double]$Audit.verified_coverage_pct -lt 100 -and -not $AllowUnverifiedSources) {
+        throw (
+            "当前verified source coverage为$($Audit.verified_coverage_pct)%，不满足可审计全量条件。" +
+            "脚本已停止，避免把部分来源扫描称为全量。人工核验并启用来源后重跑；" +
+            "仅用于先抓已有来源时可显式添加 -AllowUnverifiedSources。"
+        )
+    }
 }
 
 # 南京单月验收

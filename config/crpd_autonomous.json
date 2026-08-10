@@ -1,0 +1,48 @@
+{
+  "automation_id_prefix": "AUTO",
+  "task_name": "CRPD_Autonomous_Database_Completion",
+  "scheduler_interval_minutes": 30,
+  "start_date": "2018-01-01",
+  "end_date": "today",
+  "max_recovery_fetches": 20,
+  "pdf_limit": 30,
+  "disk": {
+    "warn_free_gb": 50,
+    "stop_free_gb": 20
+  },
+  "paths": {
+    "project_root": "D:\\Codex\\projects\\Documents-Codex\\2026-07-13\\text-20260705-xlsx-text-data-raw\\policy-database",
+    "data_root": "E:\\Data Set\\CRPD",
+    "database": "E:\\Data Set\\CRPD\\database\\policydb.duckdb",
+    "curated": "E:\\Data Set\\CRPD\\curated",
+    "outputs": "E:\\Data Set\\CRPD\\outputs",
+    "policy_archive": "E:\\Data Set\\CRPD\\archive",
+    "pdf_archive": "E:\\Data Set\\CRPD\\raw\\pdf"
+  },
+  "saturation": {
+    "city_count": 105,
+    "overall_city_month_min": 0.95,
+    "per_city_min": 0.9,
+    "max_unexplained_gap_months": 12,
+    "repeat_new_document_max": 0.01,
+    "repeat_new_detail_url_max": 0.01
+  },
+  "state_machine": [
+    "WAIT_CURRENT_RUN",
+    "CRAWL",
+    "NORMALIZE",
+    "DEDUP",
+    "AI_CLASSIFY",
+    "AI_VERIFY",
+    "ARCHIVE",
+    "COVERAGE_AUDIT",
+    "RECOVER_MISSING",
+    "CRAWL_AGAIN",
+    "PDF_STAGE",
+    "PDF_VERIFY",
+    "FINAL_AUDIT",
+    "COMPLETE"
+  ],
+  "ai_failure_policy": "DEFERRED_AI_QUEUE",
+  "secret_policy": "read existing environment or SecretStore; never write credentials"
+}

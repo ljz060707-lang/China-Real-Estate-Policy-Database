@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
 
 import polars as pl
@@ -19,8 +21,12 @@ from policydb.fast_bulk_ingest import (
 from policydb.full_sync import FullSyncConfig, FullSyncController
 from policydb.pdf_pipeline import PDFPipeline, load_pdf_config
 from policydb.settings import Settings
+from policydb.source_completion_checkpoint import (
+    build_checkpoint_state,
+    write_checkpoint_artifacts,
+)
 from policydb.source_discovery import REQUIRED_ROLES
-from policydb.source_slots import rebuild_verification_audit
+from policydb.source_slots import audit_525, rebuild_verification_audit
 
 
 def _add_full_sync_args(command: argparse.ArgumentParser) -> None:
@@ -179,6 +185,18 @@ def main() -> None:
     source_resume = source_sub.add_parser("resume")
     source_resume.add_argument("--source-id", required=True)
     source_resume.add_argument("--apply", action="store_true")
+    source_research = source_sub.add_parser(
+        "research",
+        help="bounded programmatic research for no-candidate source slots",
+    )
+    source_research.add_argument("--run-id")
+    source_research.add_argument("--output", type=Path)
+    source_research.add_argument("--slot-id", action="append", default=[])
+    source_research.add_argument("--max-slots", type=int, default=20)
+    source_research.add_argument("--max-ai-calls", type=int, default=20)
+    source_research.add_argument("--concurrency", type=int, default=2)
+    source_research.add_argument("--apply", action="store_true")
+    source_research.add_argument("--resume", action="store_true")
     args = parser.parse_args()
     settings = Settings.discover()
     if args.command == "full-sync":
@@ -275,6 +293,55 @@ def main() -> None:
     if args.command == "source":
         if not args.apply:
             raise SystemExit("source write operations require --apply")
+        if args.source_command == "research":
+            config = AutopilotConfig.load(root=settings.root)
+            config = replace(
+                config,
+                max_slots_per_batch=args.max_slots,
+                max_ai_calls_per_batch=args.max_ai_calls,
+                concurrency=args.concurrency,
+            )
+            config.validate()
+            controller = BoundedAutopilotController(
+                settings,
+                config=config,
+                output=args.output,
+                run_id=args.run_id,
+                research_mode=True,
+                slot_ids=set(args.slot_id or []),
+            )
+            result = controller.run(apply=True, resume=args.resume)
+            result["mode"] = "programmatic_manual_research"
+            # Publish a unique, crash-safe operator checkpoint after the batch
+            # has reached its own atomic boundary.  The historical checkpoint
+            # directories remain immutable; this never overwrites a prior run.
+            run_dir = Path(str(result.get("run_dir") or controller.run_dir))
+            checkpoint_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+            checkpoint_dir = settings.outputs / "source_completion_ai" / checkpoint_id
+            if checkpoint_dir.exists():
+                checkpoint_dir = settings.outputs / "source_completion_ai" / f"{checkpoint_id}_{args.run_id or run_dir.name}"
+            checkpoint_state = build_checkpoint_state(
+                run_id=str(result.get("run_id") or args.run_id or run_dir.name),
+                run_dir=run_dir,
+                current_status=controller._state(),
+                slot_audit=audit_525(settings),
+                current_command=" ".join(sys.argv),
+                repo=settings.root,
+                checkpoint_id=checkpoint_dir.name,
+                stop_reason={
+                    "code": "BATCH_COMPLETED_SAFE_BOUNDARY",
+                    "go_gate": result.get("go_gate"),
+                    "exit_code": result.get("exit_code"),
+                },
+            )
+            checkpoint = write_checkpoint_artifacts(
+                checkpoint_dir,
+                state=checkpoint_state,
+                report=result,
+            )
+            result["checkpoint_dir"] = checkpoint["checkpoint_dir"]
+            print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+            raise SystemExit(int(result.get("exit_code", 0)))
         config = FullSyncConfig(scope="source", source_id=args.source_id, backfill=True, incremental=True, resume=True, apply=True, max_sources=1)
         result = FullSyncController(settings, config=config).run(command="run")
         print(json.dumps(result, ensure_ascii=False, indent=2, default=str))

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
@@ -21,6 +22,25 @@ VIEW_ALIASES = [
     "v_psl_financing_events",
     "v_urban_renewal_policies",
 ]
+
+_CURATED_DATASET_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def curated_dataset_parquets(curated: Path) -> list[Path]:
+    """Return formal dataset snapshots, excluding atomic-write artifacts.
+
+    The crawler writes hidden sibling files such as
+    ``.crawl_items.parquet.<run>.tmp.parquet`` before an atomic replace.  A
+    broad ``*.parquet`` glob also sees those files on Windows; their stems are
+    neither stable dataset names nor valid unquoted DuckDB identifiers.
+    """
+
+    return [
+        path
+        for path in sorted(curated.glob("*.parquet"))
+        if not path.name.startswith(".")
+        and _CURATED_DATASET_NAME.fullmatch(path.stem) is not None
+    ]
 
 
 def _taxonomy_case(column: str, labels: dict[str, str]) -> str:
@@ -122,7 +142,7 @@ def build_database(
             )
             con.execute("DROP TABLE manual_review_tasks")
             con.execute("ALTER TABLE manual_review_tasks_v2 RENAME TO manual_review_tasks")
-        for parquet in sorted(settings.curated.glob("*.parquet")):
+        for parquet in curated_dataset_parquets(settings.curated):
             name = parquet.stem
             parquet_sql = str(parquet).replace("'", "''").replace("\\", "/")
             con.execute(
@@ -516,13 +536,36 @@ def build_database(
             (settings.curated / "cities_105.parquet").exists()
             and (settings.curated / "policy_applicable_cities.parquet").exists()
         ):
+            city_scope_columns = {
+                str(row[0]) for row in con.execute("DESCRIBE cities_105").fetchall()
+            }
+            city_tier_c = (
+                "c.city_tier_existing"
+                if "city_tier_existing" in city_scope_columns
+                else "NULL::BIGINT AS city_tier_existing"
+            )
+            city_scale_c = (
+                "c.city_scale_2020"
+                if "city_scale_2020" in city_scope_columns
+                else "NULL::VARCHAR AS city_scale_2020"
+            )
+            city_tier_g = (
+                "g.city_tier_existing"
+                if "city_tier_existing" in city_scope_columns
+                else "NULL::BIGINT AS city_tier_existing"
+            )
+            city_scale_g = (
+                "g.city_scale_2020"
+                if "city_scale_2020" in city_scope_columns
+                else "NULL::VARCHAR AS city_scale_2020"
+            )
             con.execute(
-                """CREATE OR REPLACE VIEW v_policy_105_cities AS
+                f"""CREATE OR REPLACE VIEW v_policy_105_cities AS
                    SELECT r.record_id,r.record_date,r.publication_date,r.title,r.summary,
                           r.full_text,r.direction,r.official_status,r.source_quality,
                           r.primary_source_url,r.official_level,r.source_sheet,
                           c.city_id,c.city_name,c.province_name AS province,
-                          c.city_tier_existing,c.city_scale_2020,
+                          {city_tier_c},{city_scale_c},
                           a.jurisdiction_level,a.district_name,a.match_method,
                           a.confidence AS geography_confidence,a.needs_review,
                           EXISTS(SELECT 1 FROM record_terms t WHERE t.record_id=r.record_id
@@ -550,7 +593,7 @@ def build_database(
                    WHERE r.record_date >= DATE '2018-01-01'"""
             )
             con.execute(
-                """CREATE OR REPLACE VIEW v_city_month_policy_panel_105 AS
+                f"""CREATE OR REPLACE VIEW v_city_month_policy_panel_105 AS
                    WITH months AS (
                      SELECT period::DATE month_start
                      FROM range(DATE '2018-01-01', current_date + INTERVAL 1 MONTH,
@@ -559,7 +602,7 @@ def build_database(
                      SELECT c.*,m.month_start FROM cities_105 c CROSS JOIN months m
                    )
                    SELECT g.city_id,g.city_name,g.province_name AS province,
-                          g.city_tier_existing,g.city_scale_2020,
+                          {city_tier_g},{city_scale_g},
                           year(g.month_start)::INTEGER AS year,
                           month(g.month_start)::INTEGER AS month,
                           count(DISTINCT p.record_id)::BIGINT policy_count,

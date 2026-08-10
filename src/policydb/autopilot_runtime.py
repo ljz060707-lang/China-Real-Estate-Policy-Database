@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -19,8 +19,16 @@ from policydb.autopilot_checkpoints import (
 from policydb.crawl.dedup import canonicalize_url
 from policydb.parquet_store import atomic_write_parquet, read_parquet_snapshot
 from policydb.settings import Settings
+from policydb.source_candidate_triage import (
+    prefilter_candidate_frame,
+    rank_candidate_proposals,
+)
 from policydb.source_completion import build_slot_work_queue
-from policydb.source_completion_ai_workflow import run_ai_batch
+from policydb.source_completion_ai_workflow import run_ai_batch_with_attempt_budget
+from policydb.source_evidence_enrichment import (
+    enrich_candidate_evidence,
+    select_evidence_enrichment_candidates,
+)
 from policydb.source_slots import (
     audit_525,
     build_human_review_rows,
@@ -32,6 +40,8 @@ from policydb.source_slots import (
     verify_candidates,
 )
 from policydb.transform.normalization import stable_id
+
+run_ai_batch = run_ai_batch_with_attempt_budget
 
 EXIT_BATCH_SUCCESS = 0
 EXIT_GO_BLOCKED = 10
@@ -54,6 +64,31 @@ def _future_retry(value: Any) -> bool:
         return datetime.fromisoformat(raw) > datetime.now(UTC)
     except ValueError:
         return False
+
+
+def _research_retry_ready(
+    checkpoint: dict[str, Any] | None,
+    *,
+    now: datetime,
+    cooldown_seconds: int,
+) -> bool:
+    '''Keep recoverable research failures from monopolising later batches.'''
+
+    if not checkpoint or str(checkpoint.get('status') or '').upper() != 'FAILED_RECOVERABLE':
+        return True
+    next_retry = checkpoint.get('next_retry_at')
+    if next_retry and _future_retry(next_retry):
+        return False
+    if cooldown_seconds <= 0:
+        return True
+    raw = checkpoint.get('updated_at') or checkpoint.get('completed_at')
+    if not raw:
+        return True
+    try:
+        updated_at = datetime.fromisoformat(str(raw).replace('Z', '+00:00'))
+    except ValueError:
+        return True
+    return updated_at <= now - timedelta(seconds=cooldown_seconds)
 
 
 def _verified(row: dict[str, Any]) -> bool:
@@ -116,18 +151,75 @@ def select_source_slots(
     return pl.from_dicts([{key: value for key, value in row.items() if key != "_priority"} for row in rows[:max_slots]], schema=queue.schema)
 
 
-def select_top_candidates(frame: pl.DataFrame, *, max_candidates: int = 3) -> tuple[pl.DataFrame, pl.DataFrame]:
+def select_manual_research_slots(
+    queue: pl.DataFrame,
+    *,
+    max_slots: int,
+    active_claimed_ids: set[str] | None = None,
+    checkpoint_records: dict[str, dict[str, Any]] | None = None,
+    now: datetime | None = None,
+    retry_cooldown_seconds: int = 3600,
+) -> pl.DataFrame:
+    """Select the separate programmatic research queue.
+
+    This queue is intentionally narrower than ordinary source completion: it
+    can revisit no-candidate/recoverable slots, but never human-adjudicated,
+    role-conflict, verified or enabled slots.
+    """
+
+    active = active_claimed_ids or set()
+    checkpoint_records = checkpoint_records or {}
+    now = now or datetime.now(UTC)
+    rows: list[dict[str, Any]] = []
+    # A recoverable research slot may be materialized as retry_wait after an
+    # append-only checkpoint transition.  The shared claim predicate below
+    # still enforces its actual deadline, so adding this state here does not
+    # bypass retry backoff.
+    allowed = {"no_candidate_manual_research", "failed_recoverable", "retry_wait"}
+    for row in queue.iter_rows(named=True):
+        if str(row.get("work_status") or "").lower() not in allowed:
+            continue
+        slot_id = str(row.get("slot_id") or "")
+        if not _research_retry_ready(
+            checkpoint_records.get(slot_id),
+            now=now,
+            cooldown_seconds=retry_cooldown_seconds,
+        ):
+            continue
+        if is_slot_claimable(
+            row,
+            checkpoint_records.get(slot_id),
+            now=now,
+            active_slot_ids=active,
+            research_mode=True,
+        ):
+            rows.append(row)
+    rows.sort(
+        key=lambda row: (
+            0 if str(row.get("work_status") or "").lower() == "failed_recoverable" else 1,
+            str(row.get("province_name") or ""),
+            str(row.get("city_name") or ""),
+            str(row.get("source_role") or ""),
+            str(row.get("slot_id") or ""),
+        )
+    )
+    return pl.from_dicts(rows[:max_slots], schema=queue.schema) if rows else queue.head(0)
+
+
+def select_top_candidates(
+    frame: pl.DataFrame,
+    *,
+    max_candidates: int = 3,
+    settings: Settings | None = None,
+) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Keep all search evidence but return at most Top-N rows for formal work."""
     if frame.is_empty() or "candidate_url" not in frame.columns:
         return frame, frame
-    rows = frame.to_dicts()
-    rows.sort(key=lambda row: (0 if ".gov.cn" in str(row.get("candidate_url") or "").lower() else 1, -float(row.get("ai_confidence") or 0), str(row.get("candidate_url") or "")))
-    selected = rows[:max_candidates]
-    selected_ids = {str(row.get("proposal_id")) for row in selected}
-    selected_frame = pl.from_dicts(selected, schema=frame.schema) if selected else frame.head(0)
-    evidence_rows = [{**row, "selection_status": "selected_top3" if str(row.get("proposal_id")) in selected_ids else "search_evidence_only", "selection_rank": index + 1 if str(row.get("proposal_id")) in selected_ids else None} for index, row in enumerate(rows)]
-    evidence_frame = pl.from_dicts(evidence_rows, infer_schema_length=None) if evidence_rows else frame.head(0)
-    return selected_frame, evidence_frame
+    return rank_candidate_proposals(
+        frame,
+        settings=settings,
+        max_candidates=max_candidates,
+    )
 
 
 def usage_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
@@ -197,13 +289,15 @@ def build_go_gate(
 class BoundedAutopilotController:
     """Single bounded batch controller; full crawl is never entered here."""
 
-    def __init__(self, settings: Settings | None = None, *, config: AutopilotConfig | None = None, output: Path | None = None, run_id: str | None = None):
+    def __init__(self, settings: Settings | None = None, *, config: AutopilotConfig | None = None, output: Path | None = None, run_id: str | None = None, research_mode: bool = False, slot_ids: set[str] | None = None):
         self.settings = settings or Settings.discover()
         self.config = config or AutopilotConfig.load(root=self.settings.root)
         self.run_id = run_id or datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
         self.run_dir = output or self.settings.outputs / "autopilot" / self.run_id
         self.store = AutopilotStateStore(self.run_dir)
         self.checkpoints = GlobalSlotCheckpointStore(self.settings.outputs / "autopilot")
+        self.research_mode = research_mode
+        self.slot_ids = {str(value) for value in (slot_ids or set()) if str(value)}
 
     def _state(self) -> dict[str, Any]:
         return self.store.read() or {
@@ -262,16 +356,29 @@ class BoundedAutopilotController:
 
     def _claim_batch_slots(self, queue: pl.DataFrame, *, max_slots: int) -> tuple[pl.DataFrame, list[dict[str, Any]]]:
         records = self._checkpoint_records()
-        candidates = select_source_slots(
-            queue,
-            max_slots=queue.height,
-            active_claimed_ids=self._active_claimed_ids(),
-            checkpoint_records=records,
-        )
+        if self.research_mode:
+            candidates = select_manual_research_slots(
+                queue,
+                max_slots=queue.height,
+                active_claimed_ids=self._active_claimed_ids(),
+                checkpoint_records=records,
+                retry_cooldown_seconds=self.config.research_retry_cooldown_seconds,
+            )
+        else:
+            candidates = select_source_slots(
+                queue,
+                max_slots=queue.height,
+                active_claimed_ids=self._active_claimed_ids(),
+                checkpoint_records=records,
+            )
         selected: list[dict[str, Any]] = []
         conflicts: list[dict[str, Any]] = []
         for row in candidates.iter_rows(named=True):
-            claimed, evidence = self.checkpoints.claim(row, run_id=self.run_id)
+            claimed, evidence = self.checkpoints.claim(
+                row,
+                run_id=self.run_id,
+                research_mode=self.research_mode,
+            )
             if claimed:
                 selected.append(row)
             else:
@@ -318,6 +425,8 @@ class BoundedAutopilotController:
         if self.store.stop_requested():
             return {"status": "STOPPED", "exit_code": EXIT_STOP, "run_dir": str(self.run_dir)}
         queue = build_slot_work_queue(self.settings)
+        if self.slot_ids:
+            queue = queue.filter(pl.col("slot_id").is_in(sorted(self.slot_ids)))
         checkpoint_records = self._checkpoint_records()
         completed = self._claims() if resume else set()
         batch_cap = min(self.config.max_slots_per_batch, self.config.max_ai_calls_per_batch)
@@ -325,13 +434,24 @@ class BoundedAutopilotController:
         if apply:
             selected, claim_conflicts = self._claim_batch_slots(queue, max_slots=batch_cap)
         else:
-            selected = select_source_slots(
-                queue,
-                max_slots=batch_cap,
-                active_claimed_ids=self._active_claimed_ids(),
-                completed_slot_ids=completed,
-                checkpoint_records=checkpoint_records,
-            )
+            if self.research_mode:
+                selected = select_manual_research_slots(
+                    queue,
+                    max_slots=batch_cap,
+                    active_claimed_ids=self._active_claimed_ids(),
+                    checkpoint_records=checkpoint_records,
+                    now=datetime.now(UTC),
+                    retry_cooldown_seconds=self.config.research_retry_cooldown_seconds,
+                )
+            else:
+                selected = select_source_slots(
+                    queue,
+                    max_slots=batch_cap,
+                    active_claimed_ids=self._active_claimed_ids(),
+                    completed_slot_ids=completed,
+                    checkpoint_records=checkpoint_records,
+                    now=datetime.now(UTC),
+                )
         slot_ids = [str(value) for value in selected.get_column("slot_id").to_list()] if selected.height else []
         selected_rows = {str(row["slot_id"]): row for row in selected.iter_rows(named=True)}
         if not apply:
@@ -372,9 +492,33 @@ class BoundedAutopilotController:
             self._write_progress(event_type="slot_claimed", step="slot_claimed", slot_id=slot_id, reason_code="slot_claimed")
             slot_applied = 0
             slot_probed = 0
+            remaining_ai_attempts = max(0, self.config.max_ai_calls_per_batch - ai_attempts)
+            discovery_mode = 'SEARCH_AND_AI' if remaining_ai_attempts > 0 else 'SEARCH_ONLY'
+            self._write_progress(
+                event_type='ai_budget_reserved',
+                step='ai_request_started',
+                slot_id=slot_id,
+                reason_code='bounded_ai_attempt_budget',
+                ai_attempt_budget_remaining=remaining_ai_attempts,
+                discovery_mode=discovery_mode,
+            )
             slot_dir = self.run_dir / "slot_runs" / slot_id
             self._write_progress(event_type="ai_request_started", step="ai_request_started", slot_id=slot_id, reason_code="provider_request_started", ai_attempts=ai_attempts)
-            slot_result = run_ai_batch(self.settings, output=slot_dir, max_slots=1, max_ai_calls=1, concurrency=1, dry_run=False, apply=False, resume=resume, slot_id=slot_id, global_audit_root=self.checkpoints.root)
+            slot_result = run_ai_batch(
+                self.settings,
+                output=slot_dir,
+                max_slots=1,
+                max_ai_calls=remaining_ai_attempts,
+                max_ai_attempts=max(1, min(3, remaining_ai_attempts)),
+                max_search_calls=self.config.max_search_queries_per_slot,
+                concurrency=1,
+                dry_run=False,
+                apply=False,
+                resume=resume,
+                slot_id=slot_id,
+                global_audit_root=self.checkpoints.root,
+                discovery_mode=discovery_mode,
+            )
             ai_calls += int(slot_result.get("ai_calls") or 0)
             reused_ai_calls += int(slot_result.get("reused_ai_calls") or 0)
             prevented_duplicate_calls += int(slot_result.get("prevented_duplicate_calls") or 0)
@@ -386,11 +530,93 @@ class BoundedAutopilotController:
             proposal_path = slot_dir / "candidate_proposals.parquet"
             proposals = read_parquet_snapshot(proposal_path) if proposal_path.exists() else pl.DataFrame()
             candidate_total += int(proposals.height)
-            selected_frame, evidence_frame = select_top_candidates(proposals, max_candidates=self.config.max_candidates_per_slot)
+            # Search/AI output remains immutable evidence.  Only rows surviving
+            # deterministic URL, jurisdiction, role and page-type prefiltering
+            # can enter the fixed Top-3 formal-candidate set.
+            prefiltered = prefilter_candidate_frame(self.settings, proposals)
+            # Compute the static score before selecting the bounded page
+            # enrichment probes.  Without this pass every weak candidate had
+            # an implicit score of zero, so the input/search order—not the
+            # deterministic evidence—decided which three URLs were fetched.
+            # This only changes enrichment order; formal selection below still
+            # requires ``prefilter_status == shortlist`` and all strict gates.
+            _, ranked_prefiltered = select_top_candidates(
+                prefiltered,
+                max_candidates=self.config.max_candidates_per_slot,
+                settings=self.settings,
+            )
+            if not ranked_prefiltered.is_empty():
+                prefiltered = ranked_prefiltered
+            if not prefiltered.is_empty():
+                atomic_write_parquet(
+                    prefiltered,
+                    slot_dir / "candidate_prefilter_before_enrichment.parquet",
+                    {"run_id": self.run_id, "job_id": "candidate-prefilter-before-enrichment"},
+                )
+            from policydb.crawl.fetcher import RespectfulFetcher
+
+            probe_fetcher = RespectfulFetcher(
+                user_agent=self.settings.user_agent,
+                timeout=self.settings.request_timeout,
+                connect_timeout=self.settings.connect_timeout,
+                retries=self.settings.max_retries,
+                rate_limit=self.settings.default_rate_limit,
+                check_robots=self.settings.respect_robots,
+            )
+            enrichment_candidates = select_evidence_enrichment_candidates(
+                prefiltered,
+                max_per_slot=self.config.max_candidates_per_slot,
+            )
+            self._write_progress(
+                event_type="evidence_enrichment_started",
+                step="evidence_enrichment_started",
+                slot_id=slot_id,
+                reason_code="official_weak_candidate_page_probe",
+                enrichment_candidates=int(enrichment_candidates.height),
+            )
+            enriched, enrichment_evidence = enrich_candidate_evidence(
+                prefiltered,
+                fetcher=probe_fetcher,
+                max_per_slot=self.config.max_candidates_per_slot,
+                run_id=self.run_id,
+            )
+            prefiltered = prefilter_candidate_frame(self.settings, enriched)
+            # Keep the complete post-fetch evidence frame separate from the
+            # formal-candidate artifact.  Rows that still fail a deterministic
+            # city/role/page gate are evidence only, but their real page title,
+            # breadcrumb, response hash and same-domain links are required for
+            # a later bounded recovery run.  This artifact never changes the
+            # Top-3 selection or any verification flag.
+            if not prefiltered.is_empty():
+                atomic_write_parquet(
+                    prefiltered,
+                    slot_dir / "candidate_prefilter_after_enrichment.parquet",
+                    {"run_id": self.run_id, "job_id": "candidate-prefilter-after-enrichment"},
+                )
+            if enrichment_evidence:
+                atomic_write_parquet(
+                    pl.from_dicts(enrichment_evidence, infer_schema_length=None),
+                    slot_dir / "evidence_enrichment.parquet",
+                    {"run_id": self.run_id, "job_id": "candidate-evidence-enrichment"},
+                )
+            self._write_progress(
+                event_type="evidence_enrichment_completed",
+                step="evidence_enrichment_completed",
+                slot_id=slot_id,
+                reason_code="prefilter_recomputed_with_page_evidence",
+                enrichment_candidates=int(enrichment_candidates.height),
+                enrichment_completed=sum(item.get("status") == "completed" for item in enrichment_evidence),
+                enrichment_failed=sum(item.get("status") == "failed" for item in enrichment_evidence),
+            )
+            selected_frame, evidence_frame = select_top_candidates(
+                prefiltered,
+                max_candidates=self.config.max_candidates_per_slot,
+                settings=self.settings,
+            )
             if not evidence_frame.is_empty():
                 all_evidence.append(evidence_frame)
             self._write_progress(event_type="search_completed", step="search_completed", slot_id=slot_id, reason_code="search_evidence_saved", candidates=candidate_total)
-            self._write_progress(event_type="candidates_ranked", step="candidates_ranked", slot_id=slot_id, reason_code="top3_selected", ranked_candidates=min(3, int(proposals.height)))
+            self._write_progress(event_type="candidates_ranked", step="candidates_ranked", slot_id=slot_id, reason_code="top3_selected", ranked_candidates=int(selected_frame.height))
             selected_items = selected_frame.to_dicts()
             selected_candidate_ids: list[str] = []
             for rank, item in enumerate(selected_items, 1):
@@ -400,7 +626,64 @@ class BoundedAutopilotController:
                 item.update({"candidate_id": candidate_id, "selection_rank": rank, "selection_status": "selected_top3"})
                 selected_candidate_ids.append(candidate_id)
                 all_selected.append(item)
-                upsert_candidates([{"candidate_id": candidate_id, "city_id": item["city_id"], "source_role": item["source_role"], "candidate_url": url, "discovery_method": "ai_assisted_search", "discovery_evidence_url": url, "discovery_evidence_text": item.get("candidate_snippet"), "official_domain_evidence": "search provider evidence; deterministic gate pending", "is_verified": False, "is_enabled": False, "manual_review_status": "pending_probe", "generation_batch_id": self.run_id}], self.settings)
+                upsert_candidates([{
+                    "candidate_id": candidate_id,
+                    "city_id": item["city_id"],
+                    "source_role": item["source_role"],
+                    "candidate_url": url,
+                    "discovery_method": "ai_assisted_search",
+                    "discovery_evidence_url": url,
+                    "site_name": item.get("site_name") or item.get("candidate_title"),
+                    "department_name": item.get("department_name") or item.get("candidate_title"),
+                    "candidate_title": item.get("candidate_title"),
+                    "candidate_snippet": item.get("candidate_snippet"),
+                    "page_title": item.get("page_title"),
+                    "page_heading": item.get("page_heading"),
+                    "breadcrumb": item.get("breadcrumb"),
+                    "page_text_excerpt": item.get("page_text_excerpt"),
+                    "institution_evidence": item.get("institution_evidence"),
+                    "page_city_evidence": item.get("page_city_evidence"),
+                    "page_role_evidence": item.get("page_role_evidence"),
+                    "page_agency_evidence": item.get("page_agency_evidence"),
+                    "page_entry_type_evidence": item.get("page_entry_type_evidence"),
+                    "page_pagination_evidence": item.get("page_pagination_evidence"),
+                    "page_redirect_chain_json": item.get("page_redirect_chain_json"),
+                    "page_same_domain_links_json": item.get("page_same_domain_links_json"),
+                    "page_same_domain_link_count": item.get("page_same_domain_link_count"),
+                    "page_content_type": item.get("page_content_type"),
+                    "page_final_url": item.get("page_final_url"),
+                    "page_http_status": item.get("page_http_status"),
+                    "page_network_route": item.get("page_network_route"),
+                    "page_response_sha256": item.get("page_response_sha256"),
+                    "evidence_enrichment_status": item.get("evidence_enrichment_status"),
+                    "evidence_enrichment_attempts": item.get("evidence_enrichment_attempts"),
+                    "evidence_enrichment_error": item.get("evidence_enrichment_error"),
+                    "evidence_enrichment_run_id": item.get("evidence_enrichment_run_id"),
+                    "evidence_enrichment_url": item.get("evidence_enrichment_url"),
+                    "enrichment_probe_hash": item.get("enrichment_probe_hash"),
+                    "discovery_evidence_text": item.get("discovery_evidence_text") or " ".join(str(value or "").strip() for value in (item.get("candidate_title"), item.get("candidate_snippet")) if str(value or "").strip())[:2000] or None,
+                    "city_match_evidence": item.get("city_match_evidence"),
+                    "role_match_evidence": item.get("role_match_evidence"),
+                    "official_domain_evidence": "search provider evidence; deterministic gate pending",
+                    "source_bundle_id": item.get("source_bundle_id"),
+                    "jurisdiction_mapping_id": item.get("jurisdiction_mapping_id"),
+                    "jurisdiction_evidence_id": item.get("jurisdiction_evidence_id"),
+                    "jurisdiction_mapping_status": item.get("jurisdiction_mapping_status"),
+                    "prefilter_status": item.get("prefilter_status"),
+                    "prefilter_reasons": item.get("prefilter_reasons"),
+                    "deterministic_score": item.get("deterministic_score"),
+                    "deterministic_score_reasons": item.get("deterministic_score_reasons"),
+                    "candidate_kind": candidate_kind,
+                    "page_type": item.get("page_type"),
+                    "entry_eligible": item.get("entry_eligible_guess"),
+                    "initial_page_type": item.get("page_type"),
+                    "initial_candidate_kind": item.get("candidate_kind"),
+                    "initial_entry_eligible": item.get("entry_eligible_guess"),
+                    "is_verified": False,
+                    "is_enabled": False,
+                    "manual_review_status": "pending_probe",
+                    "generation_batch_id": self.run_id,
+                }], self.settings)
                 applied += 1
                 slot_applied += 1
             self._write_progress(event_type="probe_started", step="probe_started", slot_id=slot_id, reason_code="top3_only", applied_candidates=slot_applied)
@@ -410,12 +693,47 @@ class BoundedAutopilotController:
                     continue
                 candidate_id = stable_id(slot_id, canonicalize_url(url), "official_entry_candidate", prefix="SRCCAND")
                 try:
-                    probe_candidates(candidate_id=candidate_id, rounds=2, settings=self.settings)
+                    from inspect import Parameter, signature
+
+                    probe_kwargs = {
+                        "candidate_id": candidate_id,
+                        "rounds": 2,
+                        "settings": self.settings,
+                    }
+
+                    try:
+                        probe_parameters = signature(
+                            probe_candidates
+                        ).parameters
+                        accepts_fetcher = (
+                            "fetcher" in probe_parameters
+                            or any(
+                                parameter.kind
+                                == Parameter.VAR_KEYWORD
+                                for parameter
+                                in probe_parameters.values()
+                            )
+                        )
+                    except (TypeError, ValueError):
+                        accepts_fetcher = True
+
+                    if accepts_fetcher:
+                        probe_kwargs["fetcher"] = probe_fetcher
+
+                    probe_candidates(**probe_kwargs)
                     probed += 1
                     slot_probed += 1
-                except Exception:
+                except Exception as exc:
                     probed += 1
                     slot_probed += 1
+                    self._write_progress(
+                        event_type="probe_failed",
+                        step="probe_failed",
+                        slot_id=slot_id,
+                        reason_code=type(exc).__name__,
+                        candidate_id=candidate_id,
+                        error_message=str(exc)[:1000],
+                    )
             self._write_progress(event_type="probe_completed", step="probe_completed", slot_id=slot_id, reason_code="probe_rounds_2", probes=probed)
             verification_result = verify_candidates(
                 slot_id=slot_id,
@@ -521,8 +839,12 @@ class BoundedAutopilotController:
                 terminal_status = "HUMAN_REVIEW"
                 terminal_outcome = "top3_requires_human_decision"
             else:
-                terminal_status = "COMPLETED"
-                terminal_outcome = "deterministic_probe_completed_without_verified_candidate"
+                terminal_status = "FAILED_RECOVERABLE"
+                terminal_outcome = (
+                    "evidence_enrichment_required"
+                    if int(enrichment_candidates.height) > 0
+                    else "no_formal_candidate_after_deterministic_prefilter"
+                )
             self.checkpoints.terminal(
                 slot_row,
                 status=terminal_status,

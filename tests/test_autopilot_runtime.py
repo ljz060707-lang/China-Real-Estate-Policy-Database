@@ -8,11 +8,13 @@ from pathlib import Path
 import polars as pl
 
 from policydb.autopilot import AutopilotConfig
+from policydb.autopilot_checkpoints import is_slot_claimable
 from policydb.autopilot_runtime import (
     EXIT_GO_BLOCKED,
     BoundedAutopilotController,
     build_go_gate,
     exit_code_for,
+    select_manual_research_slots,
     select_source_slots,
     select_top_candidates,
     usage_summary,
@@ -97,6 +99,23 @@ def test_active_and_completed_claim_sets_are_excluded() -> None:
     assert selected.get_column("slot_id").to_list() == ["C"]
 
 
+def test_retry_wait_uses_checkpoint_deadline_when_materialized_row_omits_it() -> None:
+    row = _row("RETRY", work_status="RETRY_WAIT", next_retry_at=None)
+    now = datetime.now(UTC)
+    assert is_slot_claimable(
+        row,
+        {"status": "RETRY_WAIT", "next_retry_at": (now - timedelta(seconds=1)).isoformat()},
+        now=now,
+        research_mode=True,
+    )
+    assert not is_slot_claimable(
+        row,
+        {"status": "RETRY_WAIT", "next_retry_at": (now + timedelta(hours=1)).isoformat()},
+        now=now,
+        research_mode=True,
+    )
+
+
 def test_top_three_are_formal_candidates_and_remainder_is_search_evidence() -> None:
     proposals = pl.from_dicts(
         [
@@ -162,7 +181,10 @@ def test_bounded_run_caps_candidates_syncs_status_and_records_transitions(monkey
     monkeypatch.setattr("policydb.autopilot_runtime.build_slot_work_queue", lambda _settings: queue)
     monkeypatch.setattr("policydb.autopilot_runtime.audit_525", lambda _settings: _blocked_audit())
 
-    def fake_ai_batch(_settings: Settings, *, output: Path, **_kwargs: object) -> dict[str, int]:
+    ai_budget_kwargs: dict[str, object] = {}
+
+    def fake_ai_batch(_settings: Settings, *, output: Path, **kwargs: object) -> dict[str, int]:
+        ai_budget_kwargs.update(kwargs)
         output.mkdir(parents=True, exist_ok=True)
         pl.from_dicts(
             [
@@ -257,6 +279,9 @@ def test_bounded_run_caps_candidates_syncs_status_and_records_transitions(monkey
     ]
     assert len(applied) == 3
     assert len(probed) == 3
+    assert ai_budget_kwargs['max_ai_calls'] == 1
+    assert ai_budget_kwargs['max_ai_attempts'] == 1
+    assert ai_budget_kwargs['discovery_mode'] == 'SEARCH_AND_AI'
     assert result["provider_status"] == "operational"
     assert result["api_balance_status"] == "call_succeeded"
     assert result["tokens"] is None
@@ -272,6 +297,7 @@ def test_bounded_run_caps_candidates_syncs_status_and_records_transitions(monkey
     assert status["usage_status"] == result["usage_status"] == "unavailable"
     assert status["cost_status"] == result["cost_status"] == "unavailable"
     assert status["full_tests_status"] == "unknown"
+    assert (tmp_path / "run" / "slot_runs" / "SLOT_1" / "candidate_prefilter_after_enrichment.parquet").exists()
 
     events = [
         json.loads(line)
@@ -284,6 +310,8 @@ def test_bounded_run_caps_candidates_syncs_status_and_records_transitions(monkey
         "ai_request_completed",
         "search_started",
         "search_completed",
+        "evidence_enrichment_started",
+        "evidence_enrichment_completed",
         "candidates_ranked",
         "probe_started",
         "probe_completed",
@@ -310,3 +338,52 @@ def test_ai_call_cap_also_caps_planned_slots(monkeypatch, tmp_path: Path) -> Non
     result = BoundedAutopilotController(settings, config=config, output=tmp_path / "plan").run(apply=False)
     assert result["planned_slots"] == 2
     assert not (tmp_path / "plan" / "slot_claims.json").exists()
+
+
+def test_source_research_slot_scope_is_explicit_and_bounded(monkeypatch, tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    queue = pl.from_dicts([_row("A"), _row("B")], infer_schema_length=None)
+    monkeypatch.setattr("policydb.autopilot_runtime.build_slot_work_queue", lambda _settings: queue)
+    controller = BoundedAutopilotController(
+        settings,
+        config=replace(AutopilotConfig(), max_slots_per_batch=5, max_ai_calls_per_batch=5),
+        output=tmp_path / "scoped",
+        slot_ids={"B"},
+    )
+    result = controller.run(apply=False)
+    assert result["slot_ids"] == ["B"]
+
+
+def test_programmatic_manual_research_selects_only_no_candidate_slots() -> None:
+    queue = pl.from_dicts(
+        [
+            _row("NO_CANDIDATE", work_status="no_candidate_manual_research"),
+            _row("RECOVERABLE", work_status="failed_recoverable"),
+            _row("HUMAN", work_status="human_review"),
+            _row("ROLE", work_status="blocked_role_conflict"),
+        ],
+        infer_schema_length=None,
+    )
+    selected = select_manual_research_slots(queue, max_slots=20)
+    assert set(selected["slot_id"].to_list()) == {"NO_CANDIDATE", "RECOVERABLE"}
+
+
+def test_programmatic_manual_research_requeues_only_due_retry_wait_slots() -> None:
+    now = datetime.now(UTC)
+    queue = pl.from_dicts(
+        [
+            _row("DUE", work_status="retry_wait"),
+            _row("FUTURE", work_status="retry_wait"),
+        ],
+        infer_schema_length=None,
+    )
+    selected = select_manual_research_slots(
+        queue,
+        max_slots=20,
+        now=now,
+        checkpoint_records={
+            "DUE": {"status": "RETRY_WAIT", "next_retry_at": (now - timedelta(seconds=1)).isoformat()},
+            "FUTURE": {"status": "RETRY_WAIT", "next_retry_at": (now + timedelta(hours=1)).isoformat()},
+        },
+    )
+    assert selected["slot_id"].to_list() == ["DUE"]

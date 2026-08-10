@@ -10,26 +10,57 @@ for path in (ROOT, ROOT / "src"):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from app.automation_center import render_automation_center  # noqa: E402
-from app.overview import render_overview  # noqa: E402
-from app.policy_center import render_policy_center  # noqa: E402
-from app.quality_center import render_quality_center  # noqa: E402
-from app.review_center import render_review_center  # noqa: E402
-from app.settings_page import render_settings_page  # noqa: E402
+from app.dashboard_pages import (  # noqa: E402
+    render_collection_page,
+    render_overview_page,
+    render_policy_center_page,
+    render_quality_page,
+    render_review_page,
+    render_system_page,
+)
 from app.setup_wizard import needs_initial_setup, render_setup_wizard  # noqa: E402
 from app.theme import apply_academic_theme, render_page_header, render_sidebar_brand  # noqa: E402
-from policydb import PolicyDB  # noqa: E402
+from policydb.settings import Settings  # noqa: E402
 
 PAGES = {
-    "数据总览": ("数据总览", "政策资料、来源与研究就绪状态。", render_overview),
-    "政策中心": ("政策中心", "在一个工作台完成筛选、统计、查看原文与导出。", render_policy_center),
-    "自动更新与完整性": ("自动更新与完整性", "更新任务、来源覆盖与运行报告。", render_automation_center),
-    "数据质量": ("数据质量", "正文、版本、分类、地区与覆盖问题。", render_quality_center),
-    "人工审核": ("人工审核", "仅处理自动诊断无法可靠完成的关键异常。", render_review_center),
-    "个人设置": ("个人设置", "AI、搜索、档案、地图与本地运行设置。", render_settings_page),
+    "总览": (
+        "总览",
+        "实时掌握抓取位置、政策数据规模、来源门控与待补缺口。",
+        render_overview_page,
+    ),
+    "政策中心": (
+        "政策中心",
+        "在可审计的正式数据与只读 Curated 索引中筛选、查阅和导出政策。",
+        render_policy_center_page,
+    ),
+    "采集与处理": (
+        "采集与处理",
+        "区分实时抓取、后处理和严格完整性，监控 105 城历史回溯。",
+        render_collection_page,
+    ),
+    "数据质量与覆盖率": (
+        "数据质量与覆盖率",
+        "核查城市、年份、来源、正文、归档与缺口，不用单一黑盒分数掩盖问题。",
+        render_quality_page,
+    ),
+    "人工审核": (
+        "人工审核",
+        "集中处理来源冲突、字段缺失、低置信度和机器无法可靠裁决的异常。",
+        render_review_page,
+    ),
+    "系统与设置": (
+        "系统与设置",
+        "查看数据库、抓取器、自动化、Provider、归档和本机运行健康度。",
+        render_system_page,
+    ),
 }
 
-st.set_page_config(page_title="中国房地产政策数据库", layout="wide")
+st.set_page_config(
+    page_title="中国房地产政策数据库",
+    page_icon="🏛️",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 apply_academic_theme()
 render_sidebar_brand()
 
@@ -37,21 +68,15 @@ if needs_initial_setup(ROOT):
     render_setup_wizard(ROOT)
     st.stop()
 
-
-@st.cache_resource(show_spinner=False)
-def open_database() -> PolicyDB:
-    return PolicyDB.open(ROOT)
-
-
-page = st.sidebar.radio("页面", list(PAGES), key="main_navigation")
+settings = Settings.discover(ROOT)
+page = st.sidebar.radio("主导航", list(PAGES), key="main_navigation")
+st.sidebar.caption("实时页面每 20 秒局部刷新 · 仅监听本机")
 title, subtitle, renderer = PAGES[page]
 render_page_header(title, subtitle)
-db = open_database()
-if renderer in {render_policy_center, render_automation_center, render_review_center, render_settings_page}:
-    renderer(ROOT) if renderer is not render_policy_center else renderer(db, ROOT)
-else:
-    renderer(db)
 
-if st.session_state.get("developer_mode"):
-    with st.sidebar.expander("开发模式 · 旧版页面已隐藏"):
-        st.caption("旧分类、旧视图和 CLI 仍保留用于数据血缘与兼容，不作为普通用户导航。")
+try:
+    renderer(settings)
+except Exception as exc:
+    st.error("Dashboard 暂时无法读取当前数据快照。抓取进程不会因此中断，请稍后刷新。")
+    if st.session_state.get("developer_mode"):
+        st.exception(exc)

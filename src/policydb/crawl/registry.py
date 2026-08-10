@@ -21,10 +21,22 @@ from policydb.transform.normalization import stable_id
 def load_registry(settings: Settings | None = None) -> list[RegisteredSource]:
     settings = settings or Settings.discover()
     path = settings.root / "data" / "reference" / "source_registry.yaml"
-    if not path.exists():
-        return []
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    return [RegisteredSource.model_validate(item) for item in data.get("sources", [])]
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else {}
+    data = data or {}
+    records = data.get("sources", []) or []
+    if records:
+        return [RegisteredSource.model_validate(item) for item in records]
+
+    # A deliberately empty/unavailable YAML registry must not erase the
+    # already-materialized registry when a derived slot or candidate write
+    # rebuilds its counts.  The Parquet registry is the last committed
+    # materialized state and is read-only here; callers still use the normal
+    # atomic YAML writer for intentional registry changes.
+    materialized = settings.curated / "source_registry.parquet"
+    if materialized.exists():
+        frame = read_parquet_snapshot(materialized)
+        return [RegisteredSource.model_validate(item) for item in frame.to_dicts()]
+    return []
 
 
 def save_registry_atomic(
@@ -94,6 +106,7 @@ def materialize_registry_parquet(
             "seed_urls": pl.List(pl.String),
             "list_page_urls": pl.List(pl.String),
             "city_ids": pl.List(pl.String),
+            "coverage_city_ids": pl.List(pl.String),
             "province_codes": pl.List(pl.String),
             "redirect_chain": pl.List(pl.String),
             "coverage_start_date": pl.String,
