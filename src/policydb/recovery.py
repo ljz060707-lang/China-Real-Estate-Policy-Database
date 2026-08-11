@@ -16,7 +16,7 @@ from rapidfuzz.fuzz import ratio
 
 from policydb.crawl.checkpoint import append_unique
 from policydb.crawl.dedup import canonicalize_url, content_sha256
-from policydb.crawl.fetcher import RespectfulFetcher
+from policydb.crawl.fetcher import CrawlFetchError, RespectfulFetcher
 from policydb.crawl.parser import parse_document
 from policydb.parquet_store import atomic_write_parquet, read_parquet_snapshot
 from policydb.settings import Settings
@@ -457,7 +457,7 @@ def recover_review_sources(
                         ],
                     )
             details.append({"task_id": task_id, "record_id": record_id, **result})
-        except (OSError, PermissionError, ValueError, httpx.HTTPError) as exc:
+        except (OSError, PermissionError, ValueError, httpx.HTTPError, CrawlFetchError) as exc:
             outcomes["fetch_failed"] += 1
             details.append(
                 {"task_id": task_id, "record_id": record_id, "status": "fetch_failed", "error": type(exc).__name__}

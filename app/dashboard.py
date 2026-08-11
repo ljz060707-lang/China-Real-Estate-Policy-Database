@@ -20,6 +20,7 @@ from app.dashboard_pages import (  # noqa: E402
 )
 from app.setup_wizard import needs_initial_setup, render_setup_wizard  # noqa: E402
 from app.theme import apply_academic_theme, render_page_header, render_sidebar_brand  # noqa: E402
+from policydb.dashboard_logging import log_dashboard_exception  # noqa: E402
 from policydb.settings import Settings  # noqa: E402
 
 PAGES = {
@@ -77,6 +78,16 @@ render_page_header(title, subtitle)
 try:
     renderer(settings)
 except Exception as exc:
+    log_dashboard_exception(
+        settings,
+        "Dashboard renderer failed",
+        component="dashboard",
+        operation=page,
+        data_source=str(settings.database),
+        relation="dashboard_snapshot_or_renderer",
+        query=renderer.__name__,
+        error=exc,
+    )
     st.error("Dashboard 暂时无法读取当前数据快照。抓取进程不会因此中断，请稍后刷新。")
     if st.session_state.get("developer_mode"):
         st.exception(exc)

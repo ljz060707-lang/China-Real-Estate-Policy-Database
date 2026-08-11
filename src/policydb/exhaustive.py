@@ -336,10 +336,22 @@ class ExhaustiveCrawler:
                 str(item["shard_id"]): item
                 for item in read_parquet_snapshot(self.shards_path).iter_rows(named=True)
             }
-            rows = [
-                existing.get(str(item["shard_id"]), item)
-                for item in rows
-            ]
+            reused_rows: list[dict] = []
+            for item in rows:
+                previous = existing.get(str(item["shard_id"]))
+                if previous is None:
+                    reused_rows.append(item)
+                    continue
+                # A shard ID is scoped to its city, role, source and exact
+                # date window.  Preserve its completed evidence, but attach
+                # it to the current deterministic batch.  Keeping a stale
+                # batch_id here makes exhaustive-resume plan one batch and
+                # then filter every reusable pending shard out of execution.
+                reused = dict(previous)
+                reused["batch_id"] = batch_id
+                reused["source_verified"] = item["source_verified"]
+                reused_rows.append(reused)
+            rows = reused_rows
         frame = pl.DataFrame(rows, infer_schema_length=None)
         _upsert(frame, self.shards_path, "shard_id")
         self.rebuild_progress()

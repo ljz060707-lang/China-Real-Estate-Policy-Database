@@ -25,6 +25,40 @@ VIEW_ALIASES = [
 
 _CURATED_DATASET_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
+# Semantic identifiers must stay VARCHAR even when a NULL-only Parquet column
+# would otherwise be inferred as INTEGER/NULL by DuckDB.
+_ACTION_CENTER_RECORD_ID_DATASETS = frozenset(
+    {
+        "records",
+        "policy_actions",
+        "policy_classifications",
+        "record_geographies_normalized",
+        "record_jurisdictions",
+        "record_organizations",
+        "policy_entities",
+        "policy_publications",
+        "record_collections",
+        "policies",
+        "policy_files",
+        "policy_intensity_scores",
+        "record_terms",
+    }
+)
+_ACTION_CENTER_ACTION_ID_DATASETS = frozenset(
+    {"policy_actions", "policy_classifications", "policy_intensity_scores"}
+)
+
+
+def _curated_view_projection(dataset_name: str) -> str:
+    replacements: list[str] = []
+    if dataset_name in _ACTION_CENTER_RECORD_ID_DATASETS:
+        replacements.append("CAST(record_id AS VARCHAR) AS record_id")
+    if dataset_name in _ACTION_CENTER_ACTION_ID_DATASETS:
+        replacements.append("CAST(action_id AS VARCHAR) AS action_id")
+    if not replacements:
+        return "*"
+    return "* REPLACE(" + ", ".join(replacements) + ")"
+
 
 def curated_dataset_parquets(curated: Path) -> list[Path]:
     """Return formal dataset snapshots, excluding atomic-write artifacts.
@@ -146,7 +180,8 @@ def build_database(
             name = parquet.stem
             parquet_sql = str(parquet).replace("'", "''").replace("\\", "/")
             con.execute(
-                f"CREATE OR REPLACE VIEW {name} AS SELECT * FROM read_parquet('{parquet_sql}')"
+                f"CREATE OR REPLACE VIEW {name} AS SELECT {_curated_view_projection(name)} "
+                f"FROM read_parquet('{parquet_sql}')"
             )
         exhaustive_views = {
             "source_requirement_slots": "v_source_requirement_slots",
@@ -187,11 +222,11 @@ def build_database(
                 else ""
             )
             file_join = (
-                "LEFT JOIN (SELECT record_id,"
+                "LEFT JOIN (SELECT CAST(record_id AS VARCHAR) AS record_id,"
                 "bool_or(archive_status='archived') has_archived_file,"
                 "bool_or(content_type ILIKE '%pdf%' AND archive_status='archived') has_pdf,"
                 "min(archive_relative_path) FILTER (WHERE archive_status='archived') archive_relative_path "
-                "FROM policy_files GROUP BY record_id) f USING(record_id)"
+                "FROM policy_files GROUP BY CAST(record_id AS VARCHAR)) f USING(record_id)"
                 if (settings.curated / "policy_files.parquet").exists()
                 else ""
             )
@@ -215,9 +250,9 @@ def build_database(
             )
             legacy_cte = (
                 """, legacy AS (
-                    SELECT record_id,
+                    SELECT CAST(record_id AS VARCHAR) AS record_id,
                            string_agg(DISTINCT collection_name, '、') AS legacy_collection
-                    FROM record_collections GROUP BY record_id
+                    FROM record_collections GROUP BY CAST(record_id AS VARCHAR)
                 )"""
                 if (settings.curated / "record_collections.parquet").exists()
                 else """, legacy AS (
@@ -230,27 +265,28 @@ def build_database(
             con.execute(
                 """CREATE OR REPLACE VIEW v_policy_action_center AS
                 WITH geography AS (
-                    SELECT record_id,
+                    SELECT CAST(record_id AS VARCHAR) AS record_id,
                            min(province_name) AS province,
                            min(COALESCE(parent_city_name, city_name)) AS city,
                            min(county_name) AS district,
                            string_agg(DISTINCT geography_original, '、') AS applicable_jurisdiction
-                    FROM record_geographies_normalized GROUP BY record_id
+                    FROM record_geographies_normalized GROUP BY CAST(record_id AS VARCHAR)
                 ), issuers AS (
-                    SELECT ro.record_id,
+                    SELECT CAST(ro.record_id AS VARCHAR) AS record_id,
                            min(o.name_standardized) FILTER (WHERE ro.role IN ('issuer','co_issuer')) AS original_issuer,
                            string_agg(DISTINCT o.name_standardized, '、') FILTER (WHERE ro.role IN ('issuer','co_issuer')) AS publication_issuer
                     FROM record_organizations ro JOIN organizations o USING(organization_id)
-                    GROUP BY ro.record_id
+                    GROUP BY CAST(ro.record_id AS VARCHAR)
                 ), identities AS (
-                    SELECT pe.record_id,min(pe.policy_entity_id) AS policy_entity_id,
+                    SELECT CAST(pe.record_id AS VARCHAR) AS record_id,min(pe.policy_entity_id) AS policy_entity_id,
                            min(pe.entity_status) AS version_status,
                            min(c.cluster_id) AS duplicate_cluster_id
                     FROM policy_entities pe
-                    LEFT JOIN policy_publications pp USING(record_id)
+                    LEFT JOIN policy_publications pp
+                      ON CAST(pp.record_id AS VARCHAR)=CAST(pe.record_id AS VARCHAR)
                     LEFT JOIN policy_duplicate_clusters c
                       ON strpos(c.member_document_version_ids, pp.document_version_id) > 0
-                    GROUP BY pe.record_id
+                    GROUP BY CAST(pe.record_id AS VARCHAR)
                 )
                 """
                 + legacy_cte

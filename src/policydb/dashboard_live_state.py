@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import json
 import re
+import time
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from functools import lru_cache
@@ -21,6 +23,7 @@ import polars as pl
 import psutil
 
 from policydb.dashboard_formatting import parse_datetime
+from policydb.dashboard_logging import log_dashboard_exception
 from policydb.parquet_store import read_parquet_snapshot
 from policydb.settings import Settings
 
@@ -36,6 +39,18 @@ TERMINAL_SHARD_STATUSES = {
     "partial_temporal",
     "source_incomplete",
     "failed",
+}
+AUTOMATION_CRAWL_STAGES = {"CRAWL", "CRAWL_AGAIN", "RECOVER_MISSING"}
+AUTOMATION_STATUS_MAP = {
+    "READY": "READY_FOR_NEXT_STAGE",
+    "WORKER_STARTED": "RUNNING",
+    "WORKER_ACTIVE": "RUNNING",
+    "RUNNING": "RUNNING",
+    "WAIT_CURRENT_RUN": "WAIT_CURRENT_RUN",
+    "RETRY_WAIT": "RETRY_WAIT",
+    "BLOCKED": "BLOCKED",
+    "COMPLETE": "COMPLETE",
+    "READY_FOR_NEXT_STAGE": "READY_FOR_NEXT_STAGE",
 }
 
 
@@ -66,6 +81,10 @@ class DashboardSnapshot:
     archive: dict[str, Any] = field(default_factory=dict)
     frames: dict[str, pl.DataFrame] = field(default_factory=dict)
     availability: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+
+_LAST_GOOD_SNAPSHOTS: dict[str, DashboardSnapshot] = {}
+_READ_RETRY_DELAYS = (0.0, 0.2, 0.4)
 
 
 def _file_stamp(path: Path) -> tuple[int, int]:
@@ -112,11 +131,30 @@ def _read_frame(
     }
     if not stamp:
         return pl.DataFrame(), meta
-    try:
-        return _cached_parquet(str(path), stamp, size, columns).clone(), meta
-    except (OSError, pl.exceptions.PolarsError, ValueError) as exc:
-        meta.update(status="unavailable", error_type=type(exc).__name__)
-        return pl.DataFrame(), meta
+    last_error: BaseException | None = None
+    for attempt, delay in enumerate(_READ_RETRY_DELAYS):
+        if delay:
+            time.sleep(delay)
+        try:
+            frame = _cached_parquet(str(path), stamp, size, columns).clone()
+            return frame, meta
+        except Exception as exc:
+            last_error = exc
+            if attempt == len(_READ_RETRY_DELAYS) - 1:
+                break
+    assert last_error is not None
+    meta.update(status="unavailable", error_type=type(last_error).__name__)
+    log_dashboard_exception(
+        settings,
+        "Dashboard Parquet snapshot read failed after retries",
+        component="dashboard_snapshot",
+        operation="read_frame",
+        data_source=str(path),
+        relation=name,
+        query=f"read_parquet({name}.parquet)",
+        error=last_error,
+    )
+    return pl.DataFrame(), meta
 
 
 @lru_cache(maxsize=64)
@@ -331,16 +369,25 @@ def _database_health(
 def database_health(settings: Settings) -> dict[str, Any]:
     stamp, size = _file_stamp(settings.database)
     curated_stamp, curated_size = _file_stamp(settings.curated / "records.parquet")
-    health = dict(
-        _database_health(
-            str(settings.database),
-            stamp,
-            size,
-            str(settings.curated),
-            curated_stamp,
-            curated_size,
+    health: dict[str, Any] = {}
+    for _attempt, delay in enumerate(_READ_RETRY_DELAYS):
+        if delay:
+            time.sleep(delay)
+        health = dict(
+            _database_health(
+                str(settings.database),
+                stamp,
+                size,
+                str(settings.curated),
+                curated_stamp,
+                curated_size,
+            )
         )
-    )
+        if health.get("status") == "HEALTHY":
+            break
+        # Failure results must not remain cached across a transient index swap
+        # or a recovered read-only connection.
+        _database_health.cache_clear()
     health.update(
         path=str(settings.database),
         exists=settings.database.exists(),
@@ -468,6 +515,77 @@ def _event_window(events: pl.DataFrame, shards: pl.DataFrame, limit: int = 20) -
     )
 
 
+def _dashboard_runtime_status(master: dict[str, Any]) -> str:
+    raw = str(master.get("status") or "UNKNOWN")
+    if bool(master.get("current_run_active")):
+        return "WAIT_CURRENT_RUN"
+    return AUTOMATION_STATUS_MAP.get(raw, raw)
+
+
+def _automation_live_state(
+    master: dict[str, Any],
+    latest: dict[str, Any],
+    *,
+    now: datetime,
+    event_fresh_seconds: int = 180,
+) -> dict[str, Any]:
+    """Derive current position only when the authoritative state permits it."""
+
+    stage = str(master.get("stage") or "UNKNOWN")
+    master_heartbeat = parse_datetime(master.get("last_heartbeat_at"))
+    latest_event_at = parse_datetime(latest.get("created_at"))
+    event_age = (
+        (now - latest_event_at.astimezone(UTC)).total_seconds()
+        if latest_event_at
+        else None
+    )
+    event_fresh = event_age is not None and event_age <= event_fresh_seconds
+    current_position_available = stage in AUTOMATION_CRAWL_STAGES and event_fresh
+    position = latest if current_position_available else {}
+    heartbeat_age = (
+        (now - master_heartbeat.astimezone(UTC)).total_seconds()
+        if master_heartbeat
+        else None
+    )
+    heartbeat_status = (
+        "fresh"
+        if heartbeat_age is not None and heartbeat_age <= event_fresh_seconds
+        else "stale"
+        if heartbeat_age is not None
+        else "unavailable"
+    )
+    last_position = {
+        "batch_id": latest.get("batch_id"),
+        "shard_id": latest.get("shard_id"),
+        "city_id": latest.get("shard_city_id"),
+        "city_name": latest.get("shard_city_name"),
+        "source_role": latest.get("shard_source_role"),
+        "source_id": latest.get("shard_source_id"),
+        "start_date": latest.get("shard_start_date"),
+        "end_date": latest.get("shard_end_date"),
+        "stage": latest.get("stage"),
+        "message": latest.get("message"),
+        "event_at": latest.get("created_at"),
+        "fresh": event_fresh,
+    }
+    return {
+        "status": _dashboard_runtime_status(master),
+        "raw_status": master.get("status"),
+        "stage": stage,
+        "run_id": master.get("run_id"),
+        "automation_id": master.get("automation_id"),
+        "worker_pid": master.get("worker_pid"),
+        "next_stage": master.get("next_stage"),
+        "last_heartbeat_at": master.get("last_heartbeat_at"),
+        "heartbeat_age_seconds": heartbeat_age,
+        "heartbeat_status": heartbeat_status,
+        "event_fresh": event_fresh,
+        "current_position_available": current_position_available,
+        "current_position": position,
+        "last_crawl_position": last_position,
+    }
+
+
 def _metric(
     label: str,
     numerator: int | float | None,
@@ -559,7 +677,19 @@ def _document_quality(records: pl.DataFrame) -> dict[str, int]:
     return result
 
 
-def load_dashboard_snapshot(
+def _available_frame_count(
+    frames: dict[str, pl.DataFrame],
+    availability: dict[str, dict[str, Any]],
+    name: str,
+) -> int | None:
+    """Return a count only when the corresponding snapshot was read successfully."""
+
+    if (availability.get(name) or {}).get("status") != "available":
+        return None
+    return frames.get(name, pl.DataFrame()).height
+
+
+def _build_dashboard_snapshot(
     settings: Settings | None = None,
     *,
     event_limit: int = 20,
@@ -669,20 +799,24 @@ def load_dashboard_snapshot(
     database = database_health(settings)
     log_progress = _backfill_log_progress(settings)
     master = automation["MASTER_STATE"]
+    live_state = _automation_live_state(master, latest, now=now)
+    current_position = live_state["current_position"]
     crawler_processes = process_state["crawler_processes"]
-    crawler_running = bool(crawler_processes)
+    crawler_running = bool(crawler_processes) or live_state["status"] == "RUNNING"
     registry = frames["source_registry"]
     current_source_name = None
     if (
-        latest.get("shard_source_id")
+        current_position.get("shard_source_id")
         and not registry.is_empty()
         and {"source_id", "source_name"}.issubset(registry.columns)
     ):
-        matched_source = registry.filter(pl.col("source_id") == latest["shard_source_id"])
+        matched_source = registry.filter(
+            pl.col("source_id") == current_position["shard_source_id"]
+        )
         if matched_source.height:
             current_source_name = matched_source.tail(1)[0, "source_name"]
 
-    current_batch = str(latest.get("batch_id") or "")
+    current_batch = str(current_position.get("batch_id") or "")
     batch_shards = (
         shards.filter(pl.col("batch_id") == current_batch)
         if current_batch and not shards.is_empty() and "batch_id" in shards.columns
@@ -704,24 +838,16 @@ def load_dashboard_snapshot(
         completed_cities = int(log_progress["completed_cities"])
         city_denominator = int(log_progress["city_total"])
 
-    latest_time = parse_datetime(latest.get("created_at"))
-    heartbeat_age = (now - latest_time.astimezone(UTC)).total_seconds() if latest_time else None
-    heartbeat_status = (
-        "fresh"
-        if heartbeat_age is not None and heartbeat_age <= 180
-        else "stale"
-        if heartbeat_age is not None
-        else "unavailable"
-    )
-
     snapshot.system = {
         "database": database,
         "processes": process_state,
         "automation": automation,
-        "automation_status": master.get("status"),
-        "automation_stage": master.get("stage"),
+        "automation_status": live_state["status"],
+        "automation_raw_status": live_state["raw_status"],
+        "automation_stage": live_state["stage"],
         "automation_id": master.get("automation_id"),
         "automation_heartbeat_at": master.get("last_heartbeat_at"),
+        "automation_live_state": live_state,
         "disk": master.get("disk") or {},
         "data_root_exists": settings.data_root.exists(),
         "curated_root_exists": settings.curated.exists(),
@@ -730,28 +856,33 @@ def load_dashboard_snapshot(
     }
     snapshot.crawler = {
         "running": crawler_running,
-        "status": "RUNNING" if crawler_running else (master.get("status") or "NOT_STARTED"),
-        "stage": latest.get("stage") or master.get("stage"),
-        "batch_id": latest.get("batch_id"),
-        "shard_id": latest.get("shard_id"),
-        "city_id": latest.get("shard_city_id"),
-        "city_name": latest.get("shard_city_name"),
-        "source_role": latest.get("shard_source_role"),
-        "source_id": latest.get("shard_source_id"),
+        "status": live_state["status"],
+        "raw_status": live_state["raw_status"],
+        "stage": live_state["stage"],
+        "run_id": live_state["run_id"],
+        "automation_id": live_state["automation_id"],
+        "batch_id": current_position.get("batch_id"),
+        "shard_id": current_position.get("shard_id"),
+        "city_id": current_position.get("shard_city_id"),
+        "city_name": current_position.get("shard_city_name"),
+        "source_role": current_position.get("shard_source_role"),
+        "source_id": current_position.get("shard_source_id"),
         "source_name": current_source_name,
-        "start_date": latest.get("shard_start_date"),
-        "end_date": latest.get("shard_end_date"),
-        "message": latest.get("message"),
+        "start_date": current_position.get("shard_start_date"),
+        "end_date": current_position.get("shard_end_date"),
+        "message": current_position.get("message"),
         "latest_event_at": latest.get("created_at"),
-        "last_heartbeat_at": latest.get("created_at") or master.get("last_heartbeat_at"),
-        "heartbeat_age_seconds": heartbeat_age,
-        "heartbeat_status": heartbeat_status,
-        "worker_pid": crawler_processes[-1]["pid"]
-        if crawler_processes
-        else master.get("worker_pid"),
+        "last_heartbeat_at": live_state["last_heartbeat_at"],
+        "heartbeat_age_seconds": live_state["heartbeat_age_seconds"],
+        "heartbeat_status": live_state["heartbeat_status"],
+        "event_fresh": live_state["event_fresh"],
+        "current_position_available": live_state["current_position_available"],
+        "worker_pid": live_state["worker_pid"]
+        or (crawler_processes[-1]["pid"] if crawler_processes else None),
         "runner_pid": process_state["runner_pid"],
         "started_at": crawler_processes[0]["started_at"] if crawler_processes else None,
-        "next_stage": master.get("next_stage"),
+        "next_stage": live_state["next_stage"],
+        "last_crawl_position": live_state["last_crawl_position"],
         "processed_shards": processed_batch,
         "planned_shards": planned_batch,
         "total_fetched_requests": int(shards.get_column("fetched").sum() or 0)
@@ -780,6 +911,7 @@ def load_dashboard_snapshot(
         else None
     )
     gaps = frames["coverage_gaps"]
+    gaps_available = (availability.get("coverage_gaps") or {}).get("status") == "available"
     open_gaps = (
         _count(
             gaps,
@@ -788,8 +920,8 @@ def load_dashboard_snapshot(
             .str.to_lowercase()
             .is_in(["resolved", "closed", "ignored"]),
         )
-        if not gaps.is_empty() and "status" in gaps.columns
-        else 0
+        if gaps_available and not gaps.is_empty() and "status" in gaps.columns
+        else 0 if gaps_available else None
     )
     critical_gaps = (
         _count(
@@ -800,8 +932,8 @@ def load_dashboard_snapshot(
             .str.to_lowercase()
             .is_in(["resolved", "closed", "ignored"]),
         )
-        if not gaps.is_empty() and {"severity", "status"}.issubset(gaps.columns)
-        else 0
+        if gaps_available and not gaps.is_empty() and {"severity", "status"}.issubset(gaps.columns)
+        else 0 if gaps_available else None
     )
     metrics = {
         "city_live_progress": _metric(
@@ -863,15 +995,18 @@ def load_dashboard_snapshot(
     }
 
     records = frames["records"]
-    versions = frames["policy_document_versions"]
     geographies = frames["record_geographies_normalized"]
+    records_available = (availability.get("records") or {}).get("status") == "available"
+    geography_available = (
+        (availability.get("record_geographies_normalized") or {}).get("status") == "available"
+    )
     cities_with_documents = (
         geographies.join(records.select("record_id").unique(), on="record_id", how="inner")
         .get_column("city_id")
         .drop_nulls()
         .n_unique()
-        if not records.is_empty() and not geographies.is_empty()
-        else 0
+        if records_available and geography_available and not records.is_empty() and not geographies.is_empty()
+        else 0 if records_available and geography_available else None
     )
     earliest = (
         records.get_column("record_date").drop_nulls().min()
@@ -884,9 +1019,14 @@ def load_dashboard_snapshot(
         else None
     )
     snapshot.documents = {
-        "records": records.height,
-        "document_versions": versions.height,
-        "cities_with_documents": int(cities_with_documents),
+        "records": _available_frame_count(frames, availability, "records"),
+        "document_versions": _available_frame_count(
+            frames, availability, "policy_document_versions"
+        ),
+        "crawl_items": _available_frame_count(frames, availability, "crawl_items"),
+        "cities_with_documents": (
+            int(cities_with_documents) if cities_with_documents is not None else None
+        ),
         "earliest_date": earliest,
         "latest_date": latest_date,
         "last_updated_at": availability["records"].get("updated_at"),
@@ -973,11 +1113,95 @@ def load_dashboard_snapshot(
     return snapshot
 
 
+def _snapshot_cache_key(settings: Settings) -> str:
+    return f"{settings.database.resolve()}::{settings.curated.resolve()}"
+
+
+def _last_good_snapshot(settings: Settings) -> DashboardSnapshot | None:
+    cached = _LAST_GOOD_SNAPSHOTS.get(_snapshot_cache_key(settings))
+    return deepcopy(cached) if cached is not None else None
+
+
+def _serve_last_good_snapshot(
+    settings: Settings,
+    *,
+    reason: str,
+) -> DashboardSnapshot | None:
+    snapshot = _last_good_snapshot(settings)
+    if snapshot is None:
+        return None
+    snapshot.system = dict(snapshot.system)
+    snapshot.system.update(
+        snapshot_status="LAST_GOOD",
+        snapshot_warning="数据正在更新，当前展示上一份成功快照。",
+        snapshot_served_at=datetime.now(UTC).isoformat(),
+        snapshot_failure_reason=reason,
+    )
+    snapshot.availability = dict(snapshot.availability)
+    snapshot.availability["snapshot"] = {
+        "status": "last_good",
+        "error_type": reason,
+        "updated_at": snapshot.generated_at,
+    }
+    return snapshot
+
+
+def load_dashboard_snapshot(
+    settings: Settings | None = None,
+    *,
+    event_limit: int = 20,
+) -> DashboardSnapshot:
+    """Build a read-only snapshot with retries and a last-known-good fallback."""
+
+    settings = settings or Settings.discover()
+    last_error: BaseException | None = None
+    for attempt, delay in enumerate(_READ_RETRY_DELAYS):
+        if delay:
+            time.sleep(delay)
+        try:
+            snapshot = _build_dashboard_snapshot(settings, event_limit=event_limit)
+            records_meta = snapshot.availability.get("records") or {}
+            if records_meta.get("status") == "available":
+                snapshot.system = dict(snapshot.system)
+                snapshot.system["snapshot_status"] = "FRESH"
+                _LAST_GOOD_SNAPSHOTS[_snapshot_cache_key(settings)] = deepcopy(snapshot)
+                return snapshot
+            fallback = _serve_last_good_snapshot(
+                settings,
+                reason="records_snapshot_unavailable",
+            )
+            if fallback is not None:
+                return fallback
+            return snapshot
+        except Exception as exc:
+            last_error = exc
+            if attempt == len(_READ_RETRY_DELAYS) - 1:
+                break
+            continue
+
+    assert last_error is not None
+    log_dashboard_exception(
+        settings,
+        "Dashboard snapshot build failed after retries",
+        component="dashboard_snapshot",
+        operation="build_snapshot",
+        data_source=str(settings.database),
+        relation="dashboard_snapshot",
+        query="load_dashboard_snapshot",
+        error=last_error,
+    )
+    fallback = _serve_last_good_snapshot(settings, reason=type(last_error).__name__)
+    if fallback is not None:
+        return fallback
+    raise last_error
+
+
 def clear_dashboard_caches() -> None:
     _cached_parquet.cache_clear()
     _cached_json.cache_clear()
     _database_health.cache_clear()
     _cached_backfill_log.cache_clear()
+    _LAST_GOOD_SNAPSHOTS.clear()
 
 
 __all__ = [

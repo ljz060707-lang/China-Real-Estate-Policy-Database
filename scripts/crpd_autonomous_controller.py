@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import polars as pl
 import psutil
 from filelock import FileLock, Timeout
 
@@ -46,6 +47,16 @@ STAGES = (
     "COMPLETE",
 )
 AI_STAGES = {"AI_CLASSIFY", "AI_VERIFY"}
+CRAWL_STAGES = {"CRAWL", "CRAWL_AGAIN", "RECOVER_MISSING"}
+RETRYABLE_SHARD_STATUSES = {
+    "pending",
+    "failed",
+    "partial_network",
+    "partial_parser",
+    "partial_cap",
+}
+ACTIVE_SHARD_STATUSES = {"running", "fetching", "discovering"}
+SOURCE_GAP_SHARD_STATUSES = {"source_incomplete"}
 BLOCKING_TERMS = (
     "BUDGET_LEDGER_INCONSISTENT",
     "CHECKPOINT_CONFLICT",
@@ -280,6 +291,15 @@ def default_config(project: Path, data: Path) -> dict[str, Any]:
         "start_date": "2018-01-01",
         "end_date": "today",
         "max_recovery_fetches": 20,
+        "crawl": {
+            "script": str(project / "scripts" / "CRPD_Audited_Full_Backfill.ps1"),
+            "max_pages_per_source": 3000,
+            "max_candidates_per_shard": 100000,
+            "max_fetches_per_shard": 100000,
+            "network_retry_passes": 2,
+            "existing_sources_only": True,
+            "skip_ai": True,
+        },
         "pdf_limit": 30,
         "disk": {"warn_free_gb": 50, "stop_free_gb": 20},
         "paths": {
@@ -422,7 +442,7 @@ def transition(paths: Paths, run: str, stage: str, status: str, reason: str, **e
     )
 
 
-def current_log_status(paths: Paths) -> dict[str, Any]:
+def current_log_status(paths: Paths, *, active: bool = False) -> dict[str, Any]:
     root = paths.data / "logs" / "audited_full_backfill"
     directories = sorted((p for p in root.glob("*") if p.is_dir()), key=lambda p: p.name, reverse=True)
     if not directories:
@@ -438,6 +458,15 @@ def current_log_status(paths: Paths) -> dict[str, Any]:
     except OSError as exc:
         return {"exists": True, "safe_ended": False, "reason": f"MASTER_LOG_READ_ERROR:{type(exc).__name__}"}
     marker = "补扫流程结束" in tail or "backfill complete" in tail.lower() or "full backfill complete" in tail.lower()
+    failure_evidence = [
+        redact(line.strip())
+        for line in tail.splitlines()
+        if re.search(
+            r"(?:阶段失败|exit\s*=\s*[1-9]|traceback|fatal|unhandled|process.+(?:failed|exit))",
+            line,
+            flags=re.IGNORECASE,
+        )
+    ][-8:]
     checkpoint = any(
         path.is_file() and path.stat().st_size > 0
         for path in (
@@ -445,14 +474,35 @@ def current_log_status(paths: Paths) -> dict[str, Any]:
             paths.data / "curated" / "crawl_items.parquet",
         )
     ) or any(path.is_file() and path.stat().st_size > 0 for path in (paths.data / "checkpoints").glob("*") if (paths.data / "checkpoints").exists())
+    if active:
+        handoff_status = "ACTIVE"
+        handoff_reason = "CURRENT_RUN_ACTIVE"
+        handoff_ready = False
+    elif marker and checkpoint:
+        handoff_status = "SUCCESSFUL_END"
+        handoff_reason = "RUN_SUMMARY_AND_CHECKPOINT_READY"
+        handoff_ready = True
+    elif failure_evidence:
+        # A legacy runner can exit without writing its success marker.  Its
+        # explicit stage failure evidence is still enough to establish a safe
+        # hand-off: retry from the durable checkpoint, never as a success.
+        handoff_status = "TERMINAL_FAILED"
+        handoff_reason = "LEGACY_RUN_TERMINAL_FAILED"
+        handoff_ready = True
+    else:
+        handoff_status = "TRUE_SUMMARY_PENDING"
+        handoff_reason = "RUN_SUMMARY_PENDING"
+        handoff_ready = False
     return {
         "exists": True,
-        "safe_ended": bool(marker and checkpoint),
-        "reason": "RUN_SUMMARY_AND_CHECKPOINT_READY" if marker and checkpoint else "RUN_SUMMARY_PENDING",
+        "status": handoff_status,
+        "safe_ended": handoff_ready,
+        "reason": handoff_reason,
         "run_dir": str(latest),
         "master_log": str(master),
         "summary_marker": marker,
         "checkpoint_ready": checkpoint,
+        "failure_evidence": failure_evidence,
         "last_write_at": dt.datetime.fromtimestamp(master.stat().st_mtime, UTC).isoformat(),
     }
 
@@ -497,6 +547,183 @@ def coverage_summary(paths: Paths) -> dict[str, Any]:
     return {"status": "UNKNOWN", "saturated": False, "source": None, "updated_at": utc_now()}
 
 
+def crawl_shard_summary(paths: Paths) -> dict[str, Any]:
+    """Read the durable crawl checkpoint without changing it.
+
+    A zero-row recovery command is only a legal no-op when this audit proves
+    there is no runnable or retryable work left.  Missing or unreadable
+    checkpoints are therefore explicit blockers, never an empty success.
+    """
+
+    path = paths.data / "curated" / "crawl_shards.parquet"
+    if not path.is_file():
+        return {
+            "status": "MISSING",
+            "path": str(path),
+            "rows": None,
+            "counts": {},
+            "pending": None,
+            "retryable": None,
+            "active": None,
+            "source_gaps": None,
+            "actionable": None,
+        }
+    try:
+        frame = pl.read_parquet(path)
+        if "status" not in frame.columns:
+            raise ValueError("crawl_shards checkpoint has no status column")
+        counts = {
+            str(status): int(count)
+            for status, count in frame.group_by("status").len().iter_rows()
+        }
+    except (OSError, pl.exceptions.PolarsError, ValueError) as exc:
+        return {
+            "status": "UNREADABLE",
+            "path": str(path),
+            "rows": None,
+            "counts": {},
+            "pending": None,
+            "retryable": None,
+            "active": None,
+            "source_gaps": None,
+            "actionable": None,
+            "error_type": type(exc).__name__,
+        }
+    pending = int(counts.get("pending", 0))
+    retryable = sum(int(counts.get(status, 0)) for status in RETRYABLE_SHARD_STATUSES - {"pending"})
+    active = sum(int(counts.get(status, 0)) for status in ACTIVE_SHARD_STATUSES)
+    source_gaps = sum(int(counts.get(status, 0)) for status in SOURCE_GAP_SHARD_STATUSES)
+    return {
+        "status": "AVAILABLE",
+        "path": str(path),
+        "rows": frame.height,
+        "counts": counts,
+        "pending": pending,
+        "retryable": retryable,
+        "active": active,
+        "source_gaps": source_gaps,
+        "actionable": pending + retryable + active,
+    }
+
+
+def _progress_snapshot(paths: Paths) -> dict[str, Any]:
+    path = paths.data / "curated" / "pipeline_progress_events.parquet"
+    if not path.is_file():
+        return {"status": "MISSING", "rows": None, "latest_created_at": None}
+    try:
+        frame = pl.read_parquet(path)
+        latest = None
+        if "created_at" in frame.columns and frame.height:
+            latest = str(frame.select(pl.col("created_at").cast(pl.String).max()).item())
+        return {"status": "AVAILABLE", "rows": frame.height, "latest_created_at": latest}
+    except (OSError, pl.exceptions.PolarsError, ValueError) as exc:
+        return {
+            "status": "UNREADABLE",
+            "rows": None,
+            "latest_created_at": None,
+            "error_type": type(exc).__name__,
+        }
+
+
+def _stage_json_payloads(paths: Paths, run: str, stage: str) -> list[dict[str, Any]]:
+    log_path = paths.supervisor_logs / f"{run}_{stage}.log"
+    try:
+        text = log_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    decoder = json.JSONDecoder()
+    payloads: list[dict[str, Any]] = []
+    for match in re.finditer(r"\{", text):
+        try:
+            value, _ = decoder.raw_decode(text[match.start() :])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            payloads.append(value)
+    return payloads
+
+
+def _last_metrics_payload(paths: Paths, run: str, stage: str) -> dict[str, Any]:
+    for payload in reversed(_stage_json_payloads(paths, run, stage)):
+        metrics = payload.get("metrics")
+        if isinstance(metrics, dict):
+            return {
+                "metrics": metrics,
+                "warning": bool(payload.get("warning")),
+                "job_id": payload.get("job_id"),
+            }
+    return {"metrics": {}, "warning": False, "job_id": None}
+
+
+def _is_full_backfill_command(argv: list[str]) -> bool:
+    return any("crpd_audited_full_backfill.ps1" in str(value).lower() for value in argv)
+
+
+def crawl_stage_semantics(
+    paths: Paths,
+    *,
+    run: str,
+    stage: str,
+    command_stage: str,
+    argv: list[str],
+    code: int,
+    before_shards: dict[str, Any],
+    before_progress: dict[str, Any],
+) -> tuple[bool, str, dict[str, Any]]:
+    """Classify crawl command completion from durable evidence, not exit code."""
+
+    after_shards = crawl_shard_summary(paths)
+    after_progress = _progress_snapshot(paths)
+    metrics_payload = _last_metrics_payload(paths, run, command_stage)
+    before_rows = before_progress.get("rows")
+    after_rows = after_progress.get("rows")
+    new_events = (
+        max(0, int(after_rows) - int(before_rows))
+        if before_rows is not None and after_rows is not None
+        else None
+    )
+    details = {
+        "stage": stage,
+        "command_stage": command_stage,
+        "exit_code": code,
+        "full_backfill_command": _is_full_backfill_command(argv),
+        "metrics_payload": metrics_payload,
+        "shards_before": before_shards,
+        "shards_after": after_shards,
+        "progress_before": before_progress,
+        "progress_after": after_progress,
+        "new_progress_events": new_events,
+        "coverage": coverage_summary(paths),
+    }
+    if code != 0:
+        return False, f"COMMAND_FAILED:{code}", details
+    if after_shards["status"] in {"MISSING", "UNREADABLE"}:
+        return False, f"CRAWL_CHECKPOINT_{after_shards['status']}", details
+
+    metrics = metrics_payload["metrics"]
+    if command_stage.lower().startswith("recover_missing"):
+        zero_recovery = bool(metrics_payload["warning"]) and all(
+            int(metrics.get(key, 0) or 0) == 0
+            for key in ("source_count", "candidate_count", "fetched", "failed", "document_versions")
+        )
+        unresolved = int(after_shards["actionable"] or 0) + int(after_shards["source_gaps"] or 0)
+        if zero_recovery:
+            if unresolved:
+                return False, "NO_PROGRESS_PENDING_WORK", details
+            if details["coverage"].get("status") != "SATURATED":
+                return False, "NO_PROGRESS_COVERAGE_UNKNOWN", details
+            return True, "NO_WORK_REQUIRED", details
+        return True, "RECOVERY_COMPLETED", details
+
+    if new_events and new_events > 0:
+        if int(after_shards["actionable"] or 0) > 0:
+            return True, "CRAWL_COMPLETED_WITH_REMAINING_WORK", details
+        return True, "CRAWL_COMPLETED", details
+    if int(after_shards["actionable"] or 0) == 0 and int(after_shards["source_gaps"] or 0) == 0:
+        return True, "NO_PENDING_SHARDS", details
+    return False, "NO_PROGRESS_PENDING_WORK", details
+
+
 def command_environment(paths: Paths) -> dict[str, str]:
     env = os.environ.copy()
     env.update(
@@ -522,8 +749,44 @@ def command_specs(paths: Paths, config: dict[str, Any], stage: str, run: str) ->
         raise FileNotFoundError("fixed project virtual environment is incomplete")
     recovery = str(int(config.get("max_recovery_fetches", 20)))
     pdf_limit = str(int(config.get("pdf_limit", 30)))
-    if stage in {"CRAWL", "RECOVER_MISSING", "CRAWL_AGAIN"}:
+    if stage == "RECOVER_MISSING":
         return [[str(policydb), "crawl", "recover-missing", "--max-fetches", recovery]]
+    if stage in {"CRAWL", "CRAWL_AGAIN"}:
+        crawl = config.get("crawl") if isinstance(config.get("crawl"), dict) else {}
+        script = Path(str(crawl.get("script") or paths.project / "scripts" / "CRPD_Audited_Full_Backfill.ps1"))
+        if not script.is_file():
+            raise FileNotFoundError(f"autonomous crawl script is missing: {script}")
+        command = [
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(script),
+            "-ProjectRoot",
+            str(paths.project),
+            "-DataRoot",
+            str(paths.data),
+            "-StartDate",
+            str(crawl.get("start_date") or config.get("start_date") or "2018-01-01"),
+            "-EndDate",
+            str(crawl.get("end_date") or config.get("end_date") or "today"),
+            "-MaxPagesPerSource",
+            str(int(crawl.get("max_pages_per_source", 3000))),
+            "-MaxCandidatesPerShard",
+            str(int(crawl.get("max_candidates_per_shard", 100000))),
+            "-MaxFetchesPerShard",
+            str(int(crawl.get("max_fetches_per_shard", 100000))),
+            "-NetworkRetryPasses",
+            str(int(crawl.get("network_retry_passes", 2))),
+        ]
+        if crawl.get("existing_sources_only", True):
+            command.append("-ExistingSourcesOnly")
+        if crawl.get("skip_ai", True):
+            command.append("-SkipAI")
+        return [command]
     if stage == "NORMALIZE":
         return [[str(policydb), "build-database"], [str(policydb), "validate", "--group", "all"]]
     if stage == "DEDUP":
@@ -595,13 +858,39 @@ def run_command(paths: Paths, argv: list[str], run: str, stage: str) -> int:
 
     reader = threading.Thread(target=drain, name=f"crpd-{stage}-reader", daemon=True)
     reader.start()
+    last_heartbeat = 0.0
+
+    def record_output(item: str) -> None:
+        nonlocal last_heartbeat
+        log_line(log_path, item)
+        now = time.monotonic()
+        if now - last_heartbeat >= 10:
+            runtime_stage = next(
+                (
+                    candidate
+                    for candidate in ("CRAWL_AGAIN", "RECOVER_MISSING", "CRAWL")
+                    if stage.startswith(candidate)
+                ),
+                stage.split("_", 1)[0],
+            )
+            state_update(
+                paths,
+                {
+                    "status": "RUNNING",
+                    "stage": runtime_stage,
+                    "run_id": run,
+                    "last_reason": "COMMAND_HEARTBEAT",
+                },
+            )
+            last_heartbeat = now
+
     while process.poll() is None or not output_queue.empty():
         try:
             while True:
                 item = output_queue.get_nowait()
                 if item is None:
                     break
-                log_line(log_path, item)
+                record_output(item)
         except queue.Empty:
             pass
         time.sleep(2)
@@ -611,7 +900,7 @@ def run_command(paths: Paths, argv: list[str], run: str, stage: str) -> int:
             item = output_queue.get_nowait()
             if item is None:
                 continue
-            log_line(log_path, item)
+            record_output(item)
     except queue.Empty:
         pass
     code = int(process.returncode or 0)
@@ -631,21 +920,85 @@ def stage_output_has_blocker(paths: Paths, run: str, stage: str) -> tuple[bool, 
     return False, None
 
 
+def stage_has_structured_validation_warning(paths: Paths, run: str, stage: str) -> bool:
+    """Recognize a completed validation report with data-quality gaps.
+
+    ``policydb validate --group all`` uses exit code 1 when the current
+    dataset is incomplete.  A parseable report is still useful evidence for
+    the crawl and must not be confused with a command crash or storage error.
+    """
+
+    log_path = paths.supervisor_logs / f"{run}_{stage}.log"
+    try:
+        text = log_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    decoder = json.JSONDecoder()
+    for match in re.finditer(r"(?m)^\{", text):
+        try:
+            report, _ = decoder.raw_decode(text[match.start() :])
+        except json.JSONDecodeError:
+            continue
+        if (
+            report.get("validation_group") == "all"
+            and report.get("passed") is False
+            and isinstance(report.get("v2_group_results"), dict)
+            and "record_count" in report
+        ):
+            return True
+    return False
+
+
 def run_stage(paths: Paths, config: dict[str, Any], stage: str, run: str) -> tuple[bool, str]:
     specs = command_specs(paths, config, stage, run)
     for index, argv in enumerate(specs, 1):
+        before_shards = crawl_shard_summary(paths) if stage in CRAWL_STAGES else {}
+        before_progress = _progress_snapshot(paths) if stage in CRAWL_STAGES else {}
         code = run_command(paths, argv, run, f"{stage}_{index}")
+        if stage in CRAWL_STAGES:
+            command_stage = f"{stage}_{index}"
+            ok, reason, details = crawl_stage_semantics(
+                paths,
+                run=run,
+                stage=stage,
+                command_stage=command_stage,
+                argv=argv,
+                code=code,
+                before_shards=before_shards,
+                before_progress=before_progress,
+            )
+            log_line(
+                paths.supervisor_logs / f"{run}_{command_stage}.log",
+                f"[{utc_now()}] CRAWL_SEMANTIC {json.dumps(details, ensure_ascii=False, default=str)}",
+            )
+            state_update(paths, {"last_crawl_audit": details, "last_reason": reason})
+            if not ok:
+                blocker, blocker_reason = stage_output_has_blocker(paths, run, command_stage)
+                if blocker:
+                    return False, f"BLOCKING:{blocker_reason}"
+                return False, reason
+            continue
         if code != 0:
             blocker, reason = stage_output_has_blocker(paths, run, f"{stage}_{index}")
             if blocker:
                 return False, f"BLOCKING:{reason}"
+            if (
+                stage == "NORMALIZE"
+                and index == 2
+                and stage_has_structured_validation_warning(paths, run, f"{stage}_{index}")
+            ):
+                return True, "VALIDATION_WARNINGS"
             if stage in AI_STAGES:
                 return True, "DEFERRED_AI_QUEUE"
             return False, f"COMMAND_FAILED:{code}"
     return True, "SUCCESS"
 
 
-def next_stage_after(stage: str, saturated: bool) -> str:
+def next_stage_after(
+    stage: str,
+    saturated: bool,
+    crawl_work_pending: bool | None = None,
+) -> str:
     if stage == "CRAWL":
         return "NORMALIZE"
     if stage == "NORMALIZE":
@@ -659,7 +1012,11 @@ def next_stage_after(stage: str, saturated: bool) -> str:
     if stage == "ARCHIVE":
         return "COVERAGE_AUDIT"
     if stage == "COVERAGE_AUDIT":
-        return "PDF_STAGE" if saturated else "RECOVER_MISSING"
+        if saturated:
+            return "PDF_STAGE"
+        if crawl_work_pending is True:
+            return "CRAWL_AGAIN"
+        return "RECOVER_MISSING"
     if stage == "RECOVER_MISSING":
         return "CRAWL_AGAIN"
     if stage == "CRAWL_AGAIN":
@@ -702,7 +1059,7 @@ def supervisor_decision(paths: Paths, config: dict[str, Any], dry_run: bool = Fa
         state_update(paths, {"status": "STOPPED", "stage": "WAIT_CURRENT_RUN", "last_reason": "STOP_FILE_PRESENT", "disk": disk})
         return 0
     current_active = bool(processes["current_backfill"] or processes["legacy_supervisor"] or processes["external_writers"])
-    handoff = current_log_status(paths)
+    handoff = current_log_status(paths, active=current_active)
     report = {
         "automation_id": state.get("automation_id"),
         "checked_at": utc_now(),
@@ -751,7 +1108,30 @@ def supervisor_decision(paths: Paths, config: dict[str, Any], dry_run: bool = Fa
             stage = str(latest.get("next_stage") or latest.get("stage") or "CRAWL")
             if stage == "WAIT_CURRENT_RUN":
                 stage = "CRAWL"
-            worker_run = str(latest.get("run_id") or run_id())
+            if stage == "RECOVER_MISSING":
+                shard_audit = crawl_shard_summary(paths)
+                if shard_audit.get("actionable"):
+                    stage = "CRAWL_AGAIN"
+                    append_jsonl(
+                        paths.history,
+                        {
+                            "event": "stage_route",
+                            "run_id": str(latest.get("run_id") or ""),
+                            "from_stage": "RECOVER_MISSING",
+                            "to_stage": "CRAWL_AGAIN",
+                            "reason_code": "PENDING_SHARDS_REQUIRE_REAL_CRAWL",
+                            "timestamp": utc_now(),
+                            "shard_audit": shard_audit,
+                        },
+                    )
+            # A failed handoff is a completed attempt, not a resumable stage
+            # within the same run.  Reusing its identifier would overwrite the
+            # failed run's current state and make recovery/audit ambiguous.
+            worker_run = (
+                run_id()
+                if handoff.get("status") == "TERMINAL_FAILED"
+                else str(latest.get("run_id") or run_id())
+            )
             worker = paths.project / ".venv" / "Scripts" / "python.exe"
             controller = Path(__file__).resolve()
             log_path = paths.supervisor_logs / f"{worker_run}_launcher.log"
@@ -760,7 +1140,7 @@ def supervisor_decision(paths: Paths, config: dict[str, Any], dry_run: bool = Fa
             flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
             child = subprocess.Popen(command, cwd=str(paths.project), env=command_environment(paths), stdout=handle, stderr=subprocess.STDOUT, creationflags=flags)
             handle.close()
-            state_update(paths, {"status": "WORKER_STARTED", "stage": stage, "next_stage": stage, "run_id": worker_run, "worker_pid": child.pid, "current_run_active": False, "last_reason": "WORKER_STARTED", "disk": disk})
+            state_update(paths, {"status": "WORKER_STARTED", "stage": stage, "next_stage": stage, "run_id": worker_run, "worker_pid": child.pid, "current_run_active": False, "last_reason": "WORKER_STARTED", "last_error": None, "disk": disk})
             append_jsonl(paths.history, {"event": "worker_started", "run_id": worker_run, "stage": stage, "pid": child.pid, "timestamp": utc_now(), "command_sha256": sha256_text("\0".join(command))})
     except Timeout:
         state_update(paths, {"status": "WORKER_ACTIVE", "last_reason": "AUTOMATION_LOCK_HELD"})
@@ -807,7 +1187,13 @@ def worker_run(paths: Paths, config: dict[str, Any], stage: str, run: str) -> in
         else:
             coverage = read_json(paths.automation / "COVERAGE_STATE.json", {"saturated": False})
         saturated = bool(coverage.get("saturated") is True)
-        next_stage = next_stage_after(stage, saturated)
+        shard_audit = crawl_shard_summary(paths)
+        crawl_work_pending = (
+            bool(shard_audit.get("actionable"))
+            if shard_audit.get("actionable") is not None
+            else None
+        )
+        next_stage = next_stage_after(stage, saturated, crawl_work_pending)
         if next_stage == "COMPLETE":
             transition(paths, run, stage, "COMPLETE", "FINAL_AUDIT_PASSED")
             state_update(paths, {"status": "COMPLETE", "stage": "COMPLETE", "next_stage": "COMPLETE", "worker_pid": None, "last_progress_at": utc_now(), "coverage": coverage})

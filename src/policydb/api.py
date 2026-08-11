@@ -95,6 +95,10 @@ class PolicyDB:
             for attempt in range(2):
                 try:
                     with duckdb.connect(str(self.settings.database), read_only=True) as con:
+                        if "v_policy_action_center" in sql.lower():
+                            from policydb.query.action_center import prepare_action_center_view
+
+                            prepare_action_center_view(con)
                         result = con.execute(sql, values)
                         columns = [item[0] for item in result.description]
                         rows = result.fetchall()

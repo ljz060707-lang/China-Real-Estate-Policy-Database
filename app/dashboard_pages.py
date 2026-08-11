@@ -42,6 +42,8 @@ def _tone(status: str | None) -> str:
         "HEALTHY",
         "RUNNING",
         "SUCCESS",
+        "READY_FOR_NEXT_STAGE",
+        "COMPLETE",
         "operational",
     }:
         return "good"
@@ -49,6 +51,7 @@ def _tone(status: str | None) -> str:
         "warning",
         "stale",
         "WAIT_CURRENT_RUN",
+        "RETRY_WAIT",
         "UNKNOWN",
         "HUMAN_REVIEW",
         "DATABASE_UPDATING",
@@ -74,6 +77,10 @@ def _snapshot(settings: Settings) -> DashboardSnapshot:
 def _status_strip(snapshot: DashboardSnapshot) -> None:
     crawler = snapshot.crawler
     system = snapshot.system
+    if system.get("snapshot_status") == "LAST_GOOD":
+        st.warning(
+            "数据正在更新，当前展示上一份成功快照。实时抓取状态仍以 MASTER_STATE 为准。"
+        )
     period = (
         "—".join(value for value in (crawler.get("start_date"), crawler.get("end_date")) if value)
         or "暂无数据"
@@ -307,12 +314,19 @@ def _policy_filters(service: DashboardPolicyData) -> tuple[dict[str, Any], bool]
     }, submitted
 
 
+@st.fragment(run_every=f"{REFRESH_SECONDS}s")
 def render_policy_center_page(settings: Settings) -> None:
     service = DashboardPolicyData(settings)
     if service.mode == "curated_fallback":
         st.warning(
             "正式 DuckDB 外部视图当前不可查询。政策中心正在读取同一 E 盘 Curated 数据的只读索引；数据库恢复后会自动切回正式查询。"
         )
+    elif service.degraded:
+        st.warning(
+            "正式 DuckDB 的部分辅助查询暂时不可用；政策中心已使用 E 盘 Curated 只读索引继续展示，抓取任务不受影响。"
+        )
+    if service.used_last_good_snapshot:
+        st.warning("Curated 政策快照正在更新，当前展示上一份成功的政策索引。")
     filters, submitted = _policy_filters(service)
     if submitted:
         st.session_state["policy_filters"] = filters
@@ -328,7 +342,7 @@ def render_policy_center_page(settings: Settings) -> None:
     pages = max(1, math.ceil(total / page_size))
     page = min(page, pages)
     st.caption(
-        f"共 {total:,} 条政策记录 · 第 {page} / {pages} 页 · 数据模式：{'正式 DuckDB' if service.mode == 'duckdb' else 'E 盘 Curated 只读降级'}"
+        f"共 {total:,} 条政策记录 · 第 {page} / {pages} 页 · 数据模式：{ {'duckdb': '正式 DuckDB', 'mixed': '正式 DuckDB + E 盘 Curated 只读降级', 'curated_fallback': 'E 盘 Curated 只读降级', 'unavailable': '不可用'}.get(service.display_mode, service.display_mode) }"
     )
     if frame.is_empty():
         st.info("当前筛选条件下暂无政策记录。")
@@ -359,7 +373,10 @@ def render_policy_center_page(settings: Settings) -> None:
         "official_status": "官方状态",
         "has_pdf": "PDF",
     }
-    safe_dataframe(frame.select(columns).rename(labels), height=430)
+    safe_dataframe(
+        frame.select(columns).rename({name: labels[name] for name in columns}),
+        height=430,
+    )
     navigation = st.columns([1, 1, 4])
     if navigation[0].button("上一页", disabled=page <= 1):
         st.session_state["policy_page"] = page - 1
@@ -463,6 +480,40 @@ def render_collection_page(settings: Settings) -> None:
             "HTTP 失败次数", format_count(snapshot.crawler.get("total_failed_requests"))
         )
         columns[3].metric("当前 worker PID", format_value(snapshot.crawler.get("worker_pid")))
+        live = snapshot.system.get("automation_live_state") or {}
+        st.caption(
+            "MASTER_STATE authoritative state: status, stage, run_id, worker PID, and heartbeat "
+            "come from the autonomous controller; pipeline_progress_events is only position evidence."
+        )
+        safe_dataframe(
+            [
+                {"field": "automation_id", "value": format_value(live.get("automation_id"))},
+                {"field": "status", "value": format_status(live.get("status"))},
+                {"field": "raw_status", "value": format_value(live.get("raw_status"))},
+                {"field": "stage", "value": format_stage(live.get("stage"))},
+                {"field": "run_id", "value": format_value(live.get("run_id"))},
+                {"field": "next_stage", "value": format_stage(live.get("next_stage"))},
+                {
+                    "field": "current_live_position",
+                    "value": "available"
+                    if live.get("current_position_available")
+                    else "unavailable; showing last position",
+                },
+                {
+                    "field": "MASTER_STATE heartbeat",
+                    "value": format_datetime(live.get("last_heartbeat_at")),
+                },
+            ],
+            height=300,
+        )
+        last_position = snapshot.crawler.get("last_crawl_position") or {}
+        st.caption(
+            "Last crawl position (not current work): "
+            f"{format_value(last_position.get('city_name'))} / "
+            f"{format_value(last_position.get('source_role'))} / "
+            f"{format_value(last_position.get('start_date'))}-"
+            f"{format_value(last_position.get('end_date'))}"
+        )
         safe_dataframe(_translated_events(snapshot.frames["recent_events"]), height=470)
     with tabs[1]:
         versions = snapshot.documents.get("document_versions")

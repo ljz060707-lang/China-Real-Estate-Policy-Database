@@ -441,3 +441,67 @@ def test_progress_materializes_all_city_year_cells(tmp_path):
     frame = pl.read_parquet(settings.curated / "city_year_progress.parquet")
     assert frame["city_id"].n_unique() == 105
     assert set(frame["status"].unique()) == {"source_incomplete"}
+
+
+def test_plan_city_reassigns_reused_shards_to_current_batch(tmp_path):
+    """A resumed scope must not strand pending shards under an old batch ID."""
+    settings = _source_root(tmp_path)
+    registry = {
+        "version": 2,
+        "sources": [
+            {
+                "source_id": "SRC_NJ_GOV",
+                "source_name": "南京市人民政府",
+                "domain": "nanjing.gov.cn",
+                "source_type": "government",
+                "source_role": "municipal_government",
+                "agency_type": "municipal_government",
+                "official_status": "official",
+                "homepage_url": "https://www.nanjing.gov.cn/",
+                "list_page_urls": ["https://www.nanjing.gov.cn/zwgk/"],
+                "city_ids": ["CITY_320100"],
+                "scope_type": "municipal",
+                "crawl_enabled": True,
+            }
+        ],
+    }
+    (settings.root / "data/reference/source_registry.yaml").write_text(
+        __import__("yaml").safe_dump(registry, allow_unicode=True), encoding="utf-8"
+    )
+    build_requirement_slots(settings)
+    class _NoopPipeline:
+        def plan(self, **_kwargs):
+            return {"run_id": "RUN_REUSED_SHARD", "item_count": 0}
+
+        def run(self, _run_id, *, max_fetches):
+            assert max_fetches > 0
+            return {"fetched": 0, "failed": 0}
+
+    crawler = ExhaustiveCrawler(settings, pipeline=_NoopPipeline())
+    scope = {
+        "city": "南京市",
+        "start_date": date(2024, 1, 1),
+        "end_date": date(2024, 1, 31),
+        "source_roles": ["municipal_government"],
+    }
+    crawler.plan_city(**scope)
+    shards_path = settings.curated / "crawl_shards.parquet"
+    pl.read_parquet(shards_path).with_columns(
+        pl.lit("EXHAUST_STALE_BATCH").alias("batch_id")
+    ).write_parquet(shards_path)
+
+    plan = crawler.plan_city(**scope)
+    planned = pl.read_parquet(shards_path).filter(
+        (pl.col("batch_id") == plan["batch_id"])
+        & (pl.col("status") == "pending")
+    )
+    assert plan["runnable"] == 1
+    assert planned.height == 1
+
+    result = crawler.run_city(
+        **scope,
+        max_pages_per_source=1,
+        max_candidates_per_shard=1,
+        max_fetches_per_shard=1,
+    )
+    assert result["processed_shards"] == 1

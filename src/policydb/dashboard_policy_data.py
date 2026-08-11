@@ -14,6 +14,7 @@ import polars as pl
 
 from policydb.api import PolicyDB
 from policydb.dashboard_live_state import database_health
+from policydb.dashboard_logging import log_dashboard_exception
 from policydb.dashboard_queries import (
     filter_options as duckdb_filter_options,
 )
@@ -25,6 +26,8 @@ from policydb.dashboard_queries import (
 )
 from policydb.parquet_store import read_parquet_snapshot
 from policydb.settings import Settings
+
+_LAST_GOOD_POLICY_INDEX: dict[str, pl.DataFrame] = {}
 
 
 class DashboardPolicyData:
@@ -38,6 +41,64 @@ class DashboardPolicyData:
         else:
             self.mode = "unavailable"
         self.db = PolicyDB(settings) if self.mode == "duckdb" else None
+        self.query_failures: list[dict[str, Any]] = []
+        self.read_failures: list[dict[str, Any]] = []
+        self.query_modes: dict[str, str] = {}
+        self.used_last_good_snapshot = False
+
+    @property
+    def degraded(self) -> bool:
+        return bool(self.query_failures or self.read_failures) or self.mode == "curated_fallback"
+
+    @property
+    def display_mode(self) -> str:
+        if self.mode == "curated_fallback":
+            return "curated_fallback"
+        if any(value == "curated_fallback" for value in self.query_modes.values()):
+            return "mixed"
+        return self.mode
+
+    def _record_query_failure(self, operation: str, error: BaseException) -> None:
+        failure = {
+            "operation": operation,
+            "data_source": str(self.settings.database),
+            "relation": "v_policy_action_center",
+            "error_type": type(error).__name__,
+            "error_message": str(error),
+        }
+        self.query_failures.append(failure)
+        self.query_modes[operation] = "curated_fallback"
+        log_dashboard_exception(
+            self.settings,
+            "Policy Center query failed; using a read-only fallback where available",
+            component="policy_center",
+            operation=operation,
+            data_source=str(self.settings.database),
+            relation="v_policy_action_center",
+            query=operation,
+            error=error,
+        )
+
+    def _record_read_failure(self, name: str, error: BaseException) -> None:
+        self.read_failures.append(
+            {
+                "operation": "read_curated",
+                "data_source": str(self.settings.curated / f"{name}.parquet"),
+                "relation": name,
+                "error_type": type(error).__name__,
+                "error_message": str(error),
+            }
+        )
+        log_dashboard_exception(
+            self.settings,
+            "Policy Center curated read failed",
+            component="policy_center",
+            operation="read_curated",
+            data_source=str(self.settings.curated / f"{name}.parquet"),
+            relation=name,
+            query=f"read_parquet({name}.parquet)",
+            error=error,
+        )
 
     def _read(self, name: str, columns: list[str] | None = None) -> pl.DataFrame:
         path = self.settings.curated / f"{name}.parquet"
@@ -45,7 +106,13 @@ class DashboardPolicyData:
             return pl.DataFrame()
         try:
             return read_parquet_snapshot(path, columns=columns)
-        except (OSError, pl.exceptions.PolarsError, ValueError):
+        except Exception as exc:
+            self._record_read_failure(name, exc)
+            if name == "records":
+                cached = _LAST_GOOD_POLICY_INDEX.get(str(path.resolve()))
+                if cached is not None and not cached.is_empty():
+                    self.used_last_good_snapshot = True
+                    return cached.clone()
             return pl.DataFrame()
 
     def _curated_index(self) -> pl.DataFrame:
@@ -61,6 +128,8 @@ class DashboardPolicyData:
                 "primary_source_url",
             ],
         )
+        if self.used_last_good_snapshot:
+            return records
         if records.is_empty():
             return records
         geography = self._read(
@@ -135,11 +204,48 @@ class DashboardPolicyData:
             )
         else:
             records = records.with_columns(pl.lit(False).alias("has_pdf"))
+        _LAST_GOOD_POLICY_INDEX[str((self.settings.curated / "records.parquet").resolve())] = records.clone()
         return records
+
+    def _curated_filter_options(self) -> dict[str, list[Any]]:
+        frame = self._curated_index()
+
+        def unique(column: str) -> list[Any]:
+            if frame.is_empty() or column not in frame.columns:
+                return []
+            return sorted(frame.get_column(column).drop_nulls().unique().to_list())
+
+        secondary = (
+            frame.select("primary_category_code", "secondary_category_code")
+            .drop_nulls()
+            .unique()
+            .sort(["primary_category_code", "secondary_category_code"])
+            .to_dicts()
+            if not frame.is_empty()
+            and {"primary_category_code", "secondary_category_code"}.issubset(frame.columns)
+            else []
+        )
+        return {
+            "provinces": unique("province"),
+            "cities": unique("city"),
+            "directions": unique("direction"),
+            "instruments": unique("instrument_type"),
+            "statuses": unique("official_status"),
+            "reviews": unique("classification_review_status"),
+            "primary": unique("primary_category_code"),
+            "secondary": secondary,
+        }
 
     def filter_options(self) -> dict[str, list[Any]]:
         if self.mode == "duckdb" and self.db is not None:
-            return duckdb_filter_options(self.db)
+            try:
+                options = duckdb_filter_options(self.db)
+                options.setdefault("cities", [])
+                self.query_modes["filter_options"] = "duckdb"
+                return options
+            except Exception as exc:
+                self._record_query_failure("filter_options", exc)
+                return self._curated_filter_options()
         if self.mode == "unavailable":
             return {
                 "provinces": [],
@@ -151,33 +257,8 @@ class DashboardPolicyData:
                 "primary": [],
                 "secondary": [],
             }
-        frame = self._curated_index()
-
-        def unique(column: str) -> list[Any]:
-            if frame.is_empty() or column not in frame.columns:
-                return []
-            return sorted(frame.get_column(column).drop_nulls().unique().to_list())
-
-        primary = unique("primary_category_code")
-        secondary = (
-            frame.select("primary_category_code", "secondary_category_code")
-            .drop_nulls()
-            .unique()
-            .sort(["primary_category_code", "secondary_category_code"])
-            .to_dicts()
-            if not frame.is_empty()
-            else []
-        )
-        return {
-            "provinces": unique("province"),
-            "cities": unique("city"),
-            "directions": unique("direction"),
-            "instruments": unique("instrument_type"),
-            "statuses": unique("official_status"),
-            "reviews": unique("classification_review_status"),
-            "primary": primary,
-            "secondary": secondary,
-        }
+        self.query_modes["filter_options"] = "curated_fallback"
+        return self._curated_filter_options()
 
     def search(
         self,
@@ -190,13 +271,18 @@ class DashboardPolicyData:
         page = max(1, int(page))
         page_size = min(100, max(10, int(page_size)))
         if self.mode == "duckdb" and self.db is not None:
-            return duckdb_policy_list(
-                self.db,
-                filters,
-                page=page,
-                page_size=page_size,
-                sort_by=sort_by,
-            )
+            try:
+                result = duckdb_policy_list(
+                    self.db,
+                    filters,
+                    page=page,
+                    page_size=page_size,
+                    sort_by=sort_by,
+                )
+                self.query_modes["search"] = "duckdb"
+                return result
+            except Exception as exc:
+                self._record_query_failure("search", exc)
         if self.mode == "unavailable":
             return pl.DataFrame(), 0
         frame = self._curated_index()
@@ -244,13 +330,17 @@ class DashboardPolicyData:
 
     def detail(self, record_id: str) -> dict[str, Any]:
         if self.mode == "duckdb" and self.db is not None:
-            policy, actions, files = duckdb_policy_detail(self.db, record_id)
-            return {
-                "policy": policy,
-                "actions": actions,
-                "files": files,
-                "versions": pl.DataFrame(),
-            }
+            try:
+                policy, actions, files = duckdb_policy_detail(self.db, record_id)
+                self.query_modes["detail"] = "duckdb"
+                return {
+                    "policy": policy,
+                    "actions": actions,
+                    "files": files,
+                    "versions": pl.DataFrame(),
+                }
+            except Exception as exc:
+                self._record_query_failure("detail", exc)
         if self.mode == "unavailable":
             return {
                 "policy": None,
