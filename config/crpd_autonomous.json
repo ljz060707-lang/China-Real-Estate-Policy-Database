@@ -6,6 +6,12 @@
   "end_date": "today",
   "max_recovery_fetches": 20,
   "pdf_limit": 30,
+  "recent_30d": {
+    "max_items": 20,
+    "max_pages_per_source": 30,
+    "max_candidates_per_shard": 500,
+    "max_fetches_per_shard": 500
+  },
   "disk": {
     "warn_free_gb": 50,
     "stop_free_gb": 20
@@ -36,6 +42,7 @@
     "AI_VERIFY",
     "ARCHIVE",
     "COVERAGE_AUDIT",
+    "RECENT_30D_PRIORITY",
     "RECOVER_MISSING",
     "CRAWL_AGAIN",
     "PDF_STAGE",

@@ -20,6 +20,7 @@ from policydb.fast_bulk_ingest import (
 )
 from policydb.full_sync import FullSyncConfig, FullSyncController
 from policydb.pdf_pipeline import PDFPipeline, load_pdf_config
+from policydb.recent_priority import Recent30DConfig, build_recent_queue, run_recent_30d
 from policydb.settings import Settings
 from policydb.source_completion_checkpoint import (
     build_checkpoint_state,
@@ -150,6 +151,19 @@ def main() -> None:
     fast.add_argument("--resume", action="store_true", default=True)
     fast.add_argument("--no-resume", action="store_false", dest="resume")
     fast.add_argument("--output", type=Path)
+    recent = sub.add_parser("recent-30d", help="bounded recent-30-day crawl priority and formal promotion")
+    recent_sub = recent.add_subparsers(dest="recent_command", required=True)
+    for name in ("plan", "run", "status"):
+        command = recent_sub.add_parser(name)
+        command.add_argument("--start-date", type=lambda value: __import__("datetime").date.fromisoformat(value))
+        command.add_argument("--end-date", type=lambda value: __import__("datetime").date.fromisoformat(value))
+        command.add_argument("--max-items", type=int, default=20)
+        command.add_argument("--max-pages-per-source", type=int, default=30)
+        command.add_argument("--max-candidates-per-shard", type=int, default=500)
+        command.add_argument("--max-fetches-per-shard", type=int, default=500)
+        command.add_argument("--apply", action="store_true")
+        command.add_argument("--resume", action="store_true", default=True)
+        command.add_argument("--no-resume", action="store_false", dest="resume")
     pdf = sub.add_parser("pdf", help="bounded PDF inventory/archive/discovery/download/parse workflow")
     pdf_sub = pdf.add_subparsers(dest="pdf_command", required=True)
     inventory = pdf_sub.add_parser("inventory", help="read-only recursive PDF inventory")
@@ -239,6 +253,35 @@ def main() -> None:
         result = FastBulkIngestController(settings, config=config, output=args.output).run(city_ids=args.city_id)
         print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
         raise SystemExit(int(result.get("exit_code", 0)))
+    if args.command == "recent-30d":
+        base = Recent30DConfig.default(
+            start_date=args.start_date,
+            end_date=args.end_date,
+            max_items=args.max_items,
+            max_pages_per_source=args.max_pages_per_source,
+            max_candidates_per_shard=args.max_candidates_per_shard,
+            max_fetches_per_shard=args.max_fetches_per_shard,
+            apply=bool(args.apply and args.recent_command == "run"),
+            resume=bool(args.resume),
+        )
+        if args.recent_command == "plan":
+            result = build_recent_queue(settings, config=base, resume=args.resume)
+            payload = {
+                "status": "PLANNED",
+                "queue_size": result.height,
+                "start_date": base.start_date.isoformat(),
+                "end_date": base.end_date.isoformat(),
+                "output": str(settings.outputs / "recent_30d"),
+                "exit_code": 0,
+            }
+        elif args.recent_command == "status":
+            path = settings.automation / "RECENT_30D_STATE.json"
+            payload = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {"status": "NOT_STARTED"}
+            payload["exit_code"] = 0
+        else:
+            payload = run_recent_30d(settings, config=base)
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+        raise SystemExit(int(payload.get("exit_code", 0)))
     if args.command == "pdf":
         write_commands = {"archive", "discover", "download", "parse", "match", "run"}
         if args.pdf_command in write_commands and not args.apply:

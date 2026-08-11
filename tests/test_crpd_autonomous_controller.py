@@ -63,6 +63,9 @@ def test_coverage_requires_explicit_saturation_gate(tmp_path: Path) -> None:
 def test_stage_machine_and_redaction() -> None:
     assert next_stage_after("COVERAGE_AUDIT", False) == "RECOVER_MISSING"
     assert next_stage_after("COVERAGE_AUDIT", True) == "PDF_STAGE"
+    assert next_stage_after("COVERAGE_AUDIT", False, False, recent_complete=False) == "RECENT_30D_PRIORITY"
+    assert next_stage_after("RECENT_30D_PRIORITY", False, True, recent_complete=False) == "RECENT_30D_PRIORITY"
+    assert next_stage_after("RECENT_30D_PRIORITY", False, True, recent_complete=True) == "CRAWL_AGAIN"
     assert "secret-value" not in redact("Authorization: Bearer secret-value")
 
 
@@ -158,6 +161,74 @@ def test_terminal_failed_handoff_starts_a_fresh_run_id(tmp_path: Path, monkeypat
     assert state["last_error"] is None
 
 
+def test_safe_handoff_routes_failed_historical_run_to_coverage_audit(tmp_path: Path, monkeypatch) -> None:
+    paths, config = make_paths(tmp_path)
+    install(paths, config)
+    paths.master.write_text(
+        json.dumps(
+            {
+                "automation_id": "AUTO_TEST",
+                "status": "RETRY_WAIT",
+                "stage": "CRAWL_AGAIN",
+                "next_stage": "CRAWL_AGAIN",
+                "run_id": "RUN_OLD",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (paths.automation / "SAFE_HANDOFF_ROUTE_20260811T1710Z.json").write_text(
+        json.dumps(
+            {
+                "status": "REQUESTED",
+                "route_to": "COVERAGE_AUDIT",
+                "reason": "SAFE_HANDOFF_AFTER_DURABLE_SHARD_CHECKPOINT",
+                "source_run_id": "RUN_OLD",
+            }
+        ),
+        encoding="utf-8",
+    )
+    empty_processes = {
+        "current_backfill": [],
+        "legacy_supervisor": [],
+        "external_writers": [],
+        "autonomous_workers": [],
+    }
+    monkeypatch.setattr(controller, "process_snapshot", lambda: empty_processes)
+    monkeypatch.setattr(controller, "disk_status", lambda *_args: {"status": "OK"})
+    monkeypatch.setattr(
+        controller,
+        "current_log_status",
+        lambda *_args, **_kwargs: {"status": "TERMINAL_FAILED", "safe_ended": True},
+    )
+    monkeypatch.setattr(controller, "run_id", lambda *_args: "RUN_HANDOFF")
+
+    class FakeLock:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    monkeypatch.setattr(controller, "FileLock", lambda *_args, **_kwargs: FakeLock())
+    seen = {}
+
+    class FakeProcess:
+        pid = 4321
+
+    def fake_popen(command, **_kwargs):
+        seen["command"] = command
+        return FakeProcess()
+
+    monkeypatch.setattr(controller.subprocess, "Popen", fake_popen)
+
+    assert supervisor_decision(paths, config) == 0
+    state = json.loads(paths.master.read_text(encoding="utf-8"))
+    assert state["stage"] == "COVERAGE_AUDIT"
+    assert state["run_id"] == "RUN_HANDOFF"
+    assert seen["command"][seen["command"].index("--stage") + 1] == "COVERAGE_AUDIT"
+    assert controller.latest_safe_handoff(paths) is None
+
+
 def test_incomplete_validation_report_is_a_warning_not_a_command_failure(tmp_path: Path) -> None:
     paths, config = make_paths(tmp_path)
     install(paths, config)
@@ -197,6 +268,10 @@ def test_crawl_again_uses_existing_audited_backfill_script(tmp_path: Path) -> No
         "--max-fetches",
         "20",
     ]
+    recent_command = command_specs(paths, config, "RECENT_30D_PRIORITY", "RUN_TEST")[0]
+    assert recent_command[1:5] == ["-m", "policydb.autopilot_cli", "recent-30d", "run"]
+    assert "--apply" in recent_command
+    assert "--resume" in recent_command
 
 
 def test_recovery_zero_work_is_blocked_when_pending_shards_remain(tmp_path: Path) -> None:

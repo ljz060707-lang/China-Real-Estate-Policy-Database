@@ -39,6 +39,7 @@ STAGES = (
     "AI_VERIFY",
     "ARCHIVE",
     "COVERAGE_AUDIT",
+    "RECENT_30D_PRIORITY",
     "RECOVER_MISSING",
     "CRAWL_AGAIN",
     "PDF_STAGE",
@@ -71,6 +72,7 @@ BLOCKING_TERMS = (
     "NO SPACE",
     "WRITE CONFLICT",
     "LOCK CONFLICT",
+    "RECENT_FORMAL_INGEST_BLOCKED",
 )
 SENSITIVE_PATTERNS = (
     (re.compile(r"(?i)(authorization\s*[:=]\s*bearer\s+)[^\s]+"), r"\1[REDACTED]"),
@@ -301,6 +303,12 @@ def default_config(project: Path, data: Path) -> dict[str, Any]:
             "skip_ai": True,
         },
         "pdf_limit": 30,
+        "recent_30d": {
+            "max_items": 20,
+            "max_pages_per_source": 30,
+            "max_candidates_per_shard": 500,
+            "max_fetches_per_shard": 500,
+        },
         "disk": {"warn_free_gb": 50, "stop_free_gb": 20},
         "paths": {
             "project_root": str(project),
@@ -505,6 +513,53 @@ def current_log_status(paths: Paths, *, active: bool = False) -> dict[str, Any]:
         "failure_evidence": failure_evidence,
         "last_write_at": dt.datetime.fromtimestamp(master.stat().st_mtime, UTC).isoformat(),
     }
+
+
+def latest_safe_handoff(paths: Paths) -> dict[str, Any] | None:
+    """Return the newest explicit safe-handoff route request, if any."""
+
+    candidates = sorted(
+        paths.automation.glob("SAFE_HANDOFF_ROUTE_*.json"),
+        key=lambda path: path.name,
+        reverse=True,
+    )
+    for path in candidates:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8-sig"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if (
+            isinstance(payload, dict)
+            and payload.get("status") == "REQUESTED"
+            and payload.get("route_to") == "COVERAGE_AUDIT"
+            and not safe_handoff_consumed(paths, payload)
+        ):
+            return payload
+    return None
+
+
+def safe_handoff_consumed(paths: Paths, payload: dict[str, Any]) -> bool:
+    source_run_id = str(payload.get("source_run_id") or "")
+    if not source_run_id:
+        return False
+    receipt_id = sha256_text(source_run_id)[:16]
+    return (paths.automation / f"SAFE_HANDOFF_CONSUMED_{receipt_id}.json").exists()
+
+
+def consume_safe_handoff(paths: Paths, payload: dict[str, Any]) -> None:
+    source_run_id = str(payload.get("source_run_id") or "")
+    if not source_run_id or safe_handoff_consumed(paths, payload):
+        return
+    receipt_id = sha256_text(source_run_id)[:16]
+    atomic_json(
+        paths.automation / f"SAFE_HANDOFF_CONSUMED_{receipt_id}.json",
+        {
+            "status": "CONSUMED",
+            "source_run_id": source_run_id,
+            "route_to": payload.get("route_to"),
+            "consumed_at": utc_now(),
+        },
+    )
 
 
 def disk_status(paths: Paths, config: dict[str, Any]) -> dict[str, Any]:
@@ -749,6 +804,25 @@ def command_specs(paths: Paths, config: dict[str, Any], stage: str, run: str) ->
         raise FileNotFoundError("fixed project virtual environment is incomplete")
     recovery = str(int(config.get("max_recovery_fetches", 20)))
     pdf_limit = str(int(config.get("pdf_limit", 30)))
+    recent = config.get("recent_30d") if isinstance(config.get("recent_30d"), dict) else {}
+    if stage == "RECENT_30D_PRIORITY":
+        return [[
+            str(python),
+            "-m",
+            "policydb.autopilot_cli",
+            "recent-30d",
+            "run",
+            "--max-items",
+            str(int(recent.get("max_items", 20))),
+            "--max-pages-per-source",
+            str(int(recent.get("max_pages_per_source", 30))),
+            "--max-candidates-per-shard",
+            str(int(recent.get("max_candidates_per_shard", 500))),
+            "--max-fetches-per-shard",
+            str(int(recent.get("max_fetches_per_shard", 500))),
+            "--apply",
+            "--resume",
+        ]]
     if stage == "RECOVER_MISSING":
         return [[str(policydb), "crawl", "recover-missing", "--max-fetches", recovery]]
     if stage in {"CRAWL", "CRAWL_AGAIN"}:
@@ -998,6 +1072,7 @@ def next_stage_after(
     stage: str,
     saturated: bool,
     crawl_work_pending: bool | None = None,
+    recent_complete: bool = True,
 ) -> str:
     if stage == "CRAWL":
         return "NORMALIZE"
@@ -1012,6 +1087,8 @@ def next_stage_after(
     if stage == "ARCHIVE":
         return "COVERAGE_AUDIT"
     if stage == "COVERAGE_AUDIT":
+        if not recent_complete:
+            return "RECENT_30D_PRIORITY"
         if saturated:
             return "PDF_STAGE"
         if crawl_work_pending is True:
@@ -1021,6 +1098,12 @@ def next_stage_after(
         return "CRAWL_AGAIN"
     if stage == "CRAWL_AGAIN":
         return "COVERAGE_AUDIT"
+    if stage == "RECENT_30D_PRIORITY":
+        if not recent_complete:
+            return "RECENT_30D_PRIORITY"
+        if crawl_work_pending:
+            return "CRAWL_AGAIN"
+        return "PDF_STAGE" if saturated else "COVERAGE_AUDIT"
     if stage == "PDF_STAGE":
         return "PDF_VERIFY"
     if stage == "PDF_VERIFY":
@@ -1049,6 +1132,7 @@ def supervisor_decision(paths: Paths, config: dict[str, Any], dry_run: bool = Fa
     state = ensure_initial_files(paths, config)
     processes = process_snapshot()
     disk = disk_status(paths, config)
+    safe_handoff = latest_safe_handoff(paths)
     if disk["status"] == "STOP":
         write_blocked(paths, str(state.get("run_id") or run_id()), "DISK_FREE_SPACE_BELOW_STOP", disk)
         return 0
@@ -1090,7 +1174,7 @@ def supervisor_decision(paths: Paths, config: dict[str, Any], dry_run: bool = Fa
         )
         append_jsonl(paths.history, {"event": "supervisor_check", "status": "CURRENT_RUN_ACTIVE", "timestamp": utc_now(), "details": report})
         return 0
-    if not handoff.get("safe_ended"):
+    if not handoff.get("safe_ended") and safe_handoff is None:
         report["reason"] = str(handoff.get("reason") or "CURRENT_RUN_SUMMARY_PENDING")
         atomic_json(paths.automation / "AUTOMATION_DRY_RUN_REPORT.json", report) if dry_run else None
         state_update(paths, {"status": "WAIT_CURRENT_RUN", "stage": "WAIT_CURRENT_RUN", "current_run_active": False, "last_reason": report["reason"], "disk": disk})
@@ -1108,6 +1192,22 @@ def supervisor_decision(paths: Paths, config: dict[str, Any], dry_run: bool = Fa
             stage = str(latest.get("next_stage") or latest.get("stage") or "CRAWL")
             if stage == "WAIT_CURRENT_RUN":
                 stage = "CRAWL"
+            safe_handoff = latest_safe_handoff(paths)
+            if safe_handoff and stage in {"CRAWL", "CRAWL_AGAIN", "RECOVER_MISSING"}:
+                stage = "COVERAGE_AUDIT"
+                consume_safe_handoff(paths, safe_handoff)
+                append_jsonl(
+                    paths.history,
+                    {
+                        "event": "stage_route",
+                        "run_id": str(latest.get("run_id") or ""),
+                        "from_stage": str(latest.get("next_stage") or latest.get("stage") or ""),
+                        "to_stage": stage,
+                        "reason_code": "SAFE_HANDOFF_TO_RECENT_PRIORITY",
+                        "timestamp": utc_now(),
+                        "handoff": safe_handoff,
+                    },
+                )
             if stage == "RECOVER_MISSING":
                 shard_audit = crawl_shard_summary(paths)
                 if shard_audit.get("actionable"):
@@ -1129,7 +1229,7 @@ def supervisor_decision(paths: Paths, config: dict[str, Any], dry_run: bool = Fa
             # failed run's current state and make recovery/audit ambiguous.
             worker_run = (
                 run_id()
-                if handoff.get("status") == "TERMINAL_FAILED"
+                if handoff.get("status") == "TERMINAL_FAILED" or safe_handoff is not None
                 else str(latest.get("run_id") or run_id())
             )
             worker = paths.project / ".venv" / "Scripts" / "python.exe"
@@ -1193,7 +1293,14 @@ def worker_run(paths: Paths, config: dict[str, Any], stage: str, run: str) -> in
             if shard_audit.get("actionable") is not None
             else None
         )
-        next_stage = next_stage_after(stage, saturated, crawl_work_pending)
+        recent_state = read_json(paths.automation / "RECENT_30D_STATE.json", {})
+        recent_complete = recent_state.get("status") == "COMPLETE"
+        next_stage = next_stage_after(
+            stage,
+            saturated,
+            crawl_work_pending,
+            recent_complete=recent_complete,
+        )
         if next_stage == "COMPLETE":
             transition(paths, run, stage, "COMPLETE", "FINAL_AUDIT_PASSED")
             state_update(paths, {"status": "COMPLETE", "stage": "COMPLETE", "next_stage": "COMPLETE", "worker_pid": None, "last_progress_at": utc_now(), "coverage": coverage})
@@ -1222,6 +1329,7 @@ def status(paths: Paths) -> int:
         "coverage": read_json(paths.automation / "COVERAGE_STATE.json", {}),
         "ai_queue": read_json(paths.automation / "AI_QUEUE_STATE.json", {}),
         "pdf_archive": read_json(paths.automation / "PDF_ARCHIVE_STATE.json", {}),
+        "recent_30d": read_json(paths.automation / "RECENT_30D_STATE.json", {}),
         "processes": processes,
         "stop_file": paths.stop.exists(),
         "blocked_file": paths.blocked.exists(),

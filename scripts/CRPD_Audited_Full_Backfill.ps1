@@ -41,6 +41,8 @@ $LogRoot = Join-Path $DataRoot "logs\audited_full_backfill\$Stamp"
 $AcceptanceRoot = Join-Path $DataRoot "outputs\acceptance"
 New-Item -ItemType Directory -Force -Path $LogRoot, $AcceptanceRoot | Out-Null
 $MasterLog = Join-Path $LogRoot "master.log"
+$StopFullSync = Join-Path $DataRoot "control\STOP_FULL_SYNC"
+$StopAutopilot = Join-Path $DataRoot "control\STOP_AUTOPILOT"
 
 function Write-RunLog {
     param(
@@ -51,6 +53,10 @@ function Write-RunLog {
     $Line = "{0} [{1}] {2}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Level, $Message
     Write-Host $Line
     Add-Content -Path $MasterLog -Value $Line -Encoding UTF8
+}
+
+function Test-SafeStopRequested {
+    return (Test-Path -LiteralPath $StopFullSync) -or (Test-Path -LiteralPath $StopAutopilot)
 }
 
 function Invoke-PolicyDb {
@@ -179,6 +185,10 @@ function Run-City {
 
     $CityName = [string]$City.city_name
     $CityId = [string]$City.city_id
+    if (Test-SafeStopRequested) {
+        Write-RunLog "检测到安全停止文件，未领取城市：$CityName" "WARN"
+        return
+    }
     Write-RunLog "[$Index/$Total] 开始：$CityName（$CityId）"
 
     [void](Invoke-PolicyDb `
@@ -210,7 +220,13 @@ function Run-City {
     }
 
     # 新增的自适应子分片只会在下一次resume中处理，因此循环到无pending。
+    $PreviousPending = $null
+    $NoProgressPasses = 0
     for ($Pass = 1; $Pass -le 20; $Pass++) {
+        if (Test-SafeStopRequested) {
+            Write-RunLog "检测到安全停止文件，城市在当前checkpoint后让出：$CityName" "WARN"
+            return
+        }
         $Counts = Get-CityShardCounts -CityId $CityId
         Write-RunLog (
             "$CityName 分片状态：rows=$($Counts.rows), pending=$($Counts.pending), " +
@@ -221,6 +237,17 @@ function Run-City {
         if ([int]$Counts.pending -le 0) {
             break
         }
+        if ($null -ne $PreviousPending -and [int]$Counts.pending -ge [int]$PreviousPending) {
+            $NoProgressPasses++
+        }
+        else {
+            $NoProgressPasses = 0
+        }
+        if ($NoProgressPasses -ge 2) {
+            Write-RunLog "连续两个resume没有减少pending分片，保存现状并让出城市：$CityName" "WARN"
+            break
+        }
+        $PreviousPending = [int]$Counts.pending
 
         [void](Invoke-PolicyDb `
             -Arguments @(
@@ -234,6 +261,10 @@ function Run-City {
     }
 
     for ($Retry = 1; $Retry -le $NetworkRetryPasses; $Retry++) {
+        if (Test-SafeStopRequested) {
+            Write-RunLog "检测到安全停止文件，跳过后续网络重试：$CityName" "WARN"
+            return
+        }
         $Counts = Get-CityShardCounts -CityId $CityId
         $Retryable = [int]$Counts.partial_network + [int]$Counts.failed
         if ($Retryable -le 0) {
@@ -262,6 +293,11 @@ function Run-City {
 
 Set-Location $ProjectRoot
 Write-RunLog "CRPD可审计补扫开始。日志：$LogRoot"
+
+if (Test-SafeStopRequested) {
+    Write-RunLog "启动时检测到安全停止文件；不领取新城市，保留既有checkpoint。" "WARN"
+    exit 0
+}
 
 # 前置验证
 [void](Invoke-PolicyDb -Arguments @("--help") -Stage "00_cli_help")
@@ -377,12 +413,21 @@ $Cities = @(
 )
 
 for ($Index = 0; $Index -lt $Cities.Count; $Index++) {
+    if (Test-SafeStopRequested) {
+        Write-RunLog "城市轮转在安全边界停止，后续城市留待resume。" "WARN"
+        break
+    }
     try {
         Run-City -City $Cities[$Index] -Index ($Index + 1) -Total $Cities.Count
     }
     catch {
         Write-RunLog "城市异常：$($Cities[$Index].city_name)；$($_.Exception.Message)" "ERROR"
     }
+}
+
+if (Test-SafeStopRequested) {
+    Write-RunLog "安全停止已生效；不执行全局后处理，等待下一次resume。" "WARN"
+    exit 0
 }
 
 # 全局归档与后处理。当前exhaustive-city的--run-ai只记录请求，故在这里显式执行。
