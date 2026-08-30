@@ -69,3 +69,29 @@ def test_legacy_archive_preference_remains_supported(tmp_path: Path, monkeypatch
     monkeypatch.setattr(Settings, "preferences", property(lambda self: {"policy_archive_root": str(archive)}))
 
     assert Settings(root=tmp_path).policy_archive_root == archive
+
+
+def test_archive_environment_overrides_legacy_preference(tmp_path: Path, monkeypatch) -> None:
+    configured = tmp_path / "archive-from-preferences"
+    isolated = tmp_path / "archive-from-environment"
+    monkeypatch.setattr(
+        Settings,
+        "preferences",
+        property(lambda self: {"policy_archive_root": str(configured)}),
+    )
+    monkeypatch.setenv("CRPD_ARCHIVE_ROOT", str(isolated))
+
+    assert Settings(root=tmp_path).policy_archive_root == isolated
+
+
+def test_explicit_archive_path_isolates_smoke_from_production_env(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    production = tmp_path / "production-archive"
+    isolated = tmp_path / "smoke-archive"
+    monkeypatch.setenv("CRPD_ARCHIVE_ROOT", str(production))
+
+    settings = Settings(root=tmp_path, archive_path=isolated)
+
+    assert settings.archive_root == isolated

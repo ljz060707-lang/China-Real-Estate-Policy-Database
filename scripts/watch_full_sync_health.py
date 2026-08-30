@@ -11,8 +11,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-REPO = Path(r"D:\Codex\projects\Documents-Codex\2026-07-13\text-20260705-xlsx-text-data-raw\policy-database")
-DATA_ROOT = Path(r"D:\Data Set\CRPD")
+REPO = Path(r"E:\policy-database")
+DATA_ROOT = Path(r"E:\Data Set\CRPD")
 EXPECTED_SLOTS = 525
 
 CONTINUOUS_ROOT = DATA_ROOT / "outputs" / "continuous_full_sync"

@@ -204,8 +204,37 @@ class DashboardPolicyData:
             )
         else:
             records = records.with_columns(pl.lit(False).alias("has_pdf"))
+        episode_documents = self._read(
+            "policy_episode_documents",
+            ["record_id", "episode_id", "episode_name"],
+        )
+        if (
+            not episode_documents.is_empty()
+            and "record_id" in episode_documents.columns
+            and episode_documents.schema.get("record_id") != pl.Null
+        ):
+            episode_documents = episode_documents.filter(pl.col("record_id").is_not_null()).group_by("record_id").agg(
+                pl.col("episode_id").drop_nulls().first().alias("episode_id"),
+                pl.col("episode_name").drop_nulls().first().alias("episode_name"),
+            )
+            records = records.join(episode_documents, on="record_id", how="left")
+        else:
+            records = records.with_columns(
+                pl.lit(None, dtype=pl.String).alias("episode_id"),
+                pl.lit(None, dtype=pl.String).alias("episode_name"),
+            )
         _LAST_GOOD_POLICY_INDEX[str((self.settings.curated / "records.parquet").resolve())] = records.clone()
         return records
+
+    def episode_options(self) -> list[dict[str, str]]:
+        frame = self._read("policy_episode_index", ["episode_id", "episode_name"])
+        if frame.is_empty():
+            frame = self._curated_index().select([column for column in ("episode_id", "episode_name") if column in self._curated_index().columns]).drop_nulls().unique()
+        return [
+            {"episode_id": str(row.get("episode_id")), "episode_name": str(row.get("episode_name") or row.get("episode_id"))}
+            for row in frame.to_dicts()
+            if row.get("episode_id")
+        ]
 
     def _curated_filter_options(self) -> dict[str, list[Any]]:
         frame = self._curated_index()
@@ -241,6 +270,7 @@ class DashboardPolicyData:
             try:
                 options = duckdb_filter_options(self.db)
                 options.setdefault("cities", [])
+                options["episodes"] = self.episode_options()
                 self.query_modes["filter_options"] = "duckdb"
                 return options
             except Exception as exc:
@@ -256,9 +286,12 @@ class DashboardPolicyData:
                 "reviews": [],
                 "primary": [],
                 "secondary": [],
+                "episodes": [],
             }
         self.query_modes["filter_options"] = "curated_fallback"
-        return self._curated_filter_options()
+        options = self._curated_filter_options()
+        options["episodes"] = self.episode_options()
+        return options
 
     def search(
         self,
@@ -270,7 +303,7 @@ class DashboardPolicyData:
     ) -> tuple[pl.DataFrame, int]:
         page = max(1, int(page))
         page_size = min(100, max(10, int(page_size)))
-        if self.mode == "duckdb" and self.db is not None:
+        if self.mode == "duckdb" and self.db is not None and not filters.get("episode_id"):
             try:
                 result = duckdb_policy_list(
                     self.db,
@@ -288,7 +321,13 @@ class DashboardPolicyData:
         frame = self._curated_index()
         if frame.is_empty():
             return frame, 0
-        start = filters.get("start_date") or date(2018, 1, 1)
+        # Historical episode filters must not inherit the policy center's
+        # current-data default (2018 onward).  The explicit user date range
+        # still wins; otherwise an episode selection is allowed to expose its
+        # historical records through this read-only fallback path.
+        start = filters.get("start_date") or (
+            date(2016, 1, 1) if filters.get("episode_id") else date(2018, 1, 1)
+        )
         end = filters.get("end_date") or date.today()
         frame = frame.filter(
             pl.col("record_date").is_not_null()
@@ -304,6 +343,7 @@ class DashboardPolicyData:
             "instrument_type": "instrument_type",
             "official_status": "official_status",
             "review_status": "classification_review_status",
+            "episode_id": "episode_id",
         }
         for key, column in scalar_filters.items():
             value = filters.get(key)

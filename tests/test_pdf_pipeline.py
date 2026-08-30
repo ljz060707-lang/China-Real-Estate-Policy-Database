@@ -12,6 +12,7 @@ from policydb.pdf_pipeline import (
     PDF_ATTACHMENT_SCHEMA,
     PDFPipeline,
     PDFPipelineConfig,
+    load_pdf_config,
     safe_pdf_asset_path,
 )
 from policydb.settings import Settings
@@ -202,3 +203,19 @@ def test_safe_pdf_viewer_only_resolves_content_addressed_asset(tmp_path: Path) -
 def test_ocr_configuration_cannot_be_enabled(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="OCR"):
         PDFPipelineConfig(ocr_enabled=True).validate()
+
+
+def test_explicit_isolated_settings_override_static_pdf_paths(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    (root / "config").mkdir(parents=True)
+    (root / "config" / "pdf_pipeline.yaml").write_text(
+        "pdf_pipeline:\n"
+        "  inventory_root: 'E:/Data Set/CRPD'\n"
+        "  archive_root: 'E:/Data Set/CRPD/raw/pdf'\n",
+        encoding="utf-8",
+    )
+    isolated = tmp_path / "isolated"
+    settings = Settings(root=root, data_root_path=isolated)
+    config = load_pdf_config(settings)
+    assert config.inventory_root == isolated.resolve()
+    assert config.archive_root == (isolated / "raw" / "pdf").resolve()

@@ -85,24 +85,25 @@ uv run policydb validate
 uv run policydb dashboard
 ```
 
-## D 盘正式存储
+## E 盘正式存储（canonical）
 
 推荐配置：
 
 ```text
-CRPD_DATA_ROOT=D:\Data Set\CRPD
-CRPD_ARCHIVE_ROOT=D:\Data Set\CRPD\archive
-POLICYDB_DATABASE=D:\Data Set\CRPD\database\policydb.duckdb
-POLICYDB_CURATED_ROOT=D:\Data Set\CRPD\curated
-POLICYDB_RESEARCH_ROOT=D:\Data Set\CRPD\research
-POLICYDB_LOG_ROOT=D:\Data Set\CRPD\logs
-POLICYDB_OUTPUT_ROOT=D:\Data Set\CRPD\outputs
+CRPD_HOME=E:\policy-database
+CRPD_DATA_ROOT=E:\Data Set\CRPD
+CRPD_ARCHIVE_ROOT=E:\Data Set\CRPD\archive
+POLICYDB_DATABASE=E:\Data Set\CRPD\database\policydb.duckdb
+POLICYDB_CURATED_ROOT=E:\Data Set\CRPD\curated
+POLICYDB_RESEARCH_ROOT=E:\Data Set\CRPD\research
+POLICYDB_LOG_ROOT=E:\Data Set\CRPD\logs
+POLICYDB_OUTPUT_ROOT=E:\Data Set\CRPD\outputs
 ```
 
 目录结构：
 
 ```text
-D:\Data Set\CRPD
+E:\Data Set\CRPD
 ├─ archive\pdf|html|text|attachments
 ├─ curated
 ├─ research
@@ -118,9 +119,9 @@ D:\Data Set\CRPD
 先预览，再确认迁移：
 
 ```powershell
-uv run policydb storage plan-migration --target "D:\Data Set\CRPD"
-uv run policydb storage migrate --target "D:\Data Set\CRPD" --confirm
-uv run policydb storage verify --target "D:\Data Set\CRPD"
+uv run policydb storage plan-migration --target "E:\Data Set\CRPD"
+uv run policydb storage migrate --target "E:\Data Set\CRPD" --confirm
+uv run policydb storage verify --target "E:\Data Set\CRPD"
 ```
 
 迁移采用“复制 → SHA-256 校验 → 写入非敏感偏好 → 验证”，不会删除源文件。D 盘不可用时
@@ -178,7 +179,7 @@ uv run policydb sources validate-registry
 自动发现只登记经过官方域名校验的候选，默认保持禁用；来源健康分达到 90、robots 允许、入口可
 访问、能发现详情页且正文可解析后，才可推荐启用。
 
-当前网络不可访问政府站点时，先保留完整的 105 城市 × 5 必需角色槽位，不得填造网址。更换网络并配置搜索 API 后，依次执行 discover-all --apply、health-all 和 complete-matrix；直到矩阵 CSV 中 525 个槽位均有已验证来源，才可称来源 URL 完整。缺口明细输出到 D:\Data Set\CRPD\outputs\coverage\city_source_requirement_matrix.csv。
+当前网络不可访问政府站点时，先保留完整的 105 城市 × 5 必需角色槽位，不得填造网址。更换网络并配置搜索 API 后，依次执行 discover-all --apply、health-all 和 complete-matrix；直到矩阵 CSV 中 525 个槽位均有已验证来源，才可称来源 URL 完整。缺口明细输出到 E:\Data Set\CRPD\outputs\coverage\city_source_requirement_matrix.csv。
 
 ## 历史全量扫描
 
@@ -293,7 +294,7 @@ uv run policydb sources validate-registry
 实际运行统一使用控制台入口：
 
 ```powershell
-.\.venv\Scripts\policydb.exe storage verify --target "D:\Data Set\CRPD"
+.\.venv\Scripts\policydb.exe storage verify --target "E:\Data Set\CRPD"
 .\.venv\Scripts\policydb.exe network diagnose --city "南京市"
 .\.venv\Scripts\policydb.exe sources discover-all
 .\.venv\Scripts\policydb.exe sources verify-candidates
@@ -317,7 +318,8 @@ CRPD currently prioritizes real operability, breadth of city/policy-text coverag
 The bounded breadth-first command is:
 
 ```powershell
-$env:CRPD_DATA_ROOT = "D:\Data Set\CRPD"
+$env:CRPD_HOME = "E:\policy-database"
+$env:CRPD_DATA_ROOT = "E:\Data Set\CRPD"
 \.venv\Scripts\python.exe -m policydb.autopilot_cli fast-bulk-ingest --config .\config\continuous_sync.yaml --dry-run
 \.venv\Scripts\python.exe -m policydb.autopilot_cli fast-bulk-ingest --max-cities 5 --apply --resume
 ```
@@ -331,7 +333,7 @@ shown in Dashboard completeness metrics. OCR is disabled; scanned candidates
 remain `OCR_PENDING`. The bounded CLI is:
 
 ```powershell
-\.venv\Scripts\python.exe -m policydb.autopilot_cli pdf inventory --root "D:\Data Set\CRPD"
+\.venv\Scripts\python.exe -m policydb.autopilot_cli pdf inventory --root "E:\Data Set\CRPD"
 \.venv\Scripts\python.exe -m policydb.autopilot_cli pdf archive --limit 20 --apply
 \.venv\Scripts\python.exe -m policydb.autopilot_cli pdf discover --limit 20 --apply
 \.venv\Scripts\python.exe -m policydb.autopilot_cli pdf download --limit 10 --workers 4 --apply
@@ -351,7 +353,7 @@ Start and inspect the local Dashboard with:
 .\scripts\stop_dashboard.ps1
 ```
 
-Dashboard operations write validated JSON jobs under `D:\Data Set\CRPD\control\dashboard_jobs`; no arbitrary shell command is accepted. The Dashboard reads curated Parquet, checkpoints, source registries, gap records, and run status rather than simulated values. It exposes overview KPIs, the 525-slot funnel, city/role matrix, year coverage, document quality, source health, gaps, architecture, and the disabled Gold placeholder.
+Dashboard operations write validated JSON jobs under `E:\Data Set\CRPD\control\dashboard_jobs`; no arbitrary shell command is accepted. The Dashboard reads curated Parquet, checkpoints, source registries, gap records, and run status rather than simulated values. It exposes overview KPIs, the 525-slot funnel, city/role matrix, year coverage, document quality, source health, gaps, architecture, and the disabled Gold placeholder.
 
 Research snapshots are immutable run directories containing curated summaries and a manifest with `policy_intensity_enabled=false` and `policy_intensity_rows=0`.
 

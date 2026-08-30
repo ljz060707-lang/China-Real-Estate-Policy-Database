@@ -3,6 +3,7 @@ __pycache__/
 .pytest_cache/
 .test-tmp-*/
 .test-tmp/
+.test-tmp-migration*/
 .pytest-final-*/
 .ruff_cache/
 .uv-cache/
@@ -26,6 +27,7 @@ database/*.tmp.duckdb
 outputs/
 .runtime/*
 !.runtime/.gitkeep
+database_repo_metadata_*/
 
 data/curated/*.parquet
 data/research/*.parquet

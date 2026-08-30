@@ -8,8 +8,8 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 # CRPD 全量抓取只读监控
-$Repo = "D:\Codex\projects\Documents-Codex\2026-07-13\text-20260705-xlsx-text-data-raw\policy-database"
-$DataRoot = "D:\Data Set\CRPD"
+$Repo = "E:\policy-database"
+$DataRoot = "E:\Data Set\CRPD"
 $ExpectedSlots = 525
 
 $ContinuousRoot = Join-Path $DataRoot "outputs\continuous_full_sync"

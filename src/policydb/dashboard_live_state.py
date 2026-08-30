@@ -40,7 +40,15 @@ TERMINAL_SHARD_STATUSES = {
     "source_incomplete",
     "failed",
 }
-AUTOMATION_CRAWL_STAGES = {"CRAWL", "CRAWL_AGAIN", "RECOVER_MISSING"}
+AUTOMATION_CRAWL_STAGES = {
+    "CRAWL",
+    "CRAWL_AGAIN",
+    "HISTORICAL_CRAWL_AGAIN",
+    "RECOVER_MISSING",
+    "ROLLING_24M_FULL_CITY_BACKFILL",
+    "ROLLING_24M_RECOVER_MISSING",
+    "ROLLING_24M_SECOND_PASS",
+}
 AUTOMATION_STATUS_MAP = {
     "READY": "READY_FOR_NEXT_STAGE",
     "WORKER_STARTED": "RUNNING",
@@ -185,6 +193,58 @@ def _read_json(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     except (OSError, json.JSONDecodeError, ValueError) as exc:
         meta.update(status="unavailable", error_type=type(exc).__name__)
         return {}, meta
+
+
+def _episode_930_progress(settings: Settings) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Read the atomic 930 production snapshot as a read-only dashboard input."""
+
+    output = settings.outputs / "special_projects" / "2016_930"
+    progress, meta = _read_json(output / "930_PROGRESS_SNAPSHOT.json")
+    autorun, autorun_meta = _read_json(output / "930_AUTORUN_STATE.json")
+    provider_status, provider_meta = _read_json(output / "930_API_PROVIDER_STATUS.json")
+    recovery_queue_path = output / "930_API_RECOVERY_QUEUE.parquet"
+    recovery_queue = pl.DataFrame()
+    try:
+        if recovery_queue_path.exists():
+            recovery_queue = read_parquet_snapshot(recovery_queue_path)
+    except (OSError, pl.exceptions.PolarsError, ValueError):
+        recovery_queue = pl.DataFrame()
+    if progress:
+        writer_lock = settings.logs / "policydb-write.lock"
+        autorun_lock = output / "930_AUTORUN.lock"
+        current_stage = str(progress.get("stage") or "")
+        progress["autorun"] = {
+            "lock_present": autorun_lock.exists(),
+            "status": autorun.get("status"),
+            "runner_pid": autorun.get("runner_pid"),
+            "current_job_id": autorun.get("current_job_id"),
+            "current_job_status": autorun.get("current_job_status"),
+            "active_worker": bool(autorun.get("current_job_id") and autorun.get("current_job_status") not in {None, "completed", "completed_with_warnings", "failed", "cancelled"}),
+            "active_fetch": current_stage in {"930_DISCOVERY", "930_OFFICIAL_RECOVERY"},
+            "active_writer": writer_lock.exists(),
+            "last_real_progress_at": progress.get("last_real_progress_at"),
+            "heartbeat_at": progress.get("heartbeat_at"),
+        }
+        if provider_status:
+            progress["api_status"] = provider_status.get("status") or progress.get("api_status")
+            progress["api_provider_status"] = provider_status.get("status")
+            progress["api_balance_status"] = provider_status.get("api_balance_status")
+            progress["api_provider_updated_at"] = provider_status.get("updated_at")
+        progress["api_recovery_queue"] = {
+            "total": recovery_queue.height,
+            "pending": recovery_queue.height,
+            "provider_recovery_pending": (
+                recovery_queue.filter(
+                    pl.col("recovery_status") == "PENDING_PROVIDER_RECOVERY"
+                ).height
+                if not recovery_queue.is_empty() and "recovery_status" in recovery_queue.columns
+                else 0
+            ),
+        }
+        progress["autorun_state_meta"] = autorun_meta
+    meta["autorun_state"] = autorun_meta
+    meta["provider_status"] = provider_meta
+    return progress, meta
 
 
 _REPRESENTATIVE_RELATIONS = (
@@ -527,6 +587,7 @@ def _automation_live_state(
     latest: dict[str, Any],
     *,
     now: datetime,
+    progress_snapshot: dict[str, Any] | None = None,
     event_fresh_seconds: int = 180,
 ) -> dict[str, Any]:
     """Derive current position only when the authoritative state permits it."""
@@ -540,8 +601,19 @@ def _automation_live_state(
         else None
     )
     event_fresh = event_age is not None and event_age <= event_fresh_seconds
-    current_position_available = stage in AUTOMATION_CRAWL_STAGES and event_fresh
-    position = latest if current_position_available else {}
+    progress_snapshot = progress_snapshot if isinstance(progress_snapshot, dict) else {}
+    progress_stage = str(progress_snapshot.get("stage") or "")
+    rolling_position_available = stage.startswith("ROLLING_24M") and progress_stage == stage
+    current_position_available = stage in AUTOMATION_CRAWL_STAGES and (event_fresh or rolling_position_available)
+    position = latest if event_fresh else {}
+    if rolling_position_available:
+        position = {
+            "city_name": progress_snapshot.get("current_city"),
+            "source_id": progress_snapshot.get("current_source"),
+            "start_date": (progress_snapshot.get("current_window") or {}).get("rolling_start"),
+            "end_date": (progress_snapshot.get("current_window") or {}).get("rolling_end"),
+            "message": "rolling 24-month source session",
+        }
     heartbeat_age = (
         (now - master_heartbeat.astimezone(UTC)).total_seconds()
         if master_heartbeat
@@ -583,6 +655,7 @@ def _automation_live_state(
         "current_position_available": current_position_available,
         "current_position": position,
         "last_crawl_position": last_position,
+        "progress_snapshot": progress_snapshot,
     }
 
 
@@ -783,10 +856,14 @@ def _build_dashboard_snapshot(
         "COVERAGE_STATE",
         "AI_QUEUE_STATE",
         "PDF_ARCHIVE_STATE",
+        "PROGRESS_SNAPSHOT",
+        "PROGRESS_WATCHDOG",
     ):
         value, meta = _read_json(settings.data_root / "automation" / f"{name}.json")
         automation[name] = value
         availability[f"automation/{name}"] = meta
+    episode_930, episode_930_meta = _episode_930_progress(settings)
+    availability["special_projects/2016_930/930_PROGRESS_SNAPSHOT"] = episode_930_meta
 
     events = frames["pipeline_progress_events"]
     shards = frames["crawl_shards"]
@@ -799,7 +876,12 @@ def _build_dashboard_snapshot(
     database = database_health(settings)
     log_progress = _backfill_log_progress(settings)
     master = automation["MASTER_STATE"]
-    live_state = _automation_live_state(master, latest, now=now)
+    live_state = _automation_live_state(
+        master,
+        latest,
+        now=now,
+        progress_snapshot=automation["PROGRESS_SNAPSHOT"],
+    )
     current_position = live_state["current_position"]
     crawler_processes = process_state["crawler_processes"]
     crawler_running = bool(crawler_processes) or live_state["status"] == "RUNNING"
@@ -853,6 +935,9 @@ def _build_dashboard_snapshot(
         "curated_root_exists": settings.curated.exists(),
         "crawler_running": crawler_running,
         "backfill_log_progress": log_progress,
+        "progress_snapshot": automation["PROGRESS_SNAPSHOT"],
+        "progress_watchdog": automation["PROGRESS_WATCHDOG"],
+        "episode_930_progress": episode_930,
     }
     snapshot.crawler = {
         "running": crawler_running,

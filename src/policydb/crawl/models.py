@@ -162,6 +162,14 @@ class FetchResult(BaseModel):
     protocol: str | None = None
     resolved_addresses: list[str] = Field(default_factory=list)
     fallback_used: str | None = None
+    # These fields make a live request distinguishable from a discovery or
+    # cache-only observation.  They are deliberately transport metadata only;
+    # no request headers or credentials are persisted.
+    request_started_at: datetime | None = None
+    request_finished_at: datetime | None = None
+    response_bytes: int = 0
+    cache_hit: bool = False
+    network_source: str = "LIVE_HTTP"
 
 
 class DiscoveryCandidate(BaseModel):

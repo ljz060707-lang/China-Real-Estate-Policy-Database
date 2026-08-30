@@ -18,6 +18,7 @@ import polars as pl
 
 from policydb.crawl.registry import load_registry
 from policydb.ingest.excel import RECORD_COLUMNS
+from policydb.ingest.relevance import assess_document_relevance
 from policydb.parquet_store import atomic_write_parquet, read_parquet_snapshot
 from policydb.scope import load_cities_105
 from policydb.settings import Settings
@@ -367,6 +368,26 @@ def promote_document_versions(
                 {
                     "document_version_id": version_id,
                     "reason": "requires_http_200_title_body_and_http_url",
+                }
+            )
+            continue
+        relevance = assess_document_relevance(
+            row.get("title"),
+            row.get("extracted_text"),
+            source_role=getattr(source, "agency_type", None) or getattr(source, "source_role", None),
+        )
+        if not relevance.accepted:
+            rejected.append(
+                {
+                    "document_version_id": version_id,
+                    "record_id": record["record_id"],
+                    "reason": "relevance_gate",
+                    "relevance_status": relevance.status,
+                    "reason_codes": ";".join(relevance.reason_codes),
+                    "positive_terms": ";".join(relevance.positive_terms),
+                    "negative_terms": ";".join(relevance.negative_terms),
+                    "action_terms": ";".join(relevance.action_terms),
+                    "evidence_excerpt": relevance.evidence_excerpt,
                 }
             )
             continue

@@ -1,11 +1,7 @@
 ﻿from datetime import datetime
 from pathlib import Path
 
-PATH = Path(
-    r"D:\Codex\projects\Documents-Codex\2026-07-13"
-    r"\text-20260705-xlsx-text-data-raw\policy-database"
-    r"\src\policydb\source_slots.py"
-)
+PATH = Path(__file__).resolve().parents[1] / "src" / "policydb" / "source_slots.py"
 
 
 def replace_once(

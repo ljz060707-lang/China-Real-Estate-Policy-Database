@@ -384,10 +384,26 @@ def load_pdf_config(settings: Settings | None = None, path: Path | None = None) 
             nested = loaded.get("pdf_pipeline")
             payload = nested if isinstance(nested, Mapping) else loaded
     config = PDFPipelineConfig.from_mapping(payload)
-    if config.inventory_root is None:
+    # An explicit runtime data root is an isolation boundary.  Do not let the
+    # repository's static production-oriented YAML redirect a rehearsal or
+    # test into another data root.  Production callers without an explicit
+    # root retain the configured paths for backward compatibility.
+    explicit_data_root = settings.data_root_path is not None or any(
+        os.getenv(name) for name in ("CRPD_DATA_ROOT", "POLICYDB_DATA_ROOT")
+    )
+    if explicit_data_root:
         config.inventory_root = settings.data_root
-    if config.archive_root is None:
-        config.archive_root = settings.data_root / "raw" / "pdf"
+        configured_archive = os.getenv("CRPD_ARCHIVE_ROOT") or os.getenv("POLICYDB_ARCHIVE_ROOT")
+        config.archive_root = (
+            Path(configured_archive).expanduser()
+            if configured_archive
+            else settings.data_root / "raw" / "pdf"
+        )
+    else:
+        if config.inventory_root is None:
+            config.inventory_root = settings.data_root
+        if config.archive_root is None:
+            config.archive_root = settings.data_root / "raw" / "pdf"
     config.validate()
     return config
 

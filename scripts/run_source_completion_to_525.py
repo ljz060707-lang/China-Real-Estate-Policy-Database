@@ -1268,8 +1268,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--repo",
         default=(
-            r"D:\Codex\projects\Documents-Codex\2026-07-13"
-            r"\text-20260705-xlsx-text-data-raw\policy-database"
+            r"E:\policy-database"
         ),
     )
     parser.add_argument(

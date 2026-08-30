@@ -195,7 +195,12 @@ class JobManager:
                 changes[key] = redact_secrets(changes[key], values)
         with self._state_lock:
             previous = self.load_state(job_id)
-            state = previous.model_copy(update=changes)
+            # One validation seam owns lifecycle normalization.  model_copy
+            # intentionally skips validation and would let legacy stage names
+            # re-enter the authoritative status field.
+            state = JobState.model_validate(
+                {**previous.model_dump(mode="python"), **changes}
+            )
             now = time.monotonic()
             stage_changed = state.stage != previous.stage or state.status != previous.status
             terminal = state.status in {

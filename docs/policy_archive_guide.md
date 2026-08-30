@@ -1,6 +1,6 @@
 # 政策原文档案指南
 
-默认档案根目录为 `D:\Data Set\CRPD`，可用 `POLICYDB_ARCHIVE_ROOT` 或个人设置中的非敏感路径
+默认档案根目录为 `E:\Data Set\CRPD`，可用 `POLICYDB_ARCHIVE_ROOT` 或个人设置中的非敏感路径
 修改。目标盘不可用时任务失败，不会静默改存 C 盘。
 
 ```powershell

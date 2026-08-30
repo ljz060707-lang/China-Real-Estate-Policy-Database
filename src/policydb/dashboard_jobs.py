@@ -22,7 +22,7 @@ from policydb.pdf_pipeline import PDFPipeline
 from policydb.settings import Settings
 from policydb.source_discovery import REQUIRED_ROLES
 
-ALLOWED_ACTIONS = {"fast_bulk_ingest", "city_fast_ingest", "city_complete", "source_resume", "refresh_metrics", "research_snapshot", "pdf_inventory", "pdf_archive", "pdf_discover", "pdf_download", "pdf_parse", "pdf_match", "pdf_run"}
+ALLOWED_ACTIONS = {"fast_bulk_ingest", "city_fast_ingest", "city_complete", "source_resume", "refresh_metrics", "research_snapshot", "episode_930", "pdf_inventory", "pdf_archive", "pdf_discover", "pdf_download", "pdf_parse", "pdf_match", "pdf_run"}
 ACTIVE_STATUSES = {"QUEUED", "RUNNING"}
 PDF_WRITE_ACTIONS = {"pdf_archive", "pdf_discover", "pdf_download", "pdf_parse", "pdf_match", "pdf_run"}
 
@@ -56,7 +56,7 @@ def validate_job_request(settings: Settings, action: str, scope: Mapping[str, An
     scope = dict(scope or {})
     cities = [str(value) for value in (scope.get("cities") or []) if value]
     roles = [str(value) for value in (scope.get("source_roles") or []) if value]
-    if action in {"fast_bulk_ingest", "city_fast_ingest", "city_complete", *PDF_WRITE_ACTIONS} and not confirmed:
+    if action in {"fast_bulk_ingest", "city_fast_ingest", "city_complete", "episode_930", *PDF_WRITE_ACTIONS} and not confirmed:
         raise ValueError("confirmation is required for a crawl operation")
     if action in {"city_fast_ingest", "city_complete"} and len(cities) != 1:
         raise ValueError("city operation requires exactly one registered city")
@@ -74,7 +74,11 @@ def validate_job_request(settings: Settings, action: str, scope: Mapping[str, An
     workers = scope.get("workers")
     if workers is not None and (not isinstance(workers, int) or workers < 1 or workers > 8):
         raise ValueError("PDF workers must be an integer between 1 and 8")
-    return {"action": action, "scope": {"cities": cities, "source_roles": roles, "source_id": scope.get("source_id"), "max_cities": scope.get("max_cities"), "limit": limit, "workers": workers}, "confirmed": bool(confirmed)}
+    if action == "episode_930" and scope.get("city_limit") is not None:
+        city_limit = scope.get("city_limit")
+        if not isinstance(city_limit, int) or not 1 <= city_limit <= 105:
+            raise ValueError("episode_930 city_limit must be between 1 and 105")
+    return {"action": action, "scope": {"cities": cities, "source_roles": roles, "source_id": scope.get("source_id"), "max_cities": scope.get("max_cities"), "city_limit": scope.get("city_limit"), "max_ai_calls": scope.get("max_ai_calls"), "limit": limit, "workers": workers}, "confirmed": bool(confirmed)}
 
 
 def _job_dir(settings: Settings) -> Path:
@@ -143,6 +147,25 @@ def run_next_job(settings: Settings | None = None) -> dict[str, Any] | None:
         elif action == "research_snapshot":
             from policydb.research_snapshot import create_research_snapshot
             result = create_research_snapshot(settings)
+        elif action == "episode_930":
+            from policydb.jobs.manager import JobManager
+            from policydb.jobs.models import CrawlJobRequest
+
+            scope = job.get("scope", {})
+            request = CrawlJobRequest(
+                mode="historical_episode_930",
+                episode_id="EP_2016_930_TIGHTENING",
+                episode_city_limit=int(scope.get("city_limit") or 5),
+                episode_max_ai_calls=int(scope.get("max_ai_calls") or 10),
+                cities=cities,
+                processing_mode="full",
+                max_fetches=30,
+                rebuild_database=False,
+                run_validation=False,
+            )
+            state = JobManager(settings).create(request)
+            started = JobManager(settings).start(state.job_id)
+            result = {"status": "QUEUED", "job_id": state.job_id, "pid": started.pid}
         elif action.startswith("pdf_"):
             pipeline = PDFPipeline(settings)
             scope = job.get("scope", {})

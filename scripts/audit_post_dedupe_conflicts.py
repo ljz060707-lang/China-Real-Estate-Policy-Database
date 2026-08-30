@@ -12,7 +12,7 @@ from policydb.scope import load_cities_105
 from policydb.source_discovery import REQUIRED_ROLES
 from policydb.source_slots import list_candidates
 
-ROOT = Path(r"D:\Data Set\CRPD")
+ROOT = Path(r"E:\Data Set\CRPD")
 
 SHORTLIST = (
     ROOT

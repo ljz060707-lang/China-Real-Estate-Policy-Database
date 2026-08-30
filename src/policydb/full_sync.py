@@ -831,6 +831,7 @@ class FullSyncConfig:
     concurrency: int = 1
     discovery_concurrency: int = 1
     crawl_concurrency: int = 1
+    per_host_concurrency: int = 1
     max_ai_calls: int = 0
     max_search_calls: int = 5
     max_http_calls: int = 100
@@ -869,7 +870,7 @@ class FullSyncConfig:
             raise ValueError("--source-id is required for --scope source")
         if self.discovery_mode.upper() not in {"AUTO", "DISABLED", "SEARCH_ONLY", "AI_ONLY", "SEARCH_AND_AI"}:
             raise ValueError("discovery-mode must be AUTO, DISABLED, SEARCH_ONLY, AI_ONLY, or SEARCH_AND_AI")
-        positive = {"max_slots": self.max_slots, "max_sources": self.max_sources, "max_documents": self.max_documents, "top_k": self.top_k, "concurrency": self.concurrency, "discovery_concurrency": self.discovery_concurrency, "crawl_concurrency": self.crawl_concurrency, "rate_limit_per_minute": self.rate_limit_per_minute, "lookback_days": self.lookback_days, "checkpoint_every": self.checkpoint_every, "max_consecutive_failures": self.max_consecutive_failures, "max_list_pages_per_source": self.max_list_pages_per_source, "max_document_retries": self.max_document_retries, "max_attachment_attempts": self.max_attachment_attempts, "pdf_max_downloads_per_source": self.pdf_max_downloads_per_source, "pdf_max_downloads_per_job": self.pdf_max_downloads_per_job}
+        positive = {"max_slots": self.max_slots, "max_sources": self.max_sources, "max_documents": self.max_documents, "top_k": self.top_k, "concurrency": self.concurrency, "discovery_concurrency": self.discovery_concurrency, "crawl_concurrency": self.crawl_concurrency, "per_host_concurrency": self.per_host_concurrency, "rate_limit_per_minute": self.rate_limit_per_minute, "lookback_days": self.lookback_days, "checkpoint_every": self.checkpoint_every, "max_consecutive_failures": self.max_consecutive_failures, "max_list_pages_per_source": self.max_list_pages_per_source, "max_document_retries": self.max_document_retries, "max_attachment_attempts": self.max_attachment_attempts, "pdf_max_downloads_per_source": self.pdf_max_downloads_per_source, "pdf_max_downloads_per_job": self.pdf_max_downloads_per_job}
         if any(int(value) < 1 for value in positive.values()):
             raise ValueError("all execution limits must be positive")
         if self.max_minutes_per_source is not None and int(self.max_minutes_per_source) < 1:
@@ -1146,6 +1147,8 @@ def _pipeline_run_with_retry(
     retries: int = 2,
     cancel_check=None,
     max_attachment_attempts: int | None = None,
+    fetch_concurrency: int = 1,
+    per_host_concurrency: int = 1,
 ) -> dict[str, Any]:
     """Retry only transient Windows Parquet mapping/share failures.
 
@@ -1160,6 +1163,8 @@ def _pipeline_run_with_retry(
                 max_fetches=max_fetches,
                 cancel_check=cancel_check,
                 max_attachment_attempts=max_attachment_attempts,
+                fetch_concurrency=fetch_concurrency,
+                per_host_concurrency=per_host_concurrency,
             )
             runs_path = pipeline.settings.curated / "crawl_runs.parquet"
             if runs_path.exists():
@@ -2611,6 +2616,8 @@ class FullSyncController:
                     max_fetches=max_fetches,
                     cancel_check=self._source_cancel_check,
                     max_attachment_attempts=self.config.max_attachment_attempts,
+                    fetch_concurrency=self.config.crawl_concurrency,
+                    per_host_concurrency=self.config.per_host_concurrency,
                 )
                 result.update(fetched)
                 result["article_failures"] = int(fetched.get("failed") or fetched.get("persisted_failed") or 0)
@@ -2795,7 +2802,13 @@ class FullSyncController:
             if self.config.apply and not self.config.dry_run and plan.get("status") == "planned":
                 self.store.transition("article_fetch", reason_code=f"{mode}_apply", source_id=source_id)
                 self.ledger.reserve("http", fetch_limit)
-                fetched = _pipeline_run_with_retry(pipeline, plan["run_id"], max_fetches=fetch_limit)
+                fetched = _pipeline_run_with_retry(
+                    pipeline,
+                    plan["run_id"],
+                    max_fetches=fetch_limit,
+                    fetch_concurrency=self.config.crawl_concurrency,
+                    per_host_concurrency=self.config.per_host_concurrency,
+                )
                 result.update(fetched)
                 pipeline_status = str(fetched.get("status") or "")
                 has_failures = bool(int(fetched.get("failed") or 0))

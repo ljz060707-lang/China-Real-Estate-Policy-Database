@@ -5,8 +5,8 @@
     [string]$StartDate = "2018-01-01",
     [string]$EndDate = "",
 
-    [string]$ProjectRoot = "C:\Users\ljz52\Documents\Codex\2026-07-13\text-20260705-xlsx-text-data-raw\policy-database",
-    [string]$DataRoot = "D:\Data Set\CRPD",
+    [string]$ProjectRoot = "",
+    [string]$DataRoot = "E:\Data Set\CRPD",
 
     [int]$MaxPagesPerSource = 1000,
     [int]$MaxCandidatesPerSource = 10000,
@@ -23,6 +23,10 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+if ([string]::IsNullOrWhiteSpace($ProjectRoot)) {
+    $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+}
+
 if ([string]::IsNullOrWhiteSpace($EndDate)) {
     $EndDate = (Get-Date).ToString("yyyy-MM-dd")
 }
@@ -38,7 +42,7 @@ if (-not (Test-Path $CityFile)) {
     throw "未找到105城市清单：$CityFile"
 }
 if (-not (Test-Path $DataRoot)) {
-    throw "D盘数据根目录不可用：$DataRoot"
+        throw "数据根目录不可用：$DataRoot"
 }
 
 $CityRow = Import-Csv -Path $CityFile |

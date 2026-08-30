@@ -1,7 +1,7 @@
 # API Autopilot runbook
 
 All commands resolve the repository with `git rev-parse --show-toplevel` and
-use `D:\Data Set\CRPD` as the runtime data root. This round deliberately does
+use `E:\Data Set\CRPD` as the runtime data root. This round deliberately does
 not submit or push GitHub changes and does not start full source completion or
 105-city crawling.
 

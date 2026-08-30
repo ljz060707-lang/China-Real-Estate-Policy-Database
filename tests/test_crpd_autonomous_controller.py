@@ -14,13 +14,16 @@ from scripts.crpd_autonomous_controller import (
     crawl_stage_semantics,
     current_log_status,
     default_config,
+    finalize_terminal_run,
     install,
     next_stage_after,
+    progress_watchdog,
     redact,
     resume,
     stage_has_structured_validation_warning,
     stop,
     supervisor_decision,
+    write_progress_snapshot,
 )
 
 
@@ -65,7 +68,7 @@ def test_stage_machine_and_redaction() -> None:
     assert next_stage_after("COVERAGE_AUDIT", True) == "PDF_STAGE"
     assert next_stage_after("COVERAGE_AUDIT", False, False, recent_complete=False) == "RECENT_30D_PRIORITY"
     assert next_stage_after("RECENT_30D_PRIORITY", False, True, recent_complete=False) == "RECENT_30D_PRIORITY"
-    assert next_stage_after("RECENT_30D_PRIORITY", False, True, recent_complete=True) == "CRAWL_AGAIN"
+    assert next_stage_after("RECENT_30D_PRIORITY", False, True, recent_complete=True) == "RECENT_COVERAGE_AUDIT"
     assert "secret-value" not in redact("Authorization: Bearer secret-value")
 
 
@@ -229,6 +232,79 @@ def test_safe_handoff_routes_failed_historical_run_to_coverage_audit(tmp_path: P
     assert controller.latest_safe_handoff(paths) is None
 
 
+def test_stale_recent_run_is_terminally_reconciled_and_resumed(tmp_path: Path, monkeypatch) -> None:
+    paths, config = make_paths(tmp_path)
+    install(paths, config)
+    paths.master.write_text(
+        json.dumps(
+            {
+                "automation_id": "AUTO_TEST",
+                "status": "WAIT_CURRENT_RUN",
+                "stage": "WAIT_CURRENT_RUN",
+                "next_stage": "RECENT_30D_PRIORITY",
+                "run_id": "RUN_RECENT_OLD",
+            }
+        ),
+        encoding="utf-8",
+    )
+    paths.current_run.write_text(
+        json.dumps(
+            {
+                "run_id": "RUN_RECENT_OLD",
+                "stage": "RECENT_30D_PRIORITY",
+                "pid": 99999,
+                "status": "RUNNING",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (paths.automation / "RECENT_30D_STATE.json").write_text(
+        json.dumps({"status": "RUNNING", "current_item": "ITEM_1"}),
+        encoding="utf-8",
+    )
+    empty_processes = {
+        "current_backfill": [],
+        "legacy_supervisor": [],
+        "external_writers": [],
+        "autonomous_workers": [],
+    }
+    monkeypatch.setattr(controller, "process_snapshot", lambda: empty_processes)
+    monkeypatch.setattr(controller, "disk_status", lambda *_args: {"status": "OK"})
+    monkeypatch.setattr(
+        controller,
+        "current_log_status",
+        lambda *_args, **_kwargs: {"status": "TRUE_SUMMARY_PENDING", "safe_ended": False},
+    )
+    monkeypatch.setattr(controller, "run_id", lambda *_args: "RUN_RECENT_NEW")
+
+    class FakeLock:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    monkeypatch.setattr(controller, "FileLock", lambda *_args, **_kwargs: FakeLock())
+    seen = {}
+
+    class FakeProcess:
+        pid = 4321
+
+    def fake_popen(command, **_kwargs):
+        seen["command"] = command
+        return FakeProcess()
+
+    monkeypatch.setattr(controller.subprocess, "Popen", fake_popen)
+
+    assert supervisor_decision(paths, config) == 0
+    current = json.loads(paths.current_run.read_text(encoding="utf-8"))
+    assert current["status"] == "TERMINATED"
+    assert current["terminal_reason"] == "WORKER_PROCESS_MISSING"
+    assert seen["command"][seen["command"].index("--stage") + 1] == "RECENT_30D_PRIORITY"
+    assert seen["command"][seen["command"].index("--run-id") + 1] == "RUN_RECENT_NEW"
+    assert controller.latest_safe_handoff(paths) is None
+
+
 def test_incomplete_validation_report_is_a_warning_not_a_command_failure(tmp_path: Path) -> None:
     paths, config = make_paths(tmp_path)
     install(paths, config)
@@ -305,3 +381,94 @@ def test_recovery_zero_work_is_blocked_when_pending_shards_remain(tmp_path: Path
 def test_coverage_audit_routes_to_real_crawl_when_shards_are_pending() -> None:
     assert next_stage_after("COVERAGE_AUDIT", False, True) == "CRAWL_AGAIN"
     assert next_stage_after("COVERAGE_AUDIT", False, False) == "RECOVER_MISSING"
+
+
+def test_recent_completion_routes_through_coverage_audit_before_rolling() -> None:
+    assert next_stage_after(
+        "RECENT_30D_PRIORITY",
+        False,
+        False,
+        recent_complete=True,
+        rolling_enabled=True,
+    ) == "RECENT_COVERAGE_AUDIT"
+    assert next_stage_after(
+        "RECENT_COVERAGE_AUDIT",
+        False,
+        False,
+        recent_complete=True,
+        rolling_enabled=True,
+    ) == "ROLLING_24M_FULL_CITY_BACKFILL"
+
+
+def test_terminal_run_finalize_is_idempotent(tmp_path: Path) -> None:
+    paths, config = make_paths(tmp_path)
+    install(paths, config)
+    paths.current_run.write_text(
+        json.dumps(
+            {
+                "run_id": "RUN_TERMINAL",
+                "stage": "RECENT_30D_PRIORITY",
+                "status": "COMPLETED",
+                "reason": "SUCCESS",
+                "completed_at": "2026-08-12T14:37:03Z",
+                "pid": 99999,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (paths.automation / "RECENT_30D_STATE.json").write_text(
+        json.dumps({"status": "PARTIAL", "queue_size": 4}), encoding="utf-8"
+    )
+    processes = {
+        "current_backfill": [],
+        "legacy_supervisor": [],
+        "external_writers": [],
+        "autonomous_workers": [],
+    }
+
+    first = finalize_terminal_run(paths, processes, config)
+    second = finalize_terminal_run(paths, processes, config)
+    assert first is not None
+    assert second is not None
+    assert first["handoff_id"] == second["handoff_id"]
+    assert first["route_to"] == "RECENT_30D_PRIORITY"
+    assert len(list(paths.automation.glob("TERMINAL_HANDOFF_*.json"))) == 1
+    state = json.loads(paths.master.read_text(encoding="utf-8"))
+    assert state["next_stage"] == "RECENT_30D_PRIORITY"
+
+
+def test_progress_snapshot_is_atomic_and_separates_stage_queues(tmp_path: Path) -> None:
+    paths, config = make_paths(tmp_path)
+    install(paths, config)
+    recent = paths.data / "outputs" / "recent_30d"
+    rolling = paths.data / "outputs" / "rolling_24m"
+    recent.mkdir(parents=True, exist_ok=True)
+    rolling.mkdir(parents=True, exist_ok=True)
+    pl.DataFrame([{"item_id": "R1", "status": "SUCCESS", "attempts": 1, "city_id": "C1"}]).write_parquet(recent / "RECENT_30D_QUEUE.parquet")
+    pl.DataFrame([{"queue_item_id": "Q1", "status": "PENDING", "attempt_count": 0, "city_id": "C1"}]).write_parquet(rolling / "ROLLING_24M_QUEUE.parquet")
+    snapshot = write_progress_snapshot(paths, state={"status": "RUNNING", "stage": "RECENT_30D_PRIORITY", "last_heartbeat_at": "now"}, force=True)
+    assert snapshot["recent_30d"]["completed"] == 1
+    assert snapshot["rolling_24m"]["pending"] == 1
+    assert json.loads((paths.automation / "PROGRESS_SNAPSHOT.json").read_text(encoding="utf-8"))["stage"] == "RECENT_30D_PRIORITY"
+
+
+def test_progress_watchdog_separates_stale_business_progress_from_live_worker(tmp_path: Path) -> None:
+    paths, config = make_paths(tmp_path)
+    install(paths, config)
+    (paths.automation / "MASTER_STATE.json").write_text(
+        json.dumps({"stage": "RECENT_30D_PRIORITY", "last_heartbeat_at": "2099-01-01T00:00:00Z"}),
+        encoding="utf-8",
+    )
+    (paths.automation / "RECENT_30D_STATE.json").write_text(
+        json.dumps({"last_real_progress_at": "2020-01-01T00:00:00Z", "updated_at": "2020-01-01T00:00:00Z"}),
+        encoding="utf-8",
+    )
+    result = progress_watchdog(
+        paths,
+        {"watchdog": {"no_progress_minutes": 1}},
+        {"autonomous_workers": [{"pid": 123}], "current_backfill": [], "legacy_supervisor": [], "external_writers": []},
+    )
+    assert result["status"] == "NO_REAL_PROGRESS"
+    assert result["active_worker"] is True
+    assert result["safe_recovery"] == "deferred_until_no_active_worker"
+    assert json.loads((paths.automation / "PROGRESS_WATCHDOG.json").read_text(encoding="utf-8"))["status"] == "NO_REAL_PROGRESS"

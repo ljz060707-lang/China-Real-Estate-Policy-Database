@@ -5,6 +5,7 @@ from pathlib import Path
 import polars as pl
 
 import policydb.recent_priority as recent_priority
+from policydb.autopilot_cli import _resume_recent_window
 from policydb.recent_priority import Recent30DConfig, build_recent_queue, run_recent_30d
 from policydb.settings import Settings
 
@@ -31,9 +32,27 @@ def test_recent_queue_is_enabled_official_source_scoped_and_city_round_robin(roo
     )
     assert frame.height > 0
     assert frame["item_id"].n_unique() == frame.height
-    assert frame["status"].unique().to_list() == ["PENDING"]
+    assert set(frame["status"].unique().to_list()) == {"PENDING", "SOURCE_INCOMPLETE"}
+    assert frame.filter(pl.col("status") == "SOURCE_INCOMPLETE").height == 2
     assert frame["city_id"].n_unique() >= 2
     assert frame.filter(pl.col("source_role").is_null()).height == 0
+
+
+def test_resume_reuses_persisted_queue_window(tmp_path):
+    settings = Settings(root=tmp_path, outputs_path=tmp_path / "outputs")
+    queue_root = settings.outputs / "recent_30d"
+    queue_root.mkdir(parents=True)
+    pl.DataFrame(
+        [{"item_id": "I1", "start_date": "2026-07-12", "end_date": "2026-08-11"}],
+    ).write_parquet(queue_root / "RECENT_30D_QUEUE.parquet")
+    start, end = _resume_recent_window(
+        settings,
+        start_date=None,
+        end_date=None,
+        resume=True,
+    )
+    assert start == date(2026, 7, 12)
+    assert end == date(2026, 8, 11)
 
 
 def test_recent_run_promotes_formal_records_before_next_queue_item(root, tmp_path, monkeypatch):
@@ -79,8 +98,8 @@ def test_recent_run_promotes_formal_records_before_next_queue_item(root, tmp_pat
                     "local_path": "archive/html/fake-1.html",
                     "content_type": "text/html",
                     "http_status": 200,
-                    "title": "真实近期政策",
-                    "extracted_text": "真实近期政策正文",
+                    "title": "住房政策通知",
+                    "extracted_text": "住房政策实施办法正文",
                     "parse_status": "parsed",
                     "created_at": now,
                     "updated_at": now,

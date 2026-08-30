@@ -1,7 +1,7 @@
 # 永久档案存储方法
 
 档案根目录由 `CRPD_ARCHIVE_ROOT`（兼容 `POLICYDB_ARCHIVE_ROOT`）或个人设置读取，默认
-`D:\Data Set\CRPD`。业务代码不得硬编码其他路径；根目录不可用时明确失败，不静默回退。
+`E:\Data Set\CRPD`。业务代码不得硬编码其他路径；根目录不可用时明确失败，不静默回退。
 
 PDF、HTML、TXT 和附件使用内容寻址：
 

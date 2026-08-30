@@ -20,6 +20,33 @@ PAIR_PATTERN = re.compile(
 NUMBER_PATTERN = re.compile(
     r"(?P<value>\d+(?:\.\d+)?)\s*(?P<unit>%|％|万元|亿元|元|年|个月|万平方米|平方米|套|户)"
 )
+# Numbered clause markers: 第X条 / 第(X)条 / （一） / 一、 / 1.  (deterministic structure)
+NUMBERED_CLAUSE_RE = re.compile(
+    r"(?:第[（(]?[一二三四五六七八九十百千0-9]+[）)]?条|"
+    r"（[一二三四五六七八九十0-9]+）|"
+    r"(?:^|\n)\s*[一二三四五六七八九十百]+、|"
+    r"(?:^|\n)\s*[0-9]{1,2}[\.、])"
+)
+SENTENCE_RE = re.compile(r"[。；;！？!]+")
+NEGATION_WINDOW = 8  # chars before a verb/keyword to consider negation
+# Negation / reversal context terms (context feature; the AI layer decides the
+# final semantic direction — the deterministic layer never flips silently).
+NEGATION_TERMS = (
+    "取消", "不再", "停止", "废除", "废止", "终止", "解除", "豁免", "不受",
+    "暂停", "不予", "不得", "继续执行", "不再执行", "保持不变",
+)
+DATE_MENTION_RE = re.compile(r"(?<!\d)(20\d{2})\s*[-/.年]\s*(\d{1,2})\s*[-/.月]\s*(\d{1,2})\s*日?")
+PARAM_PERCENT_RE = re.compile(r"(?<!\d)(\d{1,3}(?:\.\d+)?)\s*%|百分之([0-9一二三四五六七八九十百]+)")
+PARAM_AMOUNT_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(万亿元|亿元|万元|元)")
+PARAM_YEAR_RE = re.compile(r"满\s*(\d+)\s*年|(\d+)\s*年(?:以[上内]|以上)")
+GEO_SCOPE_RE = re.compile(r"(全市|全域|本县|本市区|市区|中心城区|全省|县区|主城区|全市范围|本市|本省)")
+
+_GEO_PROVINCES = (
+    "北京", "天津", "上海", "重庆", "河北", "山西", "辽宁", "吉林", "黑龙江", "江苏",
+    "浙江", "安徽", "福建", "江西", "山东", "河南", "湖北", "湖南", "广东", "海南",
+    "四川", "贵州", "云南", "陕西", "甘肃", "青海", "内蒙古", "广西", "西藏", "宁夏",
+    "新疆", "香港", "澳门",
+)
 
 
 def _stable_id(*parts: object, prefix: str) -> str:
@@ -56,9 +83,11 @@ class Clause:
     text: str
     start: int
     end: int
+    number: str | None = None  # numbered marker (第X条 / （一） / 一、 / 1.) when present
 
 
 def split_clauses(text: str, *, record_id: str) -> list[Clause]:
+    """Split into clauses, preserving absolute positions and numbered markers."""
     clauses: list[Clause] = []
     cursor = 0
     for part in CLAUSE_BOUNDARY.split(text):
@@ -71,9 +100,89 @@ def split_clauses(text: str, *, record_id: str) -> list[Clause]:
         local = part.find(stripped)
         start = cursor + max(local, 0)
         end = start + len(stripped)
-        clauses.append(Clause(_stable_id(record_id, start, end, prefix="CLAUSE"), stripped, start, end))
+        markers = list(NUMBERED_CLAUSE_RE.finditer(stripped))
+        if not markers:
+            clauses.append(
+                Clause(_stable_id(record_id, start, end, prefix="CLAUSE"), stripped, start, end)
+            )
+            cursor += len(part)
+            continue
+        # Split the part at numbered markers, attaching the marker to its first
+        # sub-clause only; sentence-split the body so compound numbered items
+        # (e.g. one 条 with several policy sentences) yield separate candidates.
+        segment_start = 0
+        for index, match in enumerate(markers):
+            if match.start() > segment_start:
+                head = stripped[segment_start : match.start()].strip()
+                if head:
+                    head_start = start + segment_start
+                    clauses.append(
+                        Clause(
+                            _stable_id(record_id, head_start, head_start + len(head), prefix="CLAUSE"),
+                            head,
+                            head_start,
+                            head_start + len(head),
+                        )
+                    )
+            number = stripped[match.start() : match.end()].strip()
+            body_start = match.end()
+            body_end = markers[index + 1].start() if index + 1 < len(markers) else len(stripped)
+            body = stripped[body_start:body_end].strip()
+            sub_parts = [part.strip() for part in SENTENCE_RE.split(body) if part.strip()]
+            if not sub_parts:
+                sub_parts = [body]
+            for sub_index, sub in enumerate(sub_parts):
+                prefix = f"{number} " if sub_index == 0 else ""
+                text = f"{prefix}{sub}".strip()
+                if sub_index == 0:
+                    offset = match.start()
+                else:
+                    offset = match.start() + body.find(sub)
+                seg_start = start + offset
+                clauses.append(
+                    Clause(
+                        _stable_id(record_id, seg_start, seg_start + len(text), prefix="CLAUSE"),
+                        text,
+                        seg_start,
+                        seg_start + len(text),
+                        number=number if sub_index == 0 else None,
+                    )
+                )
+            segment_start = match.start()
         cursor += len(part)
     return clauses
+
+
+def _scan_negation(clause: str) -> list[str]:
+    return [term for term in NEGATION_TERMS if term in clause]
+
+
+def _scan_mentions(clause: str) -> list[dict[str, object]]:
+    mentions: list[dict[str, object]] = []
+    for match in DATE_MENTION_RE.finditer(clause):
+        mentions.append(
+            {"kind": "date", "text": clause[match.start() : match.end()],
+             "start": match.start(), "end": match.end()}
+        )
+    for pattern in (PARAM_PERCENT_RE, PARAM_AMOUNT_RE, PARAM_YEAR_RE):
+        for match in pattern.finditer(clause):
+            mentions.append(
+                {"kind": "parameter", "text": clause[match.start() : match.end()],
+                 "start": match.start(), "end": match.end()}
+            )
+    for match in GEO_SCOPE_RE.finditer(clause):
+        mentions.append(
+            {"kind": "geography", "text": clause[match.start() : match.end()],
+             "start": match.start(), "end": match.end()}
+        )
+    for province in _GEO_PROVINCES:
+        position = clause.find(province)
+        if position >= 0:
+            mentions.append(
+                {"kind": "geography", "text": province, "start": position, "end": position + len(province)}
+            )
+    mentions.sort(key=lambda m: (int(m["start"]), str(m["kind"])))
+    return mentions
 
 
 class DeterministicPolicyRules:
@@ -93,20 +202,44 @@ class DeterministicPolicyRules:
         )
 
     def _instrument(self, clause: str) -> str | None:
-        for instrument, patterns in self.patterns["instrument_patterns"].items():
-            if any(term in clause for term in patterns):
-                return instrument
-        return None
+        """Position-based instrument: the family whose term occurs EARLIEST wins.
 
-    def _direction(self, clause: str) -> str:
+        Compound clauses (e.g. 公积金贷款额度…，公积金首付…) resolve to the
+        instrument mentioned first rather than dictionary order.
+        """
+        best: tuple[int, str] | None = None
+        for instrument, patterns in self.patterns["instrument_patterns"].items():
+            for term in patterns:
+                position = clause.find(term)
+                if position >= 0 and (best is None or position < best[0]):
+                    best = (position, instrument)
+        return best[1] if best else None
+
+    def _direction(self, clause: str, negation: list[str] | None = None) -> str:
+        negation = negation or []
         matches = {
-            direction
+            direction: [
+                word for word in words
+                if word in clause and not (
+                    negation
+                    and any(
+                        term in clause[max(0, clause.find(word) - NEGATION_WINDOW) : clause.find(word)]
+                        for term in negation
+                    )
+                )
+            ]
             for direction, words in self.patterns["action_verbs"].items()
-            if any(word in clause for word in words)
         }
-        if len(matches) > 1:
+        present = {direction for direction, words in matches.items() if words}
+        # 提高至/上调至/增加至 + 额度/上限 is a quota raise -> supportive, not tightening.
+        if any(word in clause for word in ("提高至", "上调至", "增加至", "提高额度", "提高上限")) and any(
+            word in clause for word in ("额度", "上限", "万元", "亿元")
+        ):
+            present.discard("tightening")
+            present.add("supportive")
+        if len(present) > 1:
             return "mixed"
-        return next(iter(matches), "unknown")
+        return next(iter(present), "unknown")
 
     def extract_actions(
         self,
@@ -121,17 +254,26 @@ class DeterministicPolicyRules:
             return []
         completeness = classify_text_completeness(text, official_status=official_status, title=title)
         now = datetime.now(UTC).isoformat()
+        # Document-level date mentions (e.g. 施行日期) propagate to every action
+        # whose own clause carries no date mention — deterministic linkage.
+        document_dates = [
+            {"kind": "date", "text": match.group(0), "start": match.start(), "end": match.end()}
+            for match in DATE_MENTION_RE.finditer(text)
+        ]
         actions: list[PolicyAction] = []
         seen: set[tuple[str, str]] = set()
         for clause in split_clauses(text, record_id=record_id):
             instrument = self._instrument(clause.text)
-            direction = self._direction(clause.text)
+            negation = _scan_negation(clause.text)
+            direction = self._direction(clause.text, negation)
             has_action = direction != "unknown" or any(
                 word in clause.text for words in self.patterns["action_verbs"].values() for word in words
             ) or any(
                 word in clause.text
                 for words in self.binding["scores"].values()
                 for word in words
+            ) or bool(
+                instrument and NUMBER_PATTERN.search(clause.text)
             )
             if not instrument or not has_action:
                 continue
@@ -141,6 +283,13 @@ class DeterministicPolicyRules:
             seen.add(key)
             action_id = _stable_id(record_id, document_version_id, clause.start, instrument, prefix="ACTION")
             formal = completeness == "full_official_text"
+            mentions = _scan_mentions(clause.text)
+            if not any(m["kind"] == "date" for m in mentions):
+                mentions = list(mentions) + [
+                    {"kind": "date", "text": m["text"], "start": m["start"], "end": m["end"],
+                     "source": "document"}
+                    for m in document_dates
+                ]
             actions.append(
                 PolicyAction(
                     action_id=action_id,
@@ -156,6 +305,9 @@ class DeterministicPolicyRules:
                     text_completeness=completeness,
                     formal_eligible=formal,
                     evidence_text=clause.text,
+                    negation_terms=_scan_negation(clause.text),
+                    mentions=mentions,
+                    clause_number=clause.number,
                     created_at=now,
                     updated_at=now,
                 )

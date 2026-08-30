@@ -159,7 +159,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--data-root",
-        default=r"D:\Data Set\CRPD",
+        default=r"E:\Data Set\CRPD",
     )
     parser.add_argument(
         "--force",

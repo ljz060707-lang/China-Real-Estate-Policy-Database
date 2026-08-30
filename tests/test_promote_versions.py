@@ -12,7 +12,7 @@ def _settings(tmp_path):
     return Settings(root=tmp_path, curated_path=curated)
 
 
-def _write_fixture(settings, *, version_id="V1", item_id="I1", run_id="R1", title="政策标题", body="政策正文"):
+def _write_fixture(settings, *, version_id="V1", item_id="I1", run_id="R1", title="房地产政策通知", body="住房政策实施办法正文"):
     now = "2026-08-11T00:00:00+00:00"
     pl.DataFrame(
         [
@@ -73,7 +73,7 @@ def test_promotion_propagates_date_and_is_idempotent(tmp_path):
     assert records.height == 1
     assert records[0, "record_date"] == date(2026, 8, 1)
     assert records[0, "publication_date"] == date(2026, 8, 1)
-    assert records[0, "full_text"] == "政策正文"
+    assert records[0, "full_text"] == "住房政策实施办法正文"
     versions = pl.read_parquet(settings.curated / "policy_document_versions.parquet")
     assert versions[0, "record_id"] == records[0, "record_id"]
     assert versions[0, "publication_date"] == date(2026, 8, 1)

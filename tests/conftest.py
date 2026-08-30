@@ -71,7 +71,9 @@ def isolate_project_environment():
     )
     environment_names = (
         "CRPD_DATA_ROOT",
+        "CRPD_ARCHIVE_ROOT",
         "POLICYDB_DATA_ROOT",
+        "POLICYDB_ARCHIVE_ROOT",
         "POLICYDB_CURATED_ROOT",
         "POLICYDB_DATABASE",
         "POLICYDB_RAW_ROOT",

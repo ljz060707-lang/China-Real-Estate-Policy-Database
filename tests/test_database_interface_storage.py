@@ -8,7 +8,7 @@ import polars as pl
 import pytest
 
 from policydb.query import database_validation as validation
-from policydb.query.database import curated_dataset_parquets
+from policydb.query.database import _canonical_city_file, curated_dataset_parquets
 from policydb.settings import Settings
 
 
@@ -123,6 +123,26 @@ def test_database_builder_ignores_atomic_parquet_artifacts(tmp_path: Path) -> No
         path.write_bytes(b"placeholder")
 
     assert curated_dataset_parquets(curated) == [formal]
+
+
+def test_canonical_city_file_precedes_placeholder_curated_snapshot(tmp_path: Path) -> None:
+    curated = tmp_path / "curated"
+    reference = tmp_path / "data" / "reference"
+    curated.mkdir(parents=True)
+    reference.mkdir(parents=True)
+    pl.DataFrame(
+        {"city_id": ["PLACEHOLDER_1", "PLACEHOLDER_2"]}
+    ).write_parquet(curated / "cities_105.parquet")
+    pl.DataFrame(
+        {
+            "city_id": [f"CITY_{index:03d}" for index in range(105)],
+            "city_code": [f"{index + 100000:06d}" for index in range(105)],
+        }
+    ).write_csv(reference / "cities_105.csv")
+
+    settings = Settings(root=tmp_path, curated_path=curated)
+
+    assert _canonical_city_file(settings) == reference / "cities_105.csv"
 
 
 def test_required_relation_missing_is_a_query_failure(tmp_path: Path) -> None:

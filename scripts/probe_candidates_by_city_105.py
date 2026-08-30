@@ -102,7 +102,7 @@ def main() -> int:
     parser.add_argument("--refresh-seconds", type=int, default=5)
     parser.add_argument(
         "--data-root",
-        default=r"D:\Data Set\CRPD",
+        default=r"E:\Data Set\CRPD",
     )
     args = parser.parse_args()
 

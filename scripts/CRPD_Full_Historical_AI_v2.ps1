@@ -19,7 +19,7 @@ if (-not (Test-Path (Join-Path $Root "pyproject.toml"))) {
     throw "请先 cd 到 CRPD 项目根目录后再运行本脚本。"
 }
 
-$DataRoot = "D:\Data Set\CRPD"
+$DataRoot = "E:\Data Set\CRPD"
 $RunStamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $LogRoot = Join-Path $DataRoot "logs\historical_full_ai\$RunStamp"
 $StateRoot = Join-Path $DataRoot "jobs"

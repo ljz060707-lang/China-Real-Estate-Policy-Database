@@ -4,7 +4,7 @@ import argparse
 import json
 import sys
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import polars as pl
@@ -13,6 +13,8 @@ from policydb.autopilot import AutopilotConfig
 from policydb.autopilot_checkpoints import GlobalSlotCheckpointStore
 from policydb.autopilot_runtime import BoundedAutopilotController
 from policydb.dashboard_metrics import city_role_matrix
+from policydb.episode_930 import Episode930Pipeline, EpisodeConfig
+from policydb.episode_930_production import Episode930ProductionController
 from policydb.fast_bulk_ingest import (
     FastBulkConfig,
     FastBulkIngestController,
@@ -20,7 +22,18 @@ from policydb.fast_bulk_ingest import (
 )
 from policydb.full_sync import FullSyncConfig, FullSyncController
 from policydb.pdf_pipeline import PDFPipeline, load_pdf_config
-from policydb.recent_priority import Recent30DConfig, build_recent_queue, run_recent_30d
+from policydb.recent_priority import (
+    RECENT_STATUS_TERMINAL,
+    Recent30DConfig,
+    build_recent_queue,
+    run_recent_30d,
+)
+from policydb.rolling_24m import (
+    Rolling24MConfig,
+    build_rolling_queue,
+    rolling_audit,
+    run_rolling_24m,
+)
 from policydb.settings import Settings
 from policydb.source_completion_checkpoint import (
     build_checkpoint_state,
@@ -28,6 +41,38 @@ from policydb.source_completion_checkpoint import (
 )
 from policydb.source_discovery import REQUIRED_ROLES
 from policydb.source_slots import audit_525, rebuild_verification_audit
+
+
+def _resume_recent_window(
+    settings: Settings,
+    *,
+    start_date: date | None,
+    end_date: date | None,
+    resume: bool,
+) -> tuple[date | None, date | None]:
+    """Reuse the persisted queue window when ``--resume`` has no dates.
+
+    A moving default date must never turn a resume into a new queue.  Explicit
+    CLI dates still win, and a mixed/corrupt queue remains visible to the
+    caller instead of being silently guessed.
+    """
+
+    if not resume or start_date is not None or end_date is not None:
+        return start_date, end_date
+    path = settings.outputs / "recent_30d" / "RECENT_30D_QUEUE.parquet"
+    if not path.exists():
+        return start_date, end_date
+    frame = pl.read_parquet(path)
+    if not {"start_date", "end_date"}.issubset(frame.columns) or frame.is_empty():
+        return start_date, end_date
+    pairs = frame.select(["start_date", "end_date"]).drop_nulls().unique()
+    if pairs.height != 1:
+        return start_date, end_date
+    row = pairs.row(0, named=True)
+    try:
+        return date.fromisoformat(str(row["start_date"])), date.fromisoformat(str(row["end_date"]))
+    except ValueError:
+        return start_date, end_date
 
 
 def _add_full_sync_args(command: argparse.ArgumentParser) -> None:
@@ -153,7 +198,7 @@ def main() -> None:
     fast.add_argument("--output", type=Path)
     recent = sub.add_parser("recent-30d", help="bounded recent-30-day crawl priority and formal promotion")
     recent_sub = recent.add_subparsers(dest="recent_command", required=True)
-    for name in ("plan", "run", "status"):
+    for name in ("plan", "run", "status", "audit"):
         command = recent_sub.add_parser(name)
         command.add_argument("--start-date", type=lambda value: __import__("datetime").date.fromisoformat(value))
         command.add_argument("--end-date", type=lambda value: __import__("datetime").date.fromisoformat(value))
@@ -164,6 +209,22 @@ def main() -> None:
         command.add_argument("--apply", action="store_true")
         command.add_argument("--resume", action="store_true", default=True)
         command.add_argument("--no-resume", action="store_false", dest="resume")
+    rolling = sub.add_parser("rolling-24m", help="dynamic, resumable 24-month all-city source backfill")
+    rolling_sub = rolling.add_subparsers(dest="rolling_command", required=True)
+    for name in ("plan", "run", "status", "audit"):
+        command = rolling_sub.add_parser(name)
+        command.add_argument("--start-date", type=lambda value: __import__("datetime").date.fromisoformat(value))
+        command.add_argument("--end-date", type=lambda value: __import__("datetime").date.fromisoformat(value))
+        command.add_argument("--max-items", type=int, default=5)
+        command.add_argument("--max-pages-per-source", type=int, default=300)
+        command.add_argument("--max-candidates-per-shard", type=int, default=5000)
+        command.add_argument("--max-fetches-per-shard", type=int, default=5000)
+        command.add_argument("--max-attempts", type=int, default=3)
+        command.add_argument("--pdf-discovery-limit", type=int, default=30)
+        command.add_argument("--apply", action="store_true")
+        command.add_argument("--resume", action="store_true", default=True)
+        command.add_argument("--no-resume", action="store_false", dest="resume")
+        command.add_argument("--run-id")
     pdf = sub.add_parser("pdf", help="bounded PDF inventory/archive/discovery/download/parse workflow")
     pdf_sub = pdf.add_subparsers(dest="pdf_command", required=True)
     inventory = pdf_sub.add_parser("inventory", help="read-only recursive PDF inventory")
@@ -211,6 +272,38 @@ def main() -> None:
     source_research.add_argument("--concurrency", type=int, default=2)
     source_research.add_argument("--apply", action="store_true")
     source_research.add_argument("--resume", action="store_true")
+    episode = sub.add_parser("episode-930", help="auditable 2016 930 tightening episode supplement")
+    episode_sub = episode.add_subparsers(dest="episode_command", required=True)
+    for name in ("run", "status", "discover", "recover", "audit", "extract", "classify"):
+        command = episode_sub.add_parser(name)
+        command.add_argument("--output", type=Path)
+        command.add_argument("--apply", action="store_true")
+        command.add_argument("--max-search-queries", type=int, default=120)
+        command.add_argument("--search-results-per-query", type=int, default=8)
+        command.add_argument("--max-official-fetches", type=int, default=120)
+        command.add_argument("--max-ai-calls", type=int, default=50)
+        command.add_argument("--no-search", action="store_true")
+        command.add_argument("--no-ai", action="store_true")
+        command.add_argument("--pass-number", type=int, default=1)
+    episode_production = sub.add_parser(
+        "episode-930-production",
+        help="queue or inspect the 2016 930 episode through the formal crawler",
+    )
+    episode_production_sub = episode_production.add_subparsers(
+        dest="episode_production_command", required=True
+    )
+    production_plan = episode_production_sub.add_parser("plan")
+    production_plan.add_argument("--output", type=Path)
+    production_plan.add_argument("--run-id")
+    production_start = episode_production_sub.add_parser("start")
+    production_start.add_argument("--output", type=Path)
+    production_start.add_argument("--run-id")
+    production_start.add_argument("--city-id", action="append", default=[])
+    production_start.add_argument("--city-limit", type=int, default=5)
+    production_start.add_argument("--max-ai-calls", type=int, default=10)
+    production_start.add_argument("--max-fetches", type=int, default=30)
+    production_status = episode_production_sub.add_parser("status")
+    production_status.add_argument("--output", type=Path)
     args = parser.parse_args()
     settings = Settings.discover()
     if args.command == "full-sync":
@@ -254,9 +347,15 @@ def main() -> None:
         print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
         raise SystemExit(int(result.get("exit_code", 0)))
     if args.command == "recent-30d":
-        base = Recent30DConfig.default(
+        resume_start, resume_end = _resume_recent_window(
+            settings,
             start_date=args.start_date,
             end_date=args.end_date,
+            resume=bool(args.resume),
+        )
+        base = Recent30DConfig.default(
+            start_date=resume_start,
+            end_date=resume_end,
             max_items=args.max_items,
             max_pages_per_source=args.max_pages_per_source,
             max_candidates_per_shard=args.max_candidates_per_shard,
@@ -278,8 +377,57 @@ def main() -> None:
             path = settings.automation / "RECENT_30D_STATE.json"
             payload = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {"status": "NOT_STARTED"}
             payload["exit_code"] = 0
+        elif args.recent_command == "audit":
+            queue_path = settings.outputs / "recent_30d" / "RECENT_30D_QUEUE.parquet"
+            queue = pl.read_parquet(queue_path) if queue_path.exists() else pl.DataFrame()
+            complete = bool(queue.height) and queue.get_column("status").is_in(list(RECENT_STATUS_TERMINAL)).all()
+            payload = {
+                "status": "COMPLETE" if complete else "PARTIAL",
+                "queue_size": queue.height,
+                "completed_items": int(queue.get_column("status").is_in(list(RECENT_STATUS_TERMINAL)).sum()) if queue.height else 0,
+                "pending_items": int((~queue.get_column("status").is_in(list(RECENT_STATUS_TERMINAL))).sum()) if queue.height else 0,
+                "cities_checked": int(queue.filter(pl.col("attempts") > 0).get_column("city_id").n_unique()) if queue.height and "attempts" in queue.columns else 0,
+                "audit": "PASS" if complete else "PENDING",
+                "exit_code": 0,
+            }
         else:
             payload = run_recent_30d(settings, config=base)
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+        raise SystemExit(int(payload.get("exit_code", 0)))
+    if args.command == "rolling-24m":
+        config = Rolling24MConfig(
+            start_date=args.start_date,
+            end_date=args.end_date,
+            max_items=args.max_items,
+            max_pages_per_source=args.max_pages_per_source,
+            max_candidates_per_shard=args.max_candidates_per_shard,
+            max_fetches_per_shard=args.max_fetches_per_shard,
+            max_attempts=args.max_attempts,
+            pdf_discovery_limit=args.pdf_discovery_limit,
+            apply=bool(args.apply and args.rolling_command == "run"),
+            resume=bool(args.resume),
+        )
+        if args.rolling_command == "plan":
+            queue = build_rolling_queue(settings, config=config, resume=args.resume)
+            start, end = config.resolved_window()
+            payload = {
+                "status": "PLANNED",
+                "queue_size": queue.height,
+                "window_start": start.isoformat(),
+                "window_end": end.isoformat(),
+                "target_months": json.loads(queue[0, "target_months"]) if queue.height else [],
+                "output": str(settings.outputs / "rolling_24m"),
+                "exit_code": 0,
+            }
+        elif args.rolling_command == "status":
+            path = settings.automation / "ROLLING_24M_STATE.json"
+            payload = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {"status": "NOT_STARTED"}
+            payload["exit_code"] = 0
+        elif args.rolling_command == "audit":
+            payload = rolling_audit(settings, config=config)
+            payload["exit_code"] = 0
+        else:
+            payload = run_rolling_24m(settings, config=config, run_id=args.run_id)
         print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
         raise SystemExit(int(payload.get("exit_code", 0)))
     if args.command == "pdf":
@@ -389,6 +537,98 @@ def main() -> None:
         result = FullSyncController(settings, config=config).run(command="run")
         print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
         raise SystemExit(int(result.get("exit_code", 0)))
+    if args.command == "episode-930":
+        config = EpisodeConfig(
+            max_search_queries=max(0, args.max_search_queries),
+            search_results_per_query=max(1, args.search_results_per_query),
+            max_official_fetches=max(1, args.max_official_fetches),
+            max_ai_calls=max(0, args.max_ai_calls),
+            run_search=not args.no_search,
+            run_ai=not args.no_ai,
+            apply=bool(args.apply),
+        )
+        pipeline = Episode930Pipeline(settings, config=config, output=args.output)
+        if args.episode_command == "run":
+            result = pipeline.run()
+        elif args.episode_command == "status":
+            result = pipeline.status()
+        elif args.episode_command == "discover":
+            pipeline.scope()
+            result = pipeline.discover()
+        else:
+            candidate_path = pipeline.phase_dirs["01_DISCOVERY"] / "930_DISCOVERY_CANDIDATES.parquet"
+            city_path = pipeline.phase_dirs["01_DISCOVERY"] / "2016_930_CITY_DISCOVERY.parquet"
+            if not candidate_path.exists() or not city_path.exists():
+                pipeline.scope()
+                pipeline.discover()
+            cities = pl.read_parquet(city_path)
+            candidates = pl.read_parquet(candidate_path).to_dicts()
+            recovery_path = pipeline.phase_dirs["02_OFFICIAL_RECOVERY"] / "930_OFFICIAL_RECOVERY.parquet"
+            if recovery_path.exists() and args.episode_command in {"audit", "extract", "classify"}:
+                documents = pl.read_parquet(recovery_path)
+                recovery = {"status": "REUSED_OFFICIAL_RECOVERY", "documents": documents.height}
+            else:
+                documents, recovery = pipeline.official_recovery(candidates=candidates, cities_frame=cities)
+            if args.episode_command == "recover":
+                result = recovery
+            elif args.episode_command == "audit":
+                _, gaps, result = pipeline.gap_audit(documents, pass_number=args.pass_number)
+                result["gap_rows"] = gaps.height
+            elif args.episode_command == "extract":
+                actions, params, result = pipeline.extract_actions(documents)
+                result["parameter_rows"] = params.height
+            else:
+                actions, _, _ = pipeline.extract_actions(documents)
+                _, result = pipeline.classify_actions(documents, actions)
+        print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+        raise SystemExit(0)
+    if args.command == "episode-930-production":
+        controller = Episode930ProductionController(
+            settings,
+            output=args.output,
+            run_id=getattr(args, "run_id", None),
+            city_limit=getattr(args, "city_limit", 5),
+            max_ai_calls=getattr(args, "max_ai_calls", 10),
+        )
+        if args.episode_production_command == "plan":
+            result = controller.build_plan()
+        elif args.episode_production_command == "status":
+            result = {
+                "episode_id": controller.output.name,
+                "run_id": controller.run_id,
+                "progress": controller.snapshot_path.read_text(encoding="utf-8")
+                if controller.snapshot_path.exists()
+                else None,
+                "checkpoint": controller.checkpoint_path.read_text(encoding="utf-8")
+                if controller.checkpoint_path.exists()
+                else None,
+            }
+        else:
+            from policydb.jobs.manager import JobManager
+            from policydb.jobs.models import CrawlJobRequest
+
+            manager = JobManager(settings)
+            request = CrawlJobRequest(
+                mode="historical_episode_930",
+                episode_id="EP_2016_930_TIGHTENING",
+                cities=list(args.city_id),
+                episode_city_limit=args.city_limit,
+                episode_max_ai_calls=args.max_ai_calls,
+                max_fetches=args.max_fetches,
+                processing_mode="full",
+                rebuild_database=False,
+                run_validation=False,
+            )
+            state = manager.create(request)
+            started = manager.start(state.job_id)
+            result = {
+                "status": "STARTED",
+                "job_id": state.job_id,
+                "pid": started.pid,
+                "request": request.model_dump(mode="json"),
+            }
+        print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+        raise SystemExit(0)
     config = AutopilotConfig.load(args.config, root=settings.root)
     overrides = {}
     if args.provider is not None:

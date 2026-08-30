@@ -17,6 +17,7 @@ from policydb.dashboard_live_state import (
     DashboardSnapshot,
     _automation_live_state,
     _database_error_status,
+    _episode_930_progress,
     _read_frame,
     clear_dashboard_caches,
     load_dashboard_snapshot,
@@ -327,3 +328,76 @@ def test_snapshot_keeps_records_when_versions_and_gaps_are_unavailable(
     assert snapshot.documents["document_versions"] is None
     assert snapshot.coverage["open_gaps"] is None
     assert snapshot.coverage["critical_gaps"] is None
+
+
+def test_episode_progress_distinguishes_autorun_lock_from_active_writer(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    output = settings.outputs / "special_projects" / "2016_930"
+    output.mkdir(parents=True)
+    (output / "930_PROGRESS_SNAPSHOT.json").write_text(
+        json.dumps(
+            {
+                "status": "RUNNING",
+                "stage": "930_DISCOVERY",
+                "last_micro_batch_status": "COMPLETED_WITH_WARNINGS",
+                "next_batch_status": "PENDING",
+                "last_real_progress_at": "2026-08-14T00:00:00+00:00",
+                "heartbeat_at": "2026-08-14T00:00:05+00:00",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (output / "930_AUTORUN_STATE.json").write_text(
+        json.dumps(
+            {
+                "status": "RUNNING",
+                "runner_pid": 1234,
+                "current_job_id": "JOB1",
+                "current_job_status": "discovering",
+            }
+        ),
+        encoding="utf-8",
+    )
+    progress, _meta = _episode_930_progress(settings)
+    assert progress["status"] == "RUNNING"
+    assert progress["last_micro_batch_status"] == "COMPLETED_WITH_WARNINGS"
+    assert progress["autorun"]["lock_present"] is False
+    assert progress["autorun"]["active_worker"] is True
+    assert progress["autorun"]["active_fetch"] is True
+    assert progress["autorun"]["active_writer"] is False
+
+
+def test_episode_progress_exposes_current_api_status_and_recovery_queue(
+    tmp_path: Path,
+) -> None:
+    settings = _settings(tmp_path)
+    output = settings.outputs / "special_projects" / "2016_930"
+    output.mkdir(parents=True)
+    (output / "930_PROGRESS_SNAPSHOT.json").write_text(
+        json.dumps({"status": "RUNNING", "stage": "930_API_CLASSIFY_PASS1"}),
+        encoding="utf-8",
+    )
+    (output / "930_API_PROVIDER_STATUS.json").write_text(
+        json.dumps(
+            {
+                "status": "TEMPORARY_PROVIDER_FAILURE",
+                "api_balance_status": "unknown",
+            }
+        ),
+        encoding="utf-8",
+    )
+    pl.DataFrame(
+        [
+            {"failure_id": "F1", "status": "AI_DEFERRED", "recovery_status": "PENDING_PROVIDER_RECOVERY"},
+            {"failure_id": "F2", "status": "RETRYABLE_FAILURE", "recovery_status": "PENDING_RETRY"},
+        ]
+    ).write_parquet(output / "930_API_RECOVERY_QUEUE.parquet")
+
+    progress, _meta = _episode_930_progress(settings)
+    assert progress["api_status"] == "TEMPORARY_PROVIDER_FAILURE"
+    assert progress["api_balance_status"] == "unknown"
+    assert progress["api_recovery_queue"] == {
+        "total": 2,
+        "pending": 2,
+        "provider_recovery_pending": 1,
+    }

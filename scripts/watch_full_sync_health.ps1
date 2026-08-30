@@ -25,8 +25,8 @@ Set-StrictMode -Version Latest
 # 不调用 AI
 # ============================================================
 
-$Repo = "D:\Codex\projects\Documents-Codex\2026-07-13\text-20260705-xlsx-text-data-raw\policy-database"
-$DataRoot = "D:\Data Set\CRPD"
+$Repo = "E:\policy-database"
+$DataRoot = "E:\Data Set\CRPD"
 
 $DateFrom = "2018-01-01"
 $ExpectedSlots = 525

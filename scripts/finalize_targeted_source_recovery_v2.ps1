@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Repo = "D:\Codex\projects\Documents-Codex\2026-07-13\text-20260705-xlsx-text-data-raw\policy-database"
+    [string]$Repo = "E:\policy-database"
 )
 
 Set-StrictMode -Version Latest
@@ -14,7 +14,7 @@ $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $OutputEncoding = $Utf8NoBom
 $env:PYTHONUTF8 = "1"
 $env:PYTHONIOENCODING = "utf-8"
-$env:CRPD_DATA_ROOT = "D:\Data Set\CRPD"
+$env:CRPD_DATA_ROOT = "E:\Data Set\CRPD"
 chcp 65001 | Out-Null
 
 $Python = Join-Path $Repo ".venv\Scripts\python.exe"

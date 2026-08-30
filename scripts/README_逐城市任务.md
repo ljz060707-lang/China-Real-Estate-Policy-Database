@@ -17,7 +17,7 @@
 
 3. `CRPD_Generate_City_Task_Manifest.ps1`
    - 生成105行城市任务清单；
-   - 输出到 `D:\Data Set\CRPD\jobs\city_full_search\city_task_manifest.csv`。
+   - 输出到 `E:\Data Set\CRPD\jobs\city_full_search\city_task_manifest.csv`。
 
 ## 安装
 

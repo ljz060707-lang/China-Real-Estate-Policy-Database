@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from collections import deque
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import Any
 
 import polars as pl
 import yaml
@@ -24,7 +26,12 @@ from policydb.crawl.discovery import (
     discover_search_items,
     discover_seed_items,
 )
-from policydb.crawl.fetcher import PermissionErrorLocal, RespectfulFetcher
+from policydb.crawl.fetcher import (
+    FetchTask,
+    HostAwareFetchPool,
+    PermissionErrorLocal,
+    RespectfulFetcher,
+)
 from policydb.crawl.models import DiscoveryRequest
 from policydb.crawl.parser import extract_pdf_embedded, parse_document
 from policydb.crawl.registry import load_registry
@@ -41,6 +48,45 @@ def _province_matches(name: object, code: object, requested: set[str]) -> bool:
         if full_name.endswith(suffix):
             aliases.add(full_name.removesuffix(suffix))
     return bool(aliases & requested)
+
+
+def _safe_query_year(value: object) -> int | None:
+    text = str(value or "")
+    try:
+        year = int(text[:4])
+    except (TypeError, ValueError):
+        return None
+    return year if 1900 <= year <= 2100 else None
+
+
+def _apply_item_updates(
+    items: pl.DataFrame,
+    updates: dict[str, dict[str, str | None]],
+) -> pl.DataFrame:
+    """Apply one compact status batch instead of rescanning all items per URL."""
+
+    if not updates:
+        return items
+    fields = ("status", "final_url", "etag", "last_modified", "last_checked_at")
+    rows = [
+        {
+            "item_id": item_id,
+            **{f"{field}_update": values.get(field) for field in fields},
+        }
+        for item_id, values in updates.items()
+    ]
+    update_schema = {"item_id": pl.String} | {
+        f"{field}_update": pl.String for field in fields
+    }
+    update_frame = pl.DataFrame(rows, schema=update_schema)
+    joined = items.join(update_frame, on="item_id", how="left")
+    joined = joined.with_columns(
+        [
+            pl.coalesce(pl.col(f"{field}_update"), pl.col(field)).alias(field)
+            for field in fields
+        ]
+    )
+    return joined.drop([f"{field}_update" for field in fields])
 
 
 class CrawlPipeline:
@@ -463,6 +509,114 @@ class CrawlPipeline:
     def _atomic_parquet(cls, path: Path, frame: pl.DataFrame) -> None:
         atomic_write_parquet(frame, path, {"module": "crawl.pipeline"})
 
+    def plan_external_candidates(
+        self,
+        run_id: str,
+        candidates: list[dict[str, Any]],
+        *,
+        start_date: date,
+        end_date: date,
+        run_type: str = "historical_episode_930",
+    ) -> dict[str, Any]:
+        """Materialize queue-scoped search results into the normal crawl tables.
+
+        Episode recovery must use the same fetch/archive/version path as a
+        normal crawl, but a search result does not necessarily belong to a
+        pre-registered source.  Such rows retain a deterministic discovery
+        source id and are still subject to the normal HTTP/parser/archive
+        gates; the promotion layer decides whether the evidence is official.
+        """
+
+        now = datetime.now(UTC).isoformat()
+        existing_path = self._path("crawl_items")
+        existing_ids: set[str] = set()
+        if existing_path.exists():
+            existing = read_parquet_snapshot(existing_path)
+            if "item_id" in existing.columns:
+                existing_ids = {str(value) for value in existing["item_id"].to_list()}
+        rows: list[dict[str, Any]] = []
+        links: list[dict[str, Any]] = []
+        for candidate in candidates:
+            queue_item_id = str(candidate.get("queue_item_id") or "")
+            canonical_url = str(candidate.get("canonical_url") or candidate.get("url") or "")
+            if not queue_item_id or not canonical_url:
+                continue
+            item_id = stable_id(run_id, queue_item_id, canonical_url, prefix="CRAWLITEM")
+            links.append(
+                {
+                    "link_id": stable_id(run_id, queue_item_id, canonical_url, prefix="930LINK"),
+                    "episode_id": candidate.get("episode_id"),
+                    "queue_item_id": queue_item_id,
+                    "crawl_run_id": run_id,
+                    "crawl_item_id": item_id,
+                    "url": candidate.get("url") or canonical_url,
+                    "canonical_url": canonical_url,
+                    "source_id": candidate.get("source_id"),
+                    "city_id": candidate.get("city_id"),
+                    "created_at": now,
+                }
+            )
+            if item_id in existing_ids:
+                continue
+            rows.append(
+                {
+                    "item_id": item_id,
+                    "run_id": run_id,
+                    "source_id": candidate.get("source_id"),
+                    "url": candidate.get("url") or canonical_url,
+                    "canonical_url": canonical_url,
+                    "status": "pending",
+                    "city_id": candidate.get("city_id"),
+                    "query_year": _safe_query_year(candidate.get("published_at")),
+                    "keyword_group": candidate.get("query_type"),
+                    "retry_count": 0,
+                    "first_seen_at": now,
+                    "last_seen_at": now,
+                    "created_at": now,
+                    "updated_at": now,
+                    "task_key": stable_id(
+                        candidate.get("queue_item_id"), canonical_url, run_type, prefix="TASK"
+                    ),
+                    "scan_method": run_type,
+                    "requested_url": candidate.get("url") or canonical_url,
+                    "final_url": None,
+                    "etag": None,
+                    "last_modified": None,
+                    "last_checked_at": None,
+                    "next_check_at": None,
+                    "candidate_date": candidate.get("published_at"),
+                    "candidate_date_source": "search_provider" if candidate.get("published_at") else "unknown",
+                    "candidate_date_confidence": 0.5 if candidate.get("published_at") else 0.0,
+                    "period_decision": None,
+                }
+            )
+            existing_ids.add(item_id)
+        if rows:
+            append_unique(existing_path, rows, "item_id")
+        append_unique(
+            self._path("crawl_runs"),
+            [
+                {
+                    "run_id": run_id,
+                    "run_type": run_type,
+                    "scope_id": "EP_2016_930_TIGHTENING",
+                    "period_start": start_date.isoformat(),
+                    "period_end": end_date.isoformat(),
+                    "status": "planned",
+                    "source_count": len({str(row.get("source_id") or "") for row in candidates}),
+                    "item_count": len(rows),
+                    "fetched_count": 0,
+                    "failed_count": 0,
+                    "started_at": now,
+                    "finished_at": None,
+                    "created_at": now,
+                    "updated_at": now,
+                }
+            ],
+            "run_id",
+        )
+        return {"run_id": run_id, "item_count": len(rows), "links": links}
+
     def _finalize_run(
         self,
         run_id: str,
@@ -591,7 +745,14 @@ class CrawlPipeline:
         max_attachment_attempts: int | None = None,
         cancel_check=None,
         progress=None,
+        audit_path: Path | None = None,
+        audit_context: dict[str, dict[str, Any]] | None = None,
+        fetch_concurrency: int = 1,
+        per_host_concurrency: int = 1,
     ) -> dict:
+        pipeline_started = time.perf_counter()
+        fetch_concurrency = max(1, min(int(fetch_concurrency), 16))
+        per_host_concurrency = max(1, min(int(per_host_concurrency), 2))
         items_path = self._path("crawl_items")
         if not items_path.exists():
             return {"run_id": run_id, "status": "missing_items", "fetched": 0, "failed": 0}
@@ -615,15 +776,48 @@ class CrawlPipeline:
         dedup_decisions: list[dict] = []
         errors: list[dict] = []
         attachment_records: dict[str, dict] = {}
+        http_audit: list[dict[str, Any]] = []
         fetched = 0
+        item_updates: dict[str, dict[str, str | None]] = {}
         cancelled = False
         budget_paused = False
         processed_count = 0
         last_item_id: str | None = None
-        for item in pending.iter_rows(named=True):
+        pending_rows = pending.to_dicts()
+        fetch_pool: HostAwareFetchPool | None = None
+        fetch_metrics: dict[str, int | float | None] | None = None
+        if fetch_concurrency > 1 and len(pending_rows) > 1:
+            fetch_pool = HostAwareFetchPool(
+                self.fetcher,
+                [
+                    FetchTask(
+                        key=str(item["item_id"]),
+                        url=str(item["url"]),
+                        etag=item.get("etag"),
+                        last_modified=item.get("last_modified"),
+                        rate_limit=(
+                            source_index[str(item.get("source_id") or "")].rate_limit
+                            if str(item.get("source_id") or "") in source_index
+                            else None
+                        ),
+                    )
+                    for item in pending_rows
+                ],
+                max_workers=fetch_concurrency,
+                per_host_concurrency=per_host_concurrency,
+            )
+            fetch_pool.__enter__()
+        for item in pending_rows:
             if cancel_check and cancel_check():
-                cancelled = True
-                break
+                if fetch_pool is None:
+                    cancelled = True
+                    break
+                # Stop extending the bounded window, then commit every request
+                # already in flight before yielding at a safe checkpoint.
+                fetch_pool.stop_submitting()
+                if not fetch_pool.has_task(str(item["item_id"])):
+                    cancelled = True
+                    break
             processed_count += 1
             last_item_id = item["item_id"]
             if progress:
@@ -640,27 +834,55 @@ class CrawlPipeline:
                     },
                 )
             now = datetime.now(UTC)
+            fetch_started_at = now
+            context = dict((audit_context or {}).get(str(item["item_id"]), {}))
             try:
-                source = source_index[item["source_id"]]
-                self.fetcher.rate_limit = source.rate_limit
-                result = self.fetcher.fetch(
-                    item["url"],
-                    etag=item.get("etag"),
-                    last_modified=item.get("last_modified"),
+                source = source_index.get(str(item.get("source_id") or ""))
+                if source is not None and fetch_pool is None:
+                    self.fetcher.rate_limit = source.rate_limit
+                result = (
+                    fetch_pool.get(str(item["item_id"]))
+                    if fetch_pool is not None
+                    else self.fetcher.fetch(
+                        item["url"],
+                        etag=item.get("etag"),
+                        last_modified=item.get("last_modified"),
+                    )
                 )
                 if result.not_modified:
-                    items = items.with_columns(
-                        pl.when(pl.col("item_id") == item["item_id"])
-                        .then(pl.lit("unchanged"))
-                        .otherwise(pl.col("status"))
-                        .alias("status")
+                    http_audit.append(
+                        {
+                            "http_audit_id": stable_id(run_id, item["item_id"], "304", prefix="HTTPAUDIT"),
+                            "episode_id": context.get("episode_id"),
+                            "queue_item_id": context.get("queue_item_id"),
+                            "crawl_run_id": run_id,
+                            "crawl_item_id": item["item_id"],
+                            "requested_url": result.requested_url,
+                            "final_url": result.final_url,
+                            "hostname": result.final_url.split("/", 3)[2] if "/" in result.final_url else None,
+                            "http_status": result.status_code,
+                            "content_type": result.content_type,
+                            "response_bytes": result.response_bytes,
+                            "content_sha256": None,
+                            "raw_path": None,
+                            "document_version_id": None,
+                            "document_version_created": False,
+                            "request_started_at": (result.request_started_at or fetch_started_at).isoformat(),
+                            "request_finished_at": (result.request_finished_at or datetime.now(UTC)).isoformat(),
+                            "cache_hit": True,
+                            "network_source": result.network_source,
+                            "real_network_fetch": True,
+                            "fetch_status": "CACHE_HIT",
+                            "error_type": None,
+                            "error_message": None,
+                            "created_at": datetime.now(UTC).isoformat(),
+                            **context,
+                        }
                     )
-                    items = items.with_columns(
-                        pl.when(pl.col("item_id") == item["item_id"])
-                        .then(pl.lit(now.isoformat()))
-                        .otherwise(pl.col("last_checked_at"))
-                        .alias("last_checked_at")
-                    )
+                    item_updates[str(item["item_id"])] = {
+                        "status": "unchanged",
+                        "last_checked_at": now.isoformat(),
+                    }
                     dedup_decisions.append(
                         {
                             "decision_id": stable_id(run_id, item["item_id"], "L2", prefix="DEDUP"),
@@ -779,6 +1001,39 @@ class CrawlPipeline:
                     existing_version_ids.add(version_id)
                     item_status = "fetched"
                     decision = "new_document"
+                http_audit.append(
+                    {
+                        "http_audit_id": stable_id(run_id, item["item_id"], result.response_sha256, prefix="HTTPAUDIT"),
+                        "episode_id": context.get("episode_id"),
+                        "queue_item_id": context.get("queue_item_id"),
+                        "crawl_run_id": run_id,
+                        "crawl_item_id": item["item_id"],
+                        "requested_url": result.requested_url,
+                        "final_url": result.final_url,
+                        "hostname": result.final_url.split("/", 3)[2] if "/" in result.final_url else None,
+                        "http_status": result.status_code,
+                        "content_type": result.content_type,
+                        "response_bytes": result.response_bytes,
+                        "content_sha256": result.response_sha256,
+                        "raw_path": self._stored_path(raw_path),
+                        "document_version_id": version_id,
+                        "document_version_created": version_id not in (
+                            set(existing_versions["document_version_id"].to_list())
+                            if existing_versions is not None and "document_version_id" in existing_versions.columns
+                            else set()
+                        ),
+                        "request_started_at": (result.request_started_at or fetch_started_at).isoformat(),
+                        "request_finished_at": (result.request_finished_at or datetime.now(UTC)).isoformat(),
+                        "cache_hit": bool(result.cache_hit),
+                        "network_source": result.network_source,
+                        "real_network_fetch": True,
+                        "fetch_status": "LIVE_FETCH_SUCCESS",
+                        "error_type": None,
+                        "error_message": None,
+                        "created_at": datetime.now(UTC).isoformat(),
+                        **context,
+                    }
+                )
                 dedup_decisions.append(
                     {
                         "decision_id": stable_id(run_id, item["item_id"], version_id, "L3", prefix="DEDUP"),
@@ -916,27 +1171,47 @@ class CrawlPipeline:
                                 "updated_at": now.isoformat(),
                             }
                         )
-                items = items.with_columns(
-                    pl.when(pl.col("item_id") == item["item_id"])
-                    .then(pl.lit(item_status))
-                    .otherwise(pl.col("status"))
-                    .alias("status")
-                )
-                items = items.with_columns(
-                    pl.when(pl.col("item_id") == item["item_id"])
-                    .then(pl.lit(result.final_url)).otherwise(pl.col("final_url")).alias("final_url"),
-                    pl.when(pl.col("item_id") == item["item_id"])
-                    .then(pl.lit(result.etag)).otherwise(pl.col("etag")).alias("etag"),
-                    pl.when(pl.col("item_id") == item["item_id"])
-                    .then(pl.lit(result.last_modified)).otherwise(pl.col("last_modified")).alias("last_modified"),
-                    pl.when(pl.col("item_id") == item["item_id"])
-                    .then(pl.lit(now.isoformat())).otherwise(pl.col("last_checked_at")).alias("last_checked_at"),
-                )
+                item_updates[str(item["item_id"])] = {
+                    "status": item_status,
+                    "final_url": result.final_url,
+                    "etag": result.etag,
+                    "last_modified": result.last_modified,
+                    "last_checked_at": now.isoformat(),
+                }
                 fetched += 1
             except HttpBudgetExceeded:
                 budget_paused = True
                 break
             except Exception as exc:  # failure is persisted; prior data remains untouched
+                http_audit.append(
+                    {
+                        "http_audit_id": stable_id(run_id, item["item_id"], fetch_started_at.isoformat(), prefix="HTTPAUDIT"),
+                        "episode_id": context.get("episode_id"),
+                        "queue_item_id": context.get("queue_item_id"),
+                        "crawl_run_id": run_id,
+                        "crawl_item_id": item["item_id"],
+                        "requested_url": item["url"],
+                        "final_url": None,
+                        "hostname": item["url"].split("/", 3)[2] if "/" in str(item["url"]) else None,
+                        "http_status": None,
+                        "content_type": None,
+                        "response_bytes": 0,
+                        "content_sha256": None,
+                        "raw_path": None,
+                        "document_version_id": None,
+                        "document_version_created": False,
+                        "request_started_at": fetch_started_at.isoformat(),
+                        "request_finished_at": datetime.now(UTC).isoformat(),
+                        "cache_hit": False,
+                        "network_source": "LIVE_HTTP_ATTEMPT",
+                        "real_network_fetch": False,
+                        "fetch_status": "NETWORK_FAILED",
+                        "error_type": type(exc).__name__,
+                        "error_message": str(exc)[:500],
+                        "created_at": datetime.now(UTC).isoformat(),
+                        **context,
+                    }
+                )
                 errors.append(
                     {
                         "error_id": stable_id(item["item_id"], now.isoformat(), prefix="FETCHERR"),
@@ -961,13 +1236,15 @@ class CrawlPipeline:
                         "updated_at": now.isoformat(),
                     }
                 )
-                items = items.with_columns(
-                    pl.when(pl.col("item_id") == item["item_id"])
-                    .then(pl.lit("failed"))
-                    .otherwise(pl.col("status"))
-                    .alias("status")
-                )
+                item_updates[str(item["item_id"])] = {"status": "failed"}
+        if fetch_pool is not None:
+            fetch_pool.close()
+            fetch_metrics = fetch_pool.metrics()
+        items = _apply_item_updates(items, item_updates)
+        commit_started = time.perf_counter()
         self._atomic_parquet(items_path, items)
+        if audit_path is not None and http_audit:
+            append_unique(audit_path, http_audit, "http_audit_id")
         version_rows = existing_versions.to_dicts() if existing_versions is not None else []
         version_rows.extend(versions)
         if version_rows:
@@ -982,6 +1259,7 @@ class CrawlPipeline:
             append_unique(self._path("dedup_decisions"), dedup_decisions, "decision_id")
         if attachment_records:
             append_unique(self._path("attachments"), list(attachment_records.values()), "attachment_id")
+        commit_seconds = time.perf_counter() - commit_started
         final_result = self._finalize_run(
             run_id,
             cancelled=cancelled,
@@ -991,6 +1269,39 @@ class CrawlPipeline:
             processed_count=processed_count,
             budget_paused=budget_paused,
         )
+        if fetch_metrics is not None:
+            pipeline_seconds = time.perf_counter() - pipeline_started
+            writer_batch_rows = (
+                len(item_updates)
+                + len(versions)
+                + len(errors)
+                + len(dedup_decisions)
+                + len(attachment_records)
+            )
+            fetch_metrics.update(
+                {
+                    "pipeline_wall_seconds": round(pipeline_seconds, 3),
+                    "documents_per_minute": round(fetched * 60 / pipeline_seconds, 3),
+                    "attachments_per_minute": round(
+                        len(attachment_records) * 60 / pipeline_seconds,
+                        3,
+                    ),
+                    "parse_documents_per_minute": round(
+                        fetched * 60 / pipeline_seconds,
+                        3,
+                    ),
+                    "parser_concurrency": 1,
+                    "writer_concurrency": 1,
+                    "writer_batch_rows": writer_batch_rows,
+                    "db_rows_per_second": round(
+                        writer_batch_rows / commit_seconds,
+                        3,
+                    )
+                    if commit_seconds > 0
+                    else None,
+                }
+            )
+            final_result["throughput"] = fetch_metrics
         # Read the finalized run row.  Reading it before _finalize_run leaves
         # status=planned here and incorrectly marks a fully terminal window as
         # transaction_uncommitted.

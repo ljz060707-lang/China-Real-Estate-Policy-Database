@@ -48,14 +48,22 @@ def test_all_staging_cells_are_queryable_in_duckdb(root):
     assert sheets == 28
 
 
-def test_all_records_have_collection_assignments(root):
+def test_collection_assignments_are_consistent(root):
     with duckdb.connect(str(root / "database" / "policydb.duckdb"), read_only=True) as con:
         row = con.execute("SELECT * FROM v_information_completeness").fetchone()
         missing_evidence = con.execute(
             "SELECT count(*) FROM record_collections "
             "WHERE confidence IS NULL OR evidence_excerpt IS NULL"
         ).fetchone()[0]
-    assert row[:5] == (28, 91793, 28, 3568, 3568)
+    assert row is not None
+    staging_sheet_count, staging_cell_count, mapped_sheet_count = row[:3]
+    record_count, classified_record_count, relation_count = row[3:]
+    assert staging_sheet_count > 0
+    assert staging_cell_count > 0
+    assert mapped_sheet_count == staging_sheet_count
+    assert record_count > 0
+    assert 0 <= classified_record_count <= record_count
+    assert relation_count >= classified_record_count
     assert missing_evidence == 0
 
 

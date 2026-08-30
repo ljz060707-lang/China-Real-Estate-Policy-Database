@@ -30,6 +30,7 @@ class Settings(BaseModel):
     database_path: Path | None = None
     curated_path: Path | None = None
     raw_path: Path | None = None
+    archive_path: Path | None = None
     research_path: Path | None = None
     outputs_path: Path | None = None
     logs_path: Path | None = None
@@ -178,6 +179,8 @@ class Settings(BaseModel):
 
     @property
     def archive_root(self) -> Path:
+        if self.archive_path is not None:
+            return self._normalise_path(self.archive_path)
         explicit = os.getenv("CRPD_ARCHIVE_ROOT") or os.getenv("POLICYDB_ARCHIVE_ROOT")
         if explicit:
             return self._normalise_path(explicit)
@@ -431,6 +434,11 @@ class Settings(BaseModel):
     @property
     def policy_archive_root(self) -> Path:
         """Legacy property name retained for archive callers."""
+        # Explicit run-scoped environment paths must win over the legacy
+        # preference.  Otherwise an isolated rehearsal (or a migrated data
+        # root) can still write content-addressed evidence to the old archive.
+        if os.getenv("CRPD_ARCHIVE_ROOT") or os.getenv("POLICYDB_ARCHIVE_ROOT"):
+            return self.archive_root
         configured = str(self.preferences.get("policy_archive_root", "")).strip()
         return self._normalise_path(configured) if configured else self.archive_root
 

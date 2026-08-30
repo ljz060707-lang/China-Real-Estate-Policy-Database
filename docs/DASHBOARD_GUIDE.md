@@ -27,4 +27,4 @@ The worker is one-shot and can be scheduled independently:
 .\.venv\Scripts\python.exe scripts\dashboard_operations_worker.py
 ```
 
-It claims one queued job, writes status, and exits. Jobs and historical status remain under `D:\Data Set\CRPD\control\dashboard_jobs`.
+It claims one queued job, writes status, and exits. Jobs and historical status remain under `E:\Data Set\CRPD\control\dashboard_jobs`.

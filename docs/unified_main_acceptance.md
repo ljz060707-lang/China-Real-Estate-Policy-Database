@@ -16,14 +16,14 @@
 
 ## 2. 统一存储
 
-- 正式根目录：`D:\Data Set\CRPD`
-- DuckDB：`D:\Data Set\CRPD\database\policydb.duckdb`
-- Curated：`D:\Data Set\CRPD\curated`
-- Research：`D:\Data Set\CRPD\research`
-- 归档：`D:\Data Set\CRPD\archive`
-- 任务：`D:\Data Set\CRPD\jobs`
-- 日志：`D:\Data Set\CRPD\logs`
-- 输出：`D:\Data Set\CRPD\outputs`
+- 正式根目录：`E:\Data Set\CRPD`
+- DuckDB：`E:\Data Set\CRPD\database\policydb.duckdb`
+- Curated：`E:\Data Set\CRPD\curated`
+- Research：`E:\Data Set\CRPD\research`
+- 归档：`E:\Data Set\CRPD\archive`
+- 任务：`E:\Data Set\CRPD\jobs`
+- 日志：`E:\Data Set\CRPD\logs`
+- 输出：`E:\Data Set\CRPD\outputs`
 
 迁移实际执行“复制、SHA-256 校验、配置切换、验证”，未删除仓库和旧 D 盘副本。合并历史带入的 Raw、来源备份、生成输出和本机 DuckDB 已从 Git 索引移除，本地文件仍保留；CI 会从当前 checkout 重建可移植 DuckDB 视图。实时抓取现在按 SHA-256 写入 `archive/pdf|html|text|attachments/<前2位>/`；D 盘不可用时不回退 C 盘。
 
@@ -46,8 +46,8 @@
 
 逐城市、逐角色缺口文件：
 
-- `D:\Data Set\CRPD\outputs\coverage\city_source_requirement_matrix.csv`
-- `D:\Data Set\CRPD\outputs\coverage\city_source_requirement_matrix.parquet`
+- `E:\Data Set\CRPD\outputs\coverage\city_source_requirement_matrix.csv`
+- `E:\Data Set\CRPD\outputs\coverage\city_source_requirement_matrix.parquet`
 
 矩阵槽位已完整，但 URL 未齐全。当前环境未配置搜索 API，且访问南京政府站点时发生 TLS 握手失败；系统没有编造剩余 495 个网址。更换网络并配置 Serper/Tavily/Bing 后，执行 `sources discover-all --apply`、`sources health-all`、`sources enable-recommended` 和 `sources complete-matrix` 才能补齐并验证。
 

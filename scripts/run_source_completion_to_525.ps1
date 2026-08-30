@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Repo = "D:\Codex\projects\Documents-Codex\2026-07-13\text-20260705-xlsx-text-data-raw\policy-database",
+    [string]$Repo = "E:\policy-database",
     [string]$DataRoot = "E:\Data Set\CRPD",
     [string]$Provider = "siliconflow",
     [int]$BatchSlots = 20,

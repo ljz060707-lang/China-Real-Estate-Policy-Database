@@ -14,11 +14,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-DEFAULT_REPO = Path(
-    r"D:\Codex\projects\Documents-Codex\2026-07-13"
-    r"\text-20260705-xlsx-text-data-raw\policy-database"
-)
-DEFAULT_DATA_ROOT = Path(r"D:\Data Set\CRPD")
+DEFAULT_REPO = Path(__file__).resolve().parents[1]
+DEFAULT_DATA_ROOT = Path(r"E:\Data Set\CRPD")
 
 TEXT_SUFFIXES = {".json", ".jsonl", ".log", ".txt", ".py", ".toml", ".yaml", ".yml", ".ps1"}
 SEARCH_KEYWORDS = (

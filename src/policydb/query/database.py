@@ -77,6 +77,24 @@ def curated_dataset_parquets(curated: Path) -> list[Path]:
     ]
 
 
+def _canonical_city_file(settings: Settings) -> Path | None:
+    """Return the reviewed city-universe file when one is available.
+
+    ``curated/cities_105.parquet`` is a materialized snapshot and may be
+    partial while a run is being staged.  The reviewed CSV under
+    ``data/reference`` is the authoritative 105-city denominator.  Validate it
+    through the normal loader before allowing it to drive database views.
+    """
+
+    reference = settings.root / "data" / "reference" / "cities_105.csv"
+    if not reference.is_file():
+        return None
+    from policydb.scope import load_cities_105
+
+    load_cities_105(settings)
+    return reference
+
+
 def _taxonomy_case(column: str, labels: dict[str, str]) -> str:
     """Build a small, static SQL CASE expression for dashboard display labels."""
     clauses = []
@@ -176,12 +194,21 @@ def build_database(
             )
             con.execute("DROP TABLE manual_review_tasks")
             con.execute("ALTER TABLE manual_review_tasks_v2 RENAME TO manual_review_tasks")
+        canonical_city_file = _canonical_city_file(settings)
         for parquet in curated_dataset_parquets(settings.curated):
             name = parquet.stem
+            if name == "cities_105" and canonical_city_file is not None:
+                continue
             parquet_sql = str(parquet).replace("'", "''").replace("\\", "/")
             con.execute(
                 f"CREATE OR REPLACE VIEW {name} AS SELECT {_curated_view_projection(name)} "
                 f"FROM read_parquet('{parquet_sql}')"
+            )
+        if canonical_city_file is not None:
+            canonical_sql = str(canonical_city_file).replace("'", "''").replace("\\", "/")
+            con.execute(
+                "CREATE OR REPLACE VIEW cities_105 AS "
+                f"SELECT * FROM read_csv_auto('{canonical_sql}', header=true)"
             )
         exhaustive_views = {
             "source_requirement_slots": "v_source_requirement_slots",
@@ -327,11 +354,13 @@ def build_database(
                 LEFT JOIN identities i2 USING(record_id)
                 LEFT JOIN legacy l USING(record_id)
                 """
-                + intensity_join
-                + " "
-                + file_join
-                + """
-                UNION ALL
+                 + intensity_join
+                 + " "
+                 + file_join
+                 + """
+                 WHERE COALESCE(r.status,'') <> 'excluded_non_policy'
+                   AND COALESCE(r.record_type,'') <> 'non_policy_evidence'
+                 UNION ALL
                 SELECT 'RECORD:'||r.record_id action_id,r.record_id,r.title,r.record_date,
                        r.publication_date,r.effective_date,r.official_status,r.official_level,
                        r.source_quality,r.primary_source_url,r.source_sheet,r.source_row,
@@ -362,9 +391,11 @@ def build_database(
                 LEFT JOIN legacy l USING(record_id) """
                 + file_join
                 + """
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM policy_actions a WHERE a.record_id=r.record_id
-                )"""
+                 WHERE COALESCE(r.status,'') <> 'excluded_non_policy'
+                   AND COALESCE(r.record_type,'') <> 'non_policy_evidence'
+                   AND NOT EXISTS (
+                     SELECT 1 FROM policy_actions a WHERE a.record_id=r.record_id
+                 )"""
             )
         con.execute(
             "CREATE OR REPLACE VIEW v_policy_topic_long AS SELECT r.record_id,r.record_date,r.title,t.* FROM records r JOIN record_terms t USING(record_id)"
@@ -384,9 +415,25 @@ def build_database(
                 "SELECT r.record_id,r.record_date,r.title,g.* FROM records r "
                 "JOIN record_jurisdictions g USING(record_id)"
             )
-        con.execute(
-            "CREATE OR REPLACE VIEW v_policy_quantitative_measures AS SELECT * FROM quantitative_measures"
-        )
+        if (settings.curated / "quantitative_measures.parquet").exists():
+            con.execute(
+                "CREATE OR REPLACE VIEW v_policy_quantitative_measures AS SELECT * FROM quantitative_measures"
+            )
+        else:
+            # Web-crawl-only roots have no Excel-derived quantitative measures.
+            # Keep the view present with the production schema and zero rows so
+            # database builds never hard-fail on an optional derived table.
+            con.execute(
+                "CREATE OR REPLACE VIEW v_policy_quantitative_measures AS "
+                "SELECT NULL::VARCHAR AS measure_id, NULL::VARCHAR AS record_id, "
+                "NULL::VARCHAR AS measure_type, NULL::DOUBLE AS value, "
+                "NULL::DOUBLE AS value_min, NULL::DOUBLE AS value_max, "
+                "NULL::VARCHAR AS unit, NULL::VARCHAR AS currency, "
+                "NULL::VARCHAR AS population_scope, NULL::VARCHAR AS housing_scope, "
+                "NULL::VARCHAR AS condition_text, NULL::DATE AS period_start, "
+                "NULL::DATE AS period_end, NULL::VARCHAR AS evidence_excerpt "
+                "WHERE FALSE"
+            )
         if (settings.curated / "auto_t4_links.parquet").exists():
             con.execute("""CREATE OR REPLACE VIEW v_policy_features_resolved AS
                 SELECT COALESCE(f.record_id,a.record_id) AS record_id,f.feature_name,
@@ -394,12 +441,28 @@ def build_database(
                        CASE WHEN f.record_id IS NULL AND a.record_id IS NOT NULL
                             THEN 'deterministic_auto_match' ELSE 'curated' END AS link_source
                 FROM policy_features f LEFT JOIN auto_t4_links a USING(source_cell)""")
-        else:
+        elif (settings.curated / "policy_features.parquet").exists():
             con.execute("""CREATE OR REPLACE VIEW v_policy_features_resolved AS
                 SELECT *, 'curated'::VARCHAR AS link_source FROM policy_features""")
+        else:
+            con.execute("""CREATE OR REPLACE VIEW v_policy_features_resolved AS
+                SELECT NULL::VARCHAR AS record_id,NULL::VARCHAR AS feature_name,
+                       NULL::VARCHAR AS feature_value,NULL::VARCHAR AS source_sheet,
+                       NULL::VARCHAR AS source_cell,'curated'::VARCHAR AS link_source
+                WHERE FALSE""")
         has_normalized_geography = (
             settings.curated / "record_geographies_normalized.parquet"
         ).exists()
+        policies_join = (
+            "LEFT JOIN policies p USING(record_id)"
+            if (settings.curated / "policies.parquet").exists()
+            else ""
+        )
+        policies_strength = (
+            "COALESCE(p.mandatory_strength,0)::DOUBLE AS policy_strength"
+            if policies_join
+            else "NULL::DOUBLE AS policy_strength"
+        )
         if has_normalized_geography:
             con.execute("""CREATE OR REPLACE VIEW v_policy_geography_base AS
                 SELECT r.record_id,r.record_date,r.title,r.record_type,r.direction,
@@ -407,9 +470,9 @@ def build_database(
                        g.geography_original,g.province_name AS province,
                        COALESCE(g.parent_city_name,g.city_name) AS city_name,
                        g.city_code,g.county_name,g.jurisdiction_level,
-                       COALESCE(p.mandatory_strength,0)::DOUBLE AS policy_strength
+                       """ + policies_strength + """
                 FROM records r JOIN record_geographies_normalized g USING(record_id)
-                LEFT JOIN policies p USING(record_id)""")
+                """ + policies_join + """ """)
         else:
             con.execute("""CREATE OR REPLACE VIEW v_policy_geography_base AS
                 SELECT r.record_id,r.record_date,r.title,r.record_type,r.direction,
@@ -417,9 +480,9 @@ def build_database(
                        g.geography_original,NULL::VARCHAR AS province,
                        g.jurisdiction_name AS city_name,g.jurisdiction_id AS city_code,
                        NULL::VARCHAR AS county_name,'unknown'::VARCHAR AS jurisdiction_level,
-                       COALESCE(p.mandatory_strength,0)::DOUBLE AS policy_strength
+                       """ + policies_strength + """
                 FROM records r JOIN record_jurisdictions g USING(record_id)
-                LEFT JOIN policies p USING(record_id)""")
+                """ + policies_join + """ """)
         con.execute("""CREATE OR REPLACE VIEW v_city_policy_timeline AS
             SELECT g.city_name,r.record_date,r.record_id,r.title,r.direction,r.source_quality,
                    t.term_name topic
@@ -514,7 +577,15 @@ def build_database(
         con.execute(
             "CREATE OR REPLACE VIEW v_policy_source_quality AS SELECT record_id,title,official_status,source_quality,primary_source_url FROM records"
         )
-        con.execute("CREATE OR REPLACE VIEW v_policy_relations AS SELECT * FROM policy_relations")
+        if (settings.curated / "policy_relations.parquet").exists():
+            con.execute("CREATE OR REPLACE VIEW v_policy_relations AS SELECT * FROM policy_relations")
+        else:
+            con.execute(
+                "CREATE OR REPLACE VIEW v_policy_relations AS "
+                "SELECT NULL::VARCHAR AS relation_id,NULL::VARCHAR AS source_record_id,"
+                "NULL::VARCHAR AS target_record_id,NULL::VARCHAR AS relation_type,"
+                "NULL::VARCHAR AS evidence,NULL::DOUBLE AS confidence WHERE FALSE"
+            )
         if (settings.curated / "record_collections.parquet").exists():
             con.execute(
                 """CREATE OR REPLACE VIEW v_policy_collection_long AS
@@ -595,6 +666,25 @@ def build_database(
                 if "city_scale_2020" in city_scope_columns
                 else "NULL::VARCHAR AS city_scale_2020"
             )
+            has_record_collections = (settings.curated / "record_collections.parquet").exists()
+            supply_side_sql = (
+                "EXISTS(SELECT 1 FROM record_collections x WHERE x.record_id=r.record_id "
+                "AND x.collection_code IN ('housing_urban_rural_development','natural_resources')) AS supply_side"
+                if has_record_collections
+                else "FALSE AS supply_side"
+            )
+            urban_renewal_sql = (
+                "EXISTS(SELECT 1 FROM record_collections x WHERE x.record_id=r.record_id "
+                "AND x.subcollection_code='urban_renewal') AS urban_renewal"
+                if has_record_collections
+                else "FALSE AS urban_renewal"
+            )
+            financing_sql = (
+                "EXISTS(SELECT 1 FROM record_collections x WHERE x.record_id=r.record_id "
+                "AND x.collection_code='financial_regulation') AS financing"
+                if has_record_collections
+                else "FALSE AS financing"
+            )
             con.execute(
                 f"""CREATE OR REPLACE VIEW v_policy_105_cities AS
                    SELECT r.record_id,r.record_date,r.publication_date,r.title,r.summary,
@@ -616,16 +706,12 @@ def build_database(
                             AND t.term_name='人才住房') AS talent_policy,
                           EXISTS(SELECT 1 FROM record_terms t WHERE t.record_id=r.record_id
                             AND t.term_name='购房补贴') AS subsidy,
-                          EXISTS(SELECT 1 FROM record_collections x WHERE x.record_id=r.record_id
-                            AND x.collection_code IN ('housing_urban_rural_development',
-                              'natural_resources')) AS supply_side,
-                          EXISTS(SELECT 1 FROM record_collections x WHERE x.record_id=r.record_id
-                            AND x.subcollection_code='urban_renewal') AS urban_renewal,
-                          EXISTS(SELECT 1 FROM record_collections x WHERE x.record_id=r.record_id
-                            AND x.collection_code='financial_regulation') AS financing,
-                          COALESCE(p.mandatory_strength,0) AS policy_strength
+                          {supply_side_sql},
+                          {urban_renewal_sql},
+                          {financing_sql},
+                          {policies_strength}
                    FROM records r JOIN policy_applicable_cities a USING(record_id)
-                   JOIN cities_105 c USING(city_id) LEFT JOIN policies p USING(record_id)
+                   JOIN cities_105 c USING(city_id) {policies_join}
                    WHERE r.record_date >= DATE '2018-01-01'"""
             )
             con.execute(

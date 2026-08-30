@@ -11,11 +11,11 @@ The source file is never moved or overwritten. Existing files are inventoried
 read-only and content-addressed copies are written to:
 
 ```text
-D:\Data Set\CRPD\raw\pdf\objects\<sha256[:2]>\<sha256>.pdf
-D:\Data Set\CRPD\raw\pdf\quarantine\<attachment_id>_<sha256>.bin
-D:\Data Set\CRPD\derived\pdf_text\<sha256>.json
-D:\Data Set\CRPD\manifests\existing_pdf_inventory.parquet
-D:\Data Set\CRPD\manifests\pdf_archive_manifest.parquet
+E:\Data Set\CRPD\raw\pdf\objects\<sha256[:2]>\<sha256>.pdf
+E:\Data Set\CRPD\raw\pdf\quarantine\<attachment_id>_<sha256>.bin
+E:\Data Set\CRPD\derived\pdf_text\<sha256>.json
+E:\Data Set\CRPD\manifests\existing_pdf_inventory.parquet
+E:\Data Set\CRPD\manifests\pdf_archive_manifest.parquet
 ```
 
 The curated layer contains `pdf_assets`, `document_attachments`,
@@ -30,13 +30,13 @@ All write commands require `--apply`. Limits are deliberate and can be used
 for a real smoke test:
 
 ```powershell
-\.venv\Scripts\python.exe -m policydb.autopilot_cli pdf inventory --root "D:\Data Set\CRPD"
-\.venv\Scripts\python.exe -m policydb.autopilot_cli pdf archive --root "D:\Data Set\CRPD" --limit 20 --apply
+\.venv\Scripts\python.exe -m policydb.autopilot_cli pdf inventory --root "E:\Data Set\CRPD"
+\.venv\Scripts\python.exe -m policydb.autopilot_cli pdf archive --root "E:\Data Set\CRPD" --limit 20 --apply
 \.venv\Scripts\python.exe -m policydb.autopilot_cli pdf discover --limit 20 --apply
 \.venv\Scripts\python.exe -m policydb.autopilot_cli pdf match --apply
 \.venv\Scripts\python.exe -m policydb.autopilot_cli pdf download --limit 10 --workers 4 --apply
 \.venv\Scripts\python.exe -m policydb.autopilot_cli pdf parse --limit 10 --workers 2 --apply
-\.venv\Scripts\python.exe -m policydb.autopilot_cli pdf report --output "D:\Data Set\CRPD\outputs\pdf_report.json"
+\.venv\Scripts\python.exe -m policydb.autopilot_cli pdf report --output "E:\Data Set\CRPD\outputs\pdf_report.json"
 ```
 
 `download` uses the existing direct Government client through

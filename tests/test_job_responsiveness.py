@@ -9,6 +9,7 @@ import duckdb
 import pytest
 
 from policydb.jobs import CrawlJobRequest, JobManager
+from policydb.jobs.models import JobState
 from policydb.jobs.worker import run_job
 from policydb.query import database as database_module
 from policydb.settings import Settings
@@ -43,6 +44,19 @@ def test_lightweight_estimate_does_not_construct_service():
     estimate = request.estimate(12)
     assert time.perf_counter() - started < 0.1
     assert estimate["source_count"] == 12 and estimate["query_count"] == 8
+
+
+def test_legacy_stage_status_normalizes_to_running_lifecycle() -> None:
+    state = JobState.model_validate(
+        {
+            "job_id": "JOB_LEGACY",
+            "mode": "smart",
+            "status": "fetching",
+            "stage": "fetching",
+        }
+    )
+    assert state.status == "running"
+    assert state.stage == "fetching"
 
 
 def test_background_start_returns_under_one_second(tmp_path):

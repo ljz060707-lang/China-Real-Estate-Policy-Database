@@ -1,12 +1,16 @@
 ﻿param(
-    [string]$ProjectRoot = "C:\Users\ljz52\Documents\Codex\2026-07-13\text-20260705-xlsx-text-data-raw\policy-database",
-    [string]$DataRoot = "D:\Data Set\CRPD",
+    [string]$ProjectRoot = "",
+    [string]$DataRoot = "E:\Data Set\CRPD",
     [string]$StartDate = "2018-01-01",
     [string]$EndDate = ""
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+if ([string]::IsNullOrWhiteSpace($ProjectRoot)) {
+    $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+}
 
 if ([string]::IsNullOrWhiteSpace($EndDate)) {
     $EndDate = (Get-Date).ToString("yyyy-MM-dd")

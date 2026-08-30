@@ -14,4 +14,4 @@
 
 只有 `verified_coverage_pct=100`、南京网络路线非 `blocked`，且南京单月没有 `source_incomplete`、`partial_network`、`partial_parser`、`partial_cap` 或待处理后处理计数时，才允许启动全量回溯。`CRPD_Resume_Enabled_Sources_v2_2.ps1` 默认执行这些门禁；`-PartialEnabledSourcesOnly` 只用于明确标注的局部扫描，不能用于全量验收。
 
-监督器每次输出 `D:\Data Set\CRPD\outputs\supervisor\latest.json`。退出码 2 表示仍有来源、网络或分片问题，计划任务应记录告警而不能把该次检查标为成功。
+监督器每次输出 `E:\Data Set\CRPD\outputs\supervisor\latest.json`。退出码 2 表示仍有来源、网络或分片问题，计划任务应记录告警而不能把该次检查标为成功。

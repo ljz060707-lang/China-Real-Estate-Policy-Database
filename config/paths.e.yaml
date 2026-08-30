@@ -1,0 +1,25 @@
+# Canonical local layout for the migrated CRPD installation.
+# This file contains paths only; credentials remain in the existing
+# user-level SecretStore/environment and are never written here.
+layout_version: 1
+repo_root: E:/policy-database
+data_root: E:/Data Set/CRPD
+database: E:/Data Set/CRPD/database/policydb.duckdb
+raw_root: E:/Data Set/CRPD/raw
+curated_root: E:/Data Set/CRPD/curated
+research_root: E:/Data Set/CRPD/research
+archive_root: E:/Data Set/CRPD/archive
+manifest_root: E:/Data Set/CRPD/manifests
+log_root: E:/Data Set/CRPD/logs
+cache_root: E:/Data Set/CRPD/cache
+output_root: E:/Data Set/CRPD/outputs
+control_root: E:/Data Set/CRPD/control
+jobs_root: E:/Data Set/CRPD/jobs
+data_links:
+  database: E:/Data Set/CRPD/database
+  curated: E:/Data Set/CRPD/outputs/repo_legacy/curated/curated
+  raw: E:/Data Set/CRPD/raw/repo_legacy/raw
+  staging: E:/Data Set/CRPD/outputs/repo_legacy/staging/staging
+secrets:
+  source: user_environment_or_existing_secret_store
+  copied_dotenv: false

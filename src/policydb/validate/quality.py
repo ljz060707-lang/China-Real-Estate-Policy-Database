@@ -40,29 +40,50 @@ def validate(settings: Settings | None = None, *, group: str = "all") -> dict:
             "SELECT count(*) FROM records WHERE primary_source_url IS NOT NULL "
             "AND primary_source_url NOT LIKE 'http://%' AND primary_source_url NOT LIKE 'https://%'"
         ).fetchone()[0]
-        t2_file = next(
-            (settings.root / "data" / "staging" / "excel").glob("*T2_城市房地产政策现状.parquet")
-        )
-        t2_cells = con.execute("SELECT count(*) FROM read_parquet(?)", [str(t2_file)]).fetchone()[0]
-        t2_mapped = con.execute(
-            "SELECT count(DISTINCT source_cell) FROM city_policy_rules"
-        ).fetchone()[0]
-        completeness = con.execute(
-            "SELECT * FROM v_information_completeness"
-        ).fetchone()
-        collection_count = con.execute(
-            "SELECT count(DISTINCT collection_code) FROM record_collections"
-        ).fetchone()[0]
-        subcollection_count = con.execute(
-            "SELECT count(DISTINCT collection_code || '.' || subcollection_code) "
-            "FROM record_collections WHERE subcollection_code IS NOT NULL"
-        ).fetchone()[0]
         available = {
             row[0]
             for row in con.execute(
                 "SELECT table_name FROM information_schema.tables"
             ).fetchall()
         }
+        # Excel-staging artifacts are optional (web-crawl-only roots have none);
+        # each is reported as zero rather than crashing the release gate.
+        t2_file = next(
+            iter((settings.root / "data" / "staging" / "excel").glob("*T2_城市房地产政策现状.parquet")),
+            None,
+        )
+        t2_cells = (
+            con.execute("SELECT count(*) FROM read_parquet(?)", [str(t2_file)]).fetchone()[0]
+            if t2_file is not None
+            else 0
+        )
+        t2_mapped = (
+            con.execute("SELECT count(DISTINCT source_cell) FROM city_policy_rules").fetchone()[0]
+            if "city_policy_rules" in available
+            else 0
+        )
+        completeness = (
+            con.execute("SELECT * FROM v_information_completeness").fetchone()
+            if "v_information_completeness" in available
+            else None
+        )
+        if completeness is None:
+            completeness = (0, 0, 0, 0, 0, 0)
+        collection_count = (
+            con.execute(
+                "SELECT count(DISTINCT collection_code) FROM record_collections"
+            ).fetchone()[0]
+            if "record_collections" in available
+            else 0
+        )
+        subcollection_count = (
+            con.execute(
+                "SELECT count(DISTINCT collection_code || '.' || subcollection_code) "
+                "FROM record_collections WHERE subcollection_code IS NOT NULL"
+            ).fetchone()[0]
+            if "record_collections" in available
+            else 0
+        )
         city_scope_count = (
             con.execute("SELECT count(*) FROM cities_105").fetchone()[0]
             if "cities_105" in available

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -12,6 +13,18 @@ from policydb.autopilot_checkpoints import _exclusive_file_lock
 
 def utc_now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def _redact_error(value: object) -> str:
+    text = str(value or "")[:500]
+    text = re.sub(
+        r"(?i)(api[_-]?key|authorization|bearer|token|password|secret)\s*[:=]\s*[^,\s]+",
+        r"\1=[REDACTED]",
+        text,
+    )
+    text = re.sub(r"(?i)bearer\s+[^\s,]+", "Bearer [REDACTED]", text)
+    text = re.sub(r"\bsk-[A-Za-z0-9_-]+", "[REDACTED]", text)
+    return text
 
 
 class AIAuditStore:
@@ -172,10 +185,51 @@ class AIAuditStore:
         self._update_global(record)
         return record
 
-    def fail(self, request_id: str, *, status: str = "response_failed", error_type: str, error_message: str) -> dict[str, Any]:
+    def fail(
+        self,
+        request_id: str,
+        *,
+        status: str = "response_failed",
+        error_type: str,
+        error_message: str,
+        diagnostics: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         if status not in {"response_failed", "interrupted"}:
             raise ValueError("invalid failure status")
-        record = self.update(request_id, status=status, error_type=error_type, error_message=error_message[:500])
+        allowed_diagnostics = {
+            "transport_started",
+            "dns_ok",
+            "connect_ok",
+            "http_status",
+            "response_received",
+            "response_bytes",
+            "latency_ms",
+            "timeout_type",
+            "json_parse_ok",
+            "schema_valid",
+            "schema_errors",
+            "provider_error_code",
+            "provider_error_message_sanitized",
+            "failure_class",
+            "raw_response_hash",
+            "raw_fields",
+            "raw_response_payload",
+            "configured_read_timeout",
+            "configured_connect_timeout",
+            "max_retries",
+        }
+        safe_diagnostics = {
+            key: value
+            for key, value in (diagnostics or {}).items()
+            if key in allowed_diagnostics
+        }
+        record = self.update(
+            request_id,
+            status=status,
+            error_type=error_type,
+            error_message=_redact_error(error_message),
+            **safe_diagnostics,
+        )
         self._update_global(record)
         return record
 

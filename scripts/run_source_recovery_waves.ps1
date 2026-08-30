@@ -5,16 +5,16 @@ $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 [Console]::OutputEncoding = $Utf8NoBom
 $OutputEncoding = $Utf8NoBom
 
-$env:CRPD_DATA_ROOT = "D:\Data Set\CRPD"
+$env:CRPD_DATA_ROOT = "E:\Data Set\CRPD"
 $env:PYTHONUTF8 = "1"
 $env:PYTHONIOENCODING = "utf-8"
 
-$Repo = "D:\Codex\projects\Documents-Codex\2026-07-13\text-20260705-xlsx-text-data-raw\policy-database"
+$Repo = "E:\policy-database"
 $Python = Join-Path $Repo ".venv\Scripts\python.exe"
 $Pipeline = Join-Path $Repo "scripts\run_targeted_source_recovery.py"
 
-$QuarantineQueue = "D:\Data Set\CRPD\outputs\acceptance\real_reprobe_queue\quarantined_candidates_real_reprobe.csv"
-$DepartmentQueue = "D:\Data Set\CRPD\outputs\acceptance\department_entry_slot_shortlist.csv"
+$QuarantineQueue = "E:\Data Set\CRPD\outputs\acceptance\real_reprobe_queue\quarantined_candidates_real_reprobe.csv"
+$DepartmentQueue = "E:\Data Set\CRPD\outputs\acceptance\department_entry_slot_shortlist.csv"
 
 Set-Location $Repo
 

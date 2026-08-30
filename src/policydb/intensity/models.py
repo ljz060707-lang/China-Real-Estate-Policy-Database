@@ -36,6 +36,11 @@ class PolicyAction(BaseModel):
     extraction_method: str = "rule_v1"
     rules_version: str = "1.0.0"
     evidence_text: str
+    # Deterministic context features (no AI): negation/reversal terms and
+    # date/geography/parameter mentions linked to this clause's evidence span.
+    negation_terms: list[str] = Field(default_factory=list)
+    mentions: list[dict[str, Any]] = Field(default_factory=list)
+    clause_number: str | None = None
     created_at: str
     updated_at: str
 

@@ -26,6 +26,21 @@ def test_dashboard_job_validates_city_and_confirmation(tmp_path: Path) -> None:
     assert request["action"] == "city_fast_ingest"
 
 
+def test_dashboard_episode_930_requires_confirmation_and_validates_limit(
+    tmp_path: Path,
+) -> None:
+    settings = _settings(tmp_path)
+    with pytest.raises(ValueError, match="confirmation"):
+        validate_job_request(settings, "episode_930", {"city_limit": 2})
+    request = validate_job_request(
+        settings, "episode_930", {"city_limit": 2, "max_ai_calls": 3}, confirmed=True
+    )
+    assert request["action"] == "episode_930"
+    assert request["scope"]["city_limit"] == 2
+    with pytest.raises(ValueError, match="city_limit"):
+        validate_job_request(settings, "episode_930", {"city_limit": 106}, confirmed=True)
+
+
 def test_duplicate_active_dashboard_job_is_blocked(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     first = enqueue_job(settings, "city_fast_ingest", {"cities": ["CITY_A"]}, confirmed=True)

@@ -19,7 +19,7 @@ The strict path is:
 
 ## Durable state
 
-Each run is under `D:\Data Set\CRPD\outputs\autopilot\<run_id>` and contains
+Each run is under `E:\Data Set\CRPD\outputs\autopilot\<run_id>` and contains
 an atomic `current_status.json`, append-only `state_transitions.jsonl`, source
 and full-crawl dry-run plans, provider audit, and the GO/NO-GO gate. A stop
 file, `STOP_AUTOPILOT`, is checked before and during bounded work. Resume is

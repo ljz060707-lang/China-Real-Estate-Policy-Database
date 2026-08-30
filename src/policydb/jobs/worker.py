@@ -83,7 +83,7 @@ def run_job(job_id: str, settings: Settings | None = None) -> dict:
     manager.update(
         job_id,
         force=True,
-        status="preparing",
+        status="running",
         stage="preparing",
         started_at=started,
         worker_started_at=started,
@@ -105,7 +105,7 @@ def run_job(job_id: str, settings: Settings | None = None) -> dict:
         queued = int(details.get("queued", state.queued_count))
         manager.update(
             job_id,
-            status=stage,
+            status="running",
             stage=stage,
             progress_current=current,
             progress_total=max(total, 1),
@@ -139,19 +139,33 @@ def run_job(job_id: str, settings: Settings | None = None) -> dict:
         effective_request = request.model_copy(
             update=mode_updates.get(request.processing_mode, {})
         )
-        service = CrawlService(
-            settings, workspace=manager.workspace_dir(job_id)
-        )
-        result = service.execute(
-            effective_request, progress=progress, cancel_check=cancel_check
-        )
+        episode_job = request.mode == "historical_episode_930"
+        if episode_job:
+            from policydb.episode_930_production import run_episode_930_job
+
+            result = run_episode_930_job(
+                job_id,
+                effective_request,
+                settings,
+                progress=progress,
+                cancel_check=cancel_check,
+            )
+        else:
+            service = CrawlService(
+                settings, workspace=manager.workspace_dir(job_id)
+            )
+            result = service.execute(
+                effective_request, progress=progress, cancel_check=cancel_check
+            )
         if cancel_check():
             raise InterruptedError("任务已按用户请求安全停止")
-        if request.processing_mode == "full":
+        if result.get("status") in {"PARTIAL", "BLOCKED"}:
+            result["warning"] = True
+        if request.processing_mode == "full" and not episode_job:
             manager.update(
                 job_id,
                 force=True,
-                status="rebuilding",
+                status="running",
                 stage="rebuilding",
                 message="正在校验并原子合并任务增量",
             )
@@ -169,7 +183,7 @@ def run_job(job_id: str, settings: Settings | None = None) -> dict:
                     manager.update(
                         job_id,
                         force=True,
-                        status="rebuilding",
+                        status="running",
                         stage="rebuilding",
                         message="正在构建并验证临时 DuckDB",
                     )
@@ -184,14 +198,14 @@ def run_job(job_id: str, settings: Settings | None = None) -> dict:
                     manager.update(
                         job_id,
                         force=True,
-                        status="validating",
+                        status="running",
                         stage="validating",
                         message="正在验证稳定数据快照",
                     )
                     validation = validate(settings)
                     if not validation.get("passed"):
                         result["warning"] = True
-        else:
+        elif not episode_job:
             result.setdefault("recommendations", []).append(
                 "抓取结果已暂存，尚未合并到正式数据库。"
             )
@@ -200,7 +214,7 @@ def run_job(job_id: str, settings: Settings | None = None) -> dict:
         state = manager.update(
             job_id,
             force=True,
-            status="reporting",
+            status="running",
             stage="reporting",
             message="正在生成抓取报告",
             run_id=result.get("run_id"),

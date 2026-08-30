@@ -27,6 +27,37 @@ def _normalise_block(value: str) -> str:
     return re.sub(r"[ \t\u3000]+", " ", value.replace("\r", "")).strip()
 
 
+_CHARSET_RE = re.compile(r"charset\s*=\s*[\"']?\s*([\w.-]+)", re.I)
+
+
+def _decode_html(body: bytes) -> str:
+    """Decode HTML bytes with charset detection (meta/BOM), UTF-8 first, GBK fallback.
+
+    Chinese government pages are frequently GB2312/GBK-encoded. The previous
+    unconditional ``utf-8`` with ``errors="replace"`` silently produced mojibake
+    for those pages; detection is deterministic and UTF-8 output is unchanged.
+    """
+    if body.startswith(b"\xef\xbb\xbf"):
+        return body.decode("utf-8")
+    head = body[:4096].decode("ascii", errors="ignore")
+    match = _CHARSET_RE.search(head)
+    if match:
+        charset = match.group(1).lower().replace("_", "-")
+        if charset in {"gb2312", "gbk", "cp936"}:
+            charset = "gb18030"
+        try:
+            return body.decode(charset)
+        except (LookupError, UnicodeDecodeError):
+            pass
+    try:
+        return body.decode("utf-8")
+    except UnicodeDecodeError:
+        try:
+            return body.decode("gb18030")
+        except UnicodeDecodeError:
+            return body.decode("utf-8", errors="replace")
+
+
 def merge_semantic_blocks(blocks: list[dict | str], min_chars: int = 24) -> dict:
     """Join broken DOM/PDF blocks without inventing text.
 
@@ -81,7 +112,7 @@ def merge_semantic_blocks(blocks: list[dict | str], min_chars: int = 24) -> dict
 
 
 def _html_parse(body: bytes, base_url: str | None) -> dict:
-    html = body.decode("utf-8", errors="replace")
+    html = _decode_html(body)
     soup = BeautifulSoup(html, "html.parser")
     for node in soup.select("script,style,noscript,nav,footer,header"):
         node.decompose()

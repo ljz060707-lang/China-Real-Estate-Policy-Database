@@ -1,5 +1,5 @@
 ﻿param(
-    [string]$ProjectRoot = "C:\Users\ljz52\Documents\Codex\2026-07-13\text-20260705-xlsx-text-data-raw\policy-database",
+    [string]$ProjectRoot = "",
     [string]$DataRoot = "E:\Data Set\CRPD",
     [string]$StartDate = "2018-01-01",
     [string]$EndDate = "today",
@@ -20,6 +20,10 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+
+if ([string]::IsNullOrWhiteSpace($ProjectRoot)) {
+    $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+}
 
 $ProjectRoot = [System.IO.Path]::GetFullPath($ProjectRoot)
 $PolicyDbExe = Join-Path $ProjectRoot ".venv\Scripts\policydb.exe"

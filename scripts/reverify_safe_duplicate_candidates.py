@@ -10,7 +10,7 @@ from policydb.source_slots import (
     verify_candidates,
 )
 
-ROOT = Path(r"D:\Data Set\CRPD")
+ROOT = Path(r"E:\Data Set\CRPD")
 
 INPUT = (
     ROOT

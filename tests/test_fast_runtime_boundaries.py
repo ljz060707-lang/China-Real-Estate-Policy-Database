@@ -18,10 +18,20 @@ def test_pipeline_retry_passes_safe_stop_and_attachment_budget(tmp_path: Path) -
             seen.update(kwargs)
             return {"run_id": run_id, "status": "cancelled", "cancelled": True, "fetched": 1, "failed": 0}
 
-    result = _pipeline_run_with_retry(FakePipeline(), "RUN1", max_fetches=3, cancel_check=lambda: True, max_attachment_attempts=1)
+    result = _pipeline_run_with_retry(
+        FakePipeline(),
+        "RUN1",
+        max_fetches=3,
+        cancel_check=lambda: True,
+        max_attachment_attempts=1,
+        fetch_concurrency=6,
+        per_host_concurrency=1,
+    )
     assert result["cancelled"] is True
     assert seen["cancel_check"]() is True
     assert seen["max_attachment_attempts"] == 1
+    assert seen["fetch_concurrency"] == 6
+    assert seen["per_host_concurrency"] == 1
 
 
 def test_full_sync_stop_marker_is_read_without_killing_writer(tmp_path: Path) -> None:

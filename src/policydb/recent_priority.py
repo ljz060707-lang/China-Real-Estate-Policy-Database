@@ -25,11 +25,13 @@ from policydb.crawl.registry import load_registry
 from policydb.dedup_audit import materialize_policy_identity
 from policydb.exhaustive import ExhaustiveCrawler
 from policydb.ingest.promote_versions import promote_document_versions
+from policydb.ingest.relevance import audit_recent_relevance
 from policydb.parquet_store import (
     ParquetStoreError,
     atomic_write_parquet,
     read_parquet_snapshot,
 )
+from policydb.pdf_pipeline import PDFPipeline, load_pdf_config
 from policydb.query.database import build_database
 from policydb.scope import load_cities_105
 from policydb.settings import Settings
@@ -38,6 +40,7 @@ from policydb.transform.normalization import stable_id
 QUEUE_NAME = "RECENT_30D_QUEUE.parquet"
 STATE_NAME = "RECENT_30D_STATE.json"
 RECENT_STATUS_COMPLETE = {"SUCCESS", "ZERO_CONFIRMED"}
+RECENT_STATUS_TERMINAL = RECENT_STATUS_COMPLETE | {"SOURCE_INCOMPLETE", "FAILED"}
 
 
 @dataclass(frozen=True)
@@ -104,10 +107,56 @@ def _state_path(settings: Settings) -> Path:
     return settings.automation / STATE_NAME
 
 
+def _write_progress_snapshot(settings: Settings, queue: pl.DataFrame, state: dict[str, Any]) -> None:
+    """Publish the current Recent position using an atomic JSON replacement."""
+
+    path = settings.automation / "PROGRESS_SNAPSHOT.json"
+    try:
+        previous = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except (OSError, json.JSONDecodeError):
+        previous = {}
+    if not isinstance(previous, dict):
+        previous = {}
+    statuses = queue.get_column("status") if queue.height else pl.Series([], dtype=pl.String)
+    completed = int(statuses.is_in(list(RECENT_STATUS_TERMINAL)).sum()) if queue.height else 0
+    total = queue.height
+    payload = {
+        **previous,
+        "timestamp": _utc_now(),
+        "stage": "RECENT_30D_PRIORITY",
+        "batch": state.get("batch_id"),
+        "stage_status": state.get("stage_status"),
+        "batch_status": state.get("batch_status"),
+        "current_step": state.get("last_event") or "SOURCE_SESSION",
+        "current_city": state.get("current_city"),
+        "current_source": state.get("current_source"),
+        "current_source_role": state.get("current_source_role"),
+        "current_window": {
+            **(previous.get("current_window") or {}),
+            "recent_start": state.get("start_date"),
+            "recent_end": state.get("end_date"),
+        },
+        "recent_30d": {
+            **(previous.get("recent_30d") or {}),
+            "total": total,
+            "completed": completed,
+            "pending": int((statuses == "PENDING").sum()) if queue.height else 0,
+            "running": int((statuses == "RUNNING").sum()) if queue.height else 0,
+            "failed": int((statuses == "FAILED").sum()) if queue.height else 0,
+            "progress_pct": round(100.0 * completed / total, 2) if total else 0.0,
+            "cities_checked": int(queue.filter(pl.col("attempts") > 0).get_column("city_id").n_unique()) if queue.height else 0,
+        },
+        "last_real_progress_at": state.get("last_real_progress_at") or _utc_now(),
+        "heartbeat_at": _utc_now(),
+    }
+    _atomic_json(path, payload)
+
+
 def _queue_rows(settings: Settings, config: Recent30DConfig) -> list[dict[str, Any]]:
     cities = load_cities_105(settings)
     registry = load_registry(settings)
     rows: list[dict[str, Any]] = []
+    covered_city_ids: set[str] = set()
     for city in cities.iter_rows(named=True):
         city_id = str(city["city_id"])
         for source in registry:
@@ -115,6 +164,7 @@ def _queue_rows(settings: Settings, config: Recent30DConfig) -> list[dict[str, A
                 continue
             if city_id not in {str(value) for value in source.city_ids}:
                 continue
+            covered_city_ids.add(city_id)
             role = str(source.agency_type or source.source_role)
             item_id = stable_id(
                 city_id,
@@ -143,8 +193,10 @@ def _queue_rows(settings: Settings, config: Recent30DConfig) -> list[dict[str, A
                     "document_versions": 0,
                     "records_promoted": 0,
                     "rejected_versions": 0,
+                    "relevance_rejected": 0,
                     "pdfs_found": 0,
                     "pdfs_archived": 0,
+                    "pdf_discovery_count": 0,
                     "list_checked": False,
                     "zero_confirmed": False,
                     "last_event": None,
@@ -155,6 +207,43 @@ def _queue_rows(settings: Settings, config: Recent30DConfig) -> list[dict[str, A
                     "updated_at": _utc_now(),
                 }
             )
+    for city in cities.iter_rows(named=True):
+        city_id = str(city["city_id"])
+        if city_id in covered_city_ids:
+            continue
+        rows.append(
+            {
+                "item_id": stable_id(city_id, "SOURCE_INCOMPLETE", config.start_date.isoformat(), config.end_date.isoformat(), prefix="RECENT30"),
+                "city_id": city_id,
+                "city_name": city["city_name"],
+                "source_id": f"UNRESOLVED:{city_id}",
+                "source_role": "source_incomplete",
+                "official_domain": None,
+                "entry_url": None,
+                "start_date": config.start_date.isoformat(),
+                "end_date": config.end_date.isoformat(),
+                "status": "SOURCE_INCOMPLETE",
+                "attempts": 1,
+                "run_ids_json": "[]",
+                "batch_ids_json": "[]",
+                "documents_found": 0,
+                "document_versions": 0,
+                "records_promoted": 0,
+                "rejected_versions": 0,
+                "relevance_rejected": 0,
+                "pdfs_found": 0,
+                "pdfs_archived": 0,
+                "pdf_discovery_count": 0,
+                "list_checked": False,
+                "zero_confirmed": False,
+                "last_event": "SOURCE_INCOMPLETE",
+                "last_event_at": _utc_now(),
+                "last_error": "NO_ENABLED_OFFICIAL_SOURCE",
+                "started_at": _utc_now(),
+                "completed_at": _utc_now(),
+                "updated_at": _utc_now(),
+            }
+        )
     # Role-first ordering makes the first bounded batch touch many cities and
     # prevents a single city's slow source family from monopolising the queue.
     return sorted(rows, key=lambda row: (row["source_role"], row["city_name"], row["source_id"]))
@@ -182,7 +271,8 @@ def build_recent_queue(
             for key in (
                 "status", "attempts", "run_ids_json", "batch_ids_json", "documents_found",
                 "document_versions", "records_promoted", "pdfs_found", "pdfs_archived",
-                "rejected_versions",
+                "pdf_discovery_count",
+                "rejected_versions", "relevance_rejected",
                 "list_checked", "zero_confirmed", "last_event", "last_event_at", "last_error",
                 "started_at", "completed_at",
             ):
@@ -222,6 +312,67 @@ def _write_queue(settings: Settings, frame: pl.DataFrame) -> None:
         {"module": "recent_priority", "operation": "checkpoint"},
         key_columns=("item_id",),
     )
+
+
+def reconcile_stale_recent_run(
+    settings: Settings | None = None,
+    *,
+    run_id: str,
+    reason: str = "WORKER_PROCESS_MISSING",
+) -> dict[str, Any]:
+    """Close a dead recent worker and requeue only its claimed item.
+
+    The caller must establish that no recent writer is alive before invoking
+    this function.  It never removes a queue row or any crawl evidence.
+    """
+
+    settings = settings or Settings.discover()
+    lock = FileLock(str(settings.automation / "RECENT_30D_WRITER.lock"), timeout=0.2)
+    with lock:
+        path = _queue_path(settings)
+        queue = read_parquet_snapshot(path) if path.exists() else pl.DataFrame()
+        if not queue.columns:
+            queue = pl.DataFrame(schema={"item_id": pl.String})
+        if queue.height and "relevance_rejected" not in queue.columns:
+            queue = queue.with_columns(pl.lit(0).cast(pl.Int64).alias("relevance_rejected"))
+        requeued = 0
+        if queue.height and "status" in queue.columns:
+            rows = []
+            for row in queue.iter_rows(named=True):
+                updated = dict(row)
+                if str(row.get("status")) == "RUNNING":
+                    updated["status"] = "PENDING"
+                    updated["last_error"] = f"requeued_after_stale_run:{reason}"
+                    updated["updated_at"] = _utc_now()
+                    updated["completed_at"] = None
+                    requeued += 1
+                rows.append(updated)
+            queue = pl.DataFrame(rows, infer_schema_length=None)
+        _write_queue(settings, queue)
+        previous_state_path = _state_path(settings)
+        previous_state = (
+            json.loads(previous_state_path.read_text(encoding="utf-8"))
+            if previous_state_path.exists()
+            else {}
+        )
+        state = {
+            key: previous_state[key]
+            for key in ("start_date", "end_date", "max_record_date_before")
+            if key in previous_state
+        }
+        state.update({
+            "status": "PARTIAL",
+            "current_item": None,
+            "processed_items": int(queue.filter(pl.col("attempts") > 0).height) if queue.height and "attempts" in queue.columns else 0,
+            "stale_run_id": run_id,
+            "requeued_items": requeued,
+            "terminal_reason": reason,
+            "updated_at": _utc_now(),
+        })
+        summary = _write_outputs(settings, queue, state=state)
+        summary.update({"stale_run_id": run_id, "requeued_items": requeued, "terminal_reason": reason})
+        _atomic_json(settings.automation / f"RECENT_30D_RUN_SUMMARY_{run_id}.json", summary)
+        return summary
 
 
 def _max_record_date(settings: Settings) -> str | None:
@@ -299,15 +450,16 @@ def _pdf_counts(settings: Settings, version_ids: list[str]) -> tuple[int, int, p
 def _write_outputs(settings: Settings, queue: pl.DataFrame, *, state: dict[str, Any]) -> dict[str, Any]:
     root = _output_root(settings)
     _write_queue(settings, queue)
-    completed = queue.filter(pl.col("status").is_in(list(RECENT_STATUS_COMPLETE))) if queue.height else queue
+    completed = queue.filter(pl.col("status").is_in(list(RECENT_STATUS_TERMINAL))) if queue.height else queue
     city_coverage = (
         queue.group_by(["city_id", "city_name"])
         .agg(
             pl.len().alias("source_count"),
-            pl.col("status").is_in(list(RECENT_STATUS_COMPLETE)).sum().alias("completed_sources"),
+            pl.col("status").is_in(list(RECENT_STATUS_TERMINAL)).sum().alias("completed_sources"),
             pl.col("documents_found").sum(),
             pl.col("records_promoted").sum(),
             pl.col("rejected_versions").sum(),
+            pl.col("relevance_rejected").sum(),
             pl.col("pdfs_archived").sum(),
         )
         .sort("city_name")
@@ -318,10 +470,11 @@ def _write_outputs(settings: Settings, queue: pl.DataFrame, *, state: dict[str, 
         queue.group_by(["source_id", "source_role", "official_domain"])
         .agg(
             pl.len().alias("city_count"),
-            pl.col("status").is_in(list(RECENT_STATUS_COMPLETE)).sum().alias("completed_cities"),
+            pl.col("status").is_in(list(RECENT_STATUS_TERMINAL)).sum().alias("completed_cities"),
             pl.col("documents_found").sum(),
             pl.col("records_promoted").sum(),
             pl.col("rejected_versions").sum(),
+            pl.col("relevance_rejected").sum(),
             pl.col("pdfs_archived").sum(),
         )
         .sort(["source_role", "official_domain"])
@@ -333,7 +486,7 @@ def _write_outputs(settings: Settings, queue: pl.DataFrame, *, state: dict[str, 
         (source_coverage, "RECENT_30D_SOURCE_COVERAGE.parquet"),
     ):
         frame.write_parquet(root / name, compression="zstd")
-    failures = queue.filter(~pl.col("status").is_in(list(RECENT_STATUS_COMPLETE))) if queue.height else pl.DataFrame()
+    failures = queue.filter(~pl.col("status").is_in(list(RECENT_STATUS_TERMINAL))) if queue.height else pl.DataFrame()
     failures.write_parquet(root / "RECENT_30D_FAILURES.parquet", compression="zstd")
 
     policy_path = settings.curated / "policy_document_versions.parquet"
@@ -415,12 +568,21 @@ def _write_outputs(settings: Settings, queue: pl.DataFrame, *, state: dict[str, 
         **state,
         "queue_size": queue.height,
         "completed_items": completed.height,
+        "stage_completed_items": completed.height,
+        "stage_pending_items": int(queue.filter(pl.col("status") == "PENDING").height) if queue.height else 0,
+        "stage_running_items": int(queue.filter(pl.col("status") == "RUNNING").height) if queue.height else 0,
+        "stage_failed_items": int(queue.filter(pl.col("status") == "FAILED").height) if queue.height else 0,
+        "stage_retryable_items": int(queue.filter(pl.col("status").is_in(["RETRY_WAIT", "LIST_CHECKED"])).height) if queue.height else 0,
+        "stage_status": "COMPLETE" if queue.height and queue.get_column("status").is_in(list(RECENT_STATUS_TERMINAL)).all() else str(state.get("stage_status") or "RUNNING"),
+        "batch_status": str(state.get("batch_status") or ("COMPLETED" if state.get("processed_items") else "NOT_STARTED")),
+        "batch_processed_items": int(state.get("batch_processed_items", state.get("processed_items", 0)) or 0),
         "cities_started": sorted(queue.filter(pl.col("attempts") > 0).get_column("city_name").unique().to_list()) if queue.height else [],
         "sources_started": sorted(queue.filter(pl.col("attempts") > 0).get_column("source_id").unique().to_list()) if queue.height else [],
         "documents_found": int(queue.get_column("documents_found").sum()) if queue.height else 0,
         "document_versions": int(queue.get_column("document_versions").sum()) if queue.height else 0,
         "records_promoted": int(queue.get_column("records_promoted").sum()) if queue.height else 0,
         "rejected_versions": int(queue.get_column("rejected_versions").sum()) if queue.height else 0,
+        "relevance_rejected": int(queue.get_column("relevance_rejected").sum()) if queue.height else 0,
         "pdfs_found": int(queue.get_column("pdfs_found").sum()) if queue.height else 0,
         "pdfs_archived": int(queue.get_column("pdfs_archived").sum()) if queue.height else 0,
         "max_record_date_after": _max_record_date(settings),
@@ -439,11 +601,15 @@ def _write_outputs(settings: Settings, queue: pl.DataFrame, *, state: dict[str, 
             "RECENT_DOCUMENT_VERSIONS": summary["document_versions"],
             "RECENT_RECORDS_PROMOTED": summary["records_promoted"],
             "RECENT_REJECTED_VERSIONS": summary["rejected_versions"],
+            "RECENT_RELEVANCE_REJECTED": summary["relevance_rejected"],
             "MAX_RECORD_DATE_BEFORE": state.get("max_record_date_before"),
             "MAX_RECORD_DATE_AFTER": summary["max_record_date_after"],
             "RECENT_PDFS_FOUND": summary["pdfs_found"],
-            "RECENT_PDFS_ARCHIVED": summary["pdfs_archived"],
-        }
+        "RECENT_PDFS_ARCHIVED": summary["pdfs_archived"],
+        "RECENT_CITIES_CHECKED": len(started_cities),
+        "RECENT_SOURCES_CHECKED": len(started_sources),
+        "RECENT_SOURCE_INCOMPLETE": int(queue.filter(pl.col("status") == "SOURCE_INCOMPLETE").height) if queue.height else 0,
+    }
     )
     _atomic_json(root / "RECENT_30D_SUMMARY.json", summary)
     (root / "RECENT_30D_SUMMARY.md").write_text(
@@ -482,10 +648,17 @@ def run_recent_30d(
         before = prior_state.get("max_record_date_before") or _max_record_date(settings)
         state: dict[str, Any] = {
             "status": "RUNNING" if config.apply else "PLANNED",
+            "stage_status": "RUNNING" if config.apply else "PLANNED",
+            "batch_status": "RUNNING" if config.apply else "PLANNED",
+            "batch_id": f"RECENT_BATCH_{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}_{os.getpid()}",
             "start_date": config.start_date.isoformat(),
             "end_date": config.end_date.isoformat(),
             "max_record_date_before": before,
             "current_item": None,
+            "current_city": None,
+            "current_source": None,
+            "current_source_role": None,
+            "last_real_progress_at": _utc_now(),
             "updated_at": _utc_now(),
         }
         if not config.apply:
@@ -494,7 +667,7 @@ def run_recent_30d(
         pending_indices = [
             index
             for index, row in enumerate(queue.iter_rows(named=True))
-            if row.get("status") not in RECENT_STATUS_COMPLETE
+            if row.get("status") not in RECENT_STATUS_TERMINAL
         ][: config.max_items]
         processed = 0
         blocking_error: str | None = None
@@ -506,9 +679,20 @@ def run_recent_30d(
                 pl.when(pl.col("item_id") == item_id).then(pl.col("attempts") + 1).otherwise(pl.col("attempts")).alias("attempts"),
                 pl.when(pl.col("item_id") == item_id).then(pl.lit(_utc_now())).otherwise(pl.col("started_at")).alias("started_at"),
             )
-            state.update({"current_item": item_id, "processed_items": processed, "updated_at": _utc_now()})
+            state.update({
+                "current_item": item_id,
+                "current_city": str(row["city_name"]),
+                "current_source": str(row["source_id"]),
+                "current_source_role": str(row["source_role"]),
+                "current_window": {"start": str(row["start_date"]), "end": str(row["end_date"])},
+                "processed_items": processed,
+                "batch_processed_items": processed,
+                "last_real_progress_at": _utc_now(),
+                "updated_at": _utc_now(),
+            })
             _write_queue(settings, queue)
             _atomic_json(_state_path(settings), state)
+            _write_progress_snapshot(settings, queue, state)
             try:
                 crawler = ExhaustiveCrawler(settings)
                 result = crawler.run_city(
@@ -525,11 +709,23 @@ def run_recent_30d(
                 run_ids = [str(value) for value in result.get("run_ids", [])]
                 version_ids = _run_version_ids(settings, run_ids)
                 promotion = promote_document_versions(settings, run_ids=run_ids, apply=True)
+                relevance_audit = audit_recent_relevance(settings, run_ids=run_ids, apply=True)
                 for run in run_ids:
                     archive_document_versions(settings, run_id=run)
                 for run in run_ids:
                     materialize_policy_identity(settings, run_id=run)
                 build_database(settings, materialize_geography=False)
+                # Attachment discovery is intentionally bounded and isolated:
+                # a PDF/WAF failure must never block the HTML/source item.
+                try:
+                    pdf_discovery = PDFPipeline(settings, config=load_pdf_config(settings)).discover(
+                        limit=30,
+                        city_id=str(row["city_id"]),
+                        source_id=str(row["source_id"]),
+                        run_id=run_ids[-1] if run_ids else None,
+                    )
+                except Exception as pdf_exc:  # noqa: BLE001 - PDF is a side queue
+                    pdf_discovery = {"discovered": 0, "error": f"{type(pdf_exc).__name__}: {str(pdf_exc)[:300]}"}
                 documents = int(sum(result.get("run_metrics", {}).get(run, {}).get("fetched", 0) for run in run_ids))
                 pdfs_found, pdfs_archived, _ = _pdf_counts(settings, version_ids)
                 failed = int(sum(result.get("run_metrics", {}).get(run, {}).get("failed", 0) for run in run_ids))
@@ -545,8 +741,10 @@ def run_recent_30d(
                     "document_versions": len(version_ids),
                     "records_promoted": int(promotion.get("promoted_records", 0)),
                     "rejected_versions": int(promotion.get("rejected_versions", 0)),
+                    "relevance_rejected": int(relevance_audit.get("rejected_versions", 0)),
                     "pdfs_found": pdfs_found,
                     "pdfs_archived": pdfs_archived,
+                    "pdf_discovery_count": int(pdf_discovery.get("discovered", 0) or 0),
                     "list_checked": bool(result.get("processed_shards")),
                     "zero_confirmed": zero_confirmed,
                     "last_event": "ZERO_CONFIRMED" if zero_confirmed else "FORMAL_RECORDS_PROMOTED",
@@ -575,19 +773,34 @@ def run_recent_30d(
                     )
             processed += 1
             _write_queue(settings, queue)
-            state.update({"processed_items": processed, "current_item": None, "updated_at": _utc_now()})
+            state.update({
+                "processed_items": processed,
+                "batch_processed_items": processed,
+                "current_item": None,
+                "current_city": None,
+                "current_source": None,
+                "current_source_role": None,
+                "last_real_progress_at": _utc_now(),
+                "updated_at": _utc_now(),
+            })
             if blocking_error:
                 state["latest_error"] = blocking_error
                 state["status"] = "BLOCKED"
             _atomic_json(_state_path(settings), state)
+            _write_progress_snapshot(settings, queue, state)
             if blocking_error:
                 break
 
-        complete = bool(queue.height) and queue.get_column("status").is_in(list(RECENT_STATUS_COMPLETE)).all()
+        complete = bool(queue.height) and queue.get_column("status").is_in(list(RECENT_STATUS_TERMINAL)).all()
         state.update(
             {
                 "status": "BLOCKED" if blocking_error else ("COMPLETE" if complete else "PARTIAL"),
+                "stage_status": "BLOCKED" if blocking_error else ("COMPLETE" if complete else "RUNNING"),
+                "batch_status": "BLOCKED" if blocking_error else "COMPLETED",
                 "current_item": None,
+                "current_city": None,
+                "current_source": None,
+                "current_source_role": None,
                 "updated_at": _utc_now(),
             }
         )
@@ -603,4 +816,10 @@ def run_recent_30d(
         }
 
 
-__all__ = ["Recent30DConfig", "build_recent_queue", "run_recent_30d"]
+__all__ = [
+    "RECENT_STATUS_TERMINAL",
+    "Recent30DConfig",
+    "build_recent_queue",
+    "reconcile_stale_recent_run",
+    "run_recent_30d",
+]

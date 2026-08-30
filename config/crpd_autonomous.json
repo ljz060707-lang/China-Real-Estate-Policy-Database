@@ -12,6 +12,19 @@
     "max_candidates_per_shard": 500,
     "max_fetches_per_shard": 500
   },
+  "rolling_24m": {
+    "enabled": true,
+    "max_items": 5,
+    "max_pages_per_source": 300,
+    "max_candidates_per_shard": 5000,
+    "max_fetches_per_shard": 5000,
+    "max_attempts": 3,
+    "pdf_discovery_limit": 30
+  },
+  "watchdog": {
+    "no_progress_minutes": 15,
+    "recovery_cooldown_minutes": 15
+  },
   "disk": {
     "warn_free_gb": 50,
     "stop_free_gb": 20
@@ -43,8 +56,15 @@
     "ARCHIVE",
     "COVERAGE_AUDIT",
     "RECENT_30D_PRIORITY",
+    "RECENT_COVERAGE_AUDIT",
+    "ROLLING_24M_FULL_CITY_BACKFILL",
+    "ROLLING_24M_COVERAGE_AUDIT",
+    "ROLLING_24M_RECOVER_MISSING",
+    "ROLLING_24M_SECOND_PASS",
+    "ROLLING_24M_SATURATED",
     "RECOVER_MISSING",
     "CRAWL_AGAIN",
+    "HISTORICAL_CRAWL_AGAIN",
     "PDF_STAGE",
     "PDF_VERIFY",
     "FINAL_AUDIT",

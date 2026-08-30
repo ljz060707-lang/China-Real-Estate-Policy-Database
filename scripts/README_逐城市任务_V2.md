@@ -42,15 +42,15 @@ V2改为直接执行：
 ```powershell
 $Stamp = Get-Date -Format "yyyyMMdd_HHmmss"
 
-if (Test-Path "D:\Data Set\CRPD\jobs\city_full_search\CITY_320100") {
+if (Test-Path "E:\Data Set\CRPD\jobs\city_full_search\CITY_320100") {
     Rename-Item `
-      "D:\Data Set\CRPD\jobs\city_full_search\CITY_320100" `
+      "E:\Data Set\CRPD\jobs\city_full_search\CITY_320100" `
       "CITY_320100_false_run_$Stamp"
 }
 
-if (Test-Path "D:\Data Set\CRPD\logs\city_full_search\CITY_320100") {
+if (Test-Path "E:\Data Set\CRPD\logs\city_full_search\CITY_320100") {
     Rename-Item `
-      "D:\Data Set\CRPD\logs\city_full_search\CITY_320100" `
+      "E:\Data Set\CRPD\logs\city_full_search\CITY_320100" `
       "CITY_320100_false_run_$Stamp"
 }
 ```

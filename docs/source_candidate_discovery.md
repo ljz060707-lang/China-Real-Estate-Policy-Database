@@ -19,7 +19,7 @@
 .\.venv\Scripts\policydb.exe sources discover-city --city "南京市"
 .\.venv\Scripts\policydb.exe sources candidates --city "南京市"
 .\.venv\Scripts\policydb.exe sources verify-candidates --city "南京市"
-.\.venv\Scripts\policydb.exe sources export-candidates --output "D:\Data Set\CRPD\outputs\source_candidates.csv"
+.\.venv\Scripts\policydb.exe sources export-candidates --output "E:\Data Set\CRPD\outputs\source_candidates.csv"
 .\.venv\Scripts\policydb.exe sources seed-record-candidates
 .\.venv\Scripts\policydb.exe sources export-candidate-audit
 ```

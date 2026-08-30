@@ -1,6 +1,6 @@
 param(
     [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot),
-    [string]$DataRoot = "D:\Data Set\CRPD"
+    [string]$DataRoot = "E:\Data Set\CRPD"
 )
 
 Set-StrictMode -Version Latest

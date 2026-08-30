@@ -47,7 +47,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 
 ```powershell
 New-Item `
-  "D:\Data Set\CRPD\control\STOP_SOURCE_COMPLETION_TO_525" `
+  "E:\Data Set\CRPD\control\STOP_SOURCE_COMPLETION_TO_525" `
   -ItemType File -Force
 ```
 
@@ -87,7 +87,7 @@ successful batches with no increase in verified slots, the controller stops
 without weakening gates and writes:
 
 ```text
-D:\Data Set\CRPD\outputs\acceptance\source_completion_to_525\<run_id>\BLOCKERS.json
+ E:\Data Set\CRPD\outputs\acceptance\source_completion_to_525\<run_id>\BLOCKERS.json
 ```
 
 Resolve only the listed blockers, then launch the same command again to resume.

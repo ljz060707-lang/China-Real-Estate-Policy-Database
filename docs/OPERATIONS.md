@@ -3,12 +3,13 @@
 ## Bounded fast coverage
 
 ```powershell
-$env:CRPD_DATA_ROOT = "D:\Data Set\CRPD"
+$env:CRPD_HOME = "E:\policy-database"
+$env:CRPD_DATA_ROOT = "E:\Data Set\CRPD"
 .\.venv\Scripts\python.exe -m policydb.autopilot_cli fast-bulk-ingest --config .\config\continuous_sync.yaml --dry-run
 .\.venv\Scripts\python.exe -m policydb.autopilot_cli fast-bulk-ingest --max-cities 5 --apply --resume
 ```
 
-The default run is bounded and single-writer at the source level. It saves the task result under `D:\Data Set\CRPD\outputs\fast_bulk_ingest` and the global status under the same directory. A STOP file yields at a safe pipeline checkpoint; it does not kill a writer.
+The default run is bounded and single-writer at the source level. It saves the task result under `E:\Data Set\CRPD\outputs\fast_bulk_ingest` and the global status under the same directory. A STOP file yields at a safe pipeline checkpoint; it does not kill a writer.
 
 ## Dashboard
 

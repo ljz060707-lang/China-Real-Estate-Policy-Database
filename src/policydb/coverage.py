@@ -36,10 +36,29 @@ _STRICT_TERMINATION_REASONS = {
 }
 
 
+def _coverage_cities(settings: Settings) -> pl.DataFrame:
+    """Use the reviewed city universe when it exists, with legacy fallback.
+
+    Production coverage must use ``data/reference/cities_105.csv`` so a
+    partial curated snapshot cannot silently shrink the denominator.  Older
+    isolated fixtures intentionally contain only ``curated/cities_105.parquet``
+    and remain valid for the legacy source-matrix contract, so they fall back
+    to that snapshot when no reviewed reference file is present.
+    """
+    reference = settings.root / "data" / "reference" / "cities_105.csv"
+    if reference.is_file():
+        return load_cities_105(settings)
+    curated = settings.curated / "cities_105.parquet"
+    if curated.exists():
+        return read_parquet_snapshot(curated)
+    return load_cities_105(settings)
+
+
 def build_source_matrix(settings: Settings | None = None) -> pl.DataFrame:
     settings = settings or Settings.discover()
-    curated_cities = settings.curated / "cities_105.parquet"
-    cities = read_parquet_snapshot(curated_cities) if curated_cities.exists() else load_cities_105(settings)
+    # Prefer the reviewed CSV, while retaining compatibility with old
+    # fixture-only roots that do not carry the canonical reference file.
+    cities = _coverage_cities(settings)
     rows: list[dict] = []
     for source in load_registry(settings):
         if not source.is_valid:
@@ -141,11 +160,9 @@ def build_city_source_month_coverage(
 ) -> dict:
     settings = settings or Settings.discover()
     end = end or date.today()
-    cities = (
-        read_parquet_snapshot(settings.curated / "cities_105.parquet")
-        if (settings.curated / "cities_105.parquet").exists()
-        else load_cities_105(settings)
-    )
+    # Keep city/month coverage on the same reviewed universe as the source
+    # matrix; old fixture-only roots use their materialized snapshot.
+    cities = _coverage_cities(settings)
     source_matrix = build_source_matrix(settings)
     roles = {
         "government_gazette": {"central_government", "local_government"},

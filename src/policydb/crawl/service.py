@@ -8,7 +8,8 @@ from urllib.parse import urlsplit
 
 import polars as pl
 
-from policydb.config.providers import build_search_provider
+from policydb.archive import archive_document_versions
+from policydb.config.providers import build_search_fallback, build_search_provider
 from policydb.crawl.checkpoint import append_unique
 from policydb.crawl.dedup import canonicalize_url
 from policydb.crawl.health import evaluate_sources
@@ -26,6 +27,31 @@ from policydb.settings import Settings
 from policydb.transform.normalization import stable_id
 
 QUERY_ACTIONS = ("通知", "政策", "实施细则", "调整", "优化", "取消", "提高", "降低")
+
+
+def selected_batch_fetch_limit(request: CrawlJobRequest, planned_item_count: int) -> int:
+    """Resolve the fetch cap for a selected rehearsal without bypassing safety caps."""
+
+    planned = max(0, int(planned_item_count))
+    safety = min(
+        int(request.global_safety_limit),
+        int(request.max_candidates_total or request.max_candidates),
+    )
+    if request.drain_selected_batch:
+        return min(planned, safety)
+    return min(int(request.max_fetches), safety)
+
+
+def _coerce_date(value: object) -> date | None:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    text = str(value or "")[:10]
+    try:
+        return date.fromisoformat(text) if text else None
+    except ValueError:
+        return None
 
 
 class CrawlService:
@@ -84,6 +110,12 @@ class CrawlService:
                 "recovered_sources": self._parquet_rows("source_recovery_attempts"),
                 "recommendations": [],
             }
+        if request.mode == "historical_episode_930":
+            return self._historical_episode_930(
+                request,
+                progress=progress,
+                cancel_check=cancel_check,
+            )
         run_type = request.mode
         seed_mode = request.mode == "seed_backtrack"
         official_mode = request.mode in {"official_update", "historical_105"}
@@ -141,14 +173,29 @@ class CrawlService:
         fetched = self.pipeline.run(
             plan["run_id"],
             max_fetches=request.max_fetches,
+            max_attachment_attempts=request.max_attachment_attempts,
             cancel_check=cancel_check,
             progress=progress,
+            fetch_concurrency=request.fetch_concurrency or self.settings.max_concurrency,
+            per_host_concurrency=request.per_host_concurrency,
         )
         if fetched.get("cancelled"):
             raise InterruptedError("任务已按用户请求安全停止")
         self._notify(progress, "deduplicating", 4, 8, "正在识别内容哈希和网页版本")
+        archive_result = {}
         glm_result = verify_result = {}
         if request.run_glm and self.settings.glm_api_key:
+            # GLMEnricher intentionally requires an immutable archive/hash
+            # record.  Complete that gate for this run before asking it to
+            # classify; otherwise a normal crawl reports zero AI work and
+            # leaves the just-fetched versions stranded until a later manual
+            # archive command.
+            self.work_settings.archive_root.mkdir(parents=True, exist_ok=True)
+            archive_result = archive_document_versions(
+                self.work_settings,
+                archive_root=self.work_settings.archive_root,
+                run_id=plan["run_id"],
+            )
             self._notify(progress, "enriching", 5, 8, "正在处理本次新增或变化文档")
             glm_result = GLMEnricher(self.work_settings).enrich_pending(
                 run_id=plan["run_id"]
@@ -172,6 +219,7 @@ class CrawlService:
         return {
             "run_id": plan["run_id"],
             "warning": bool(error_count),
+            "archive": archive_result,
             "metrics": {
                 "source_count": plan["source_count"],
                 "candidate_count": plan["item_count"],
@@ -194,6 +242,256 @@ class CrawlService:
                 "errors": errors_preview,
             },
             "recommendations": recommendations,
+        }
+
+    def _historical_episode_930(self, request: CrawlJobRequest, *, progress=None, cancel_check=None) -> dict:
+        """Run queue-scoped 930 search and fetch through the normal crawler.
+
+        The old episode path silently substituted ``historical_105`` and never
+        passed the queue query to a search provider.  This adapter keeps the
+        existing single writer and ``CrawlPipeline`` archive/version path, but
+        makes every search result and HTTP response explicitly linkable to a
+        930 queue item.
+        """
+
+        queue_path = Path(request.episode_queue_path or (
+            self.settings.outputs / "special_projects" / "2016_930" / "930_TASK_QUEUE.parquet"
+        ))
+        output = Path(request.episode_output_path or queue_path.parent)
+        output.mkdir(parents=True, exist_ok=True)
+        if not queue_path.exists():
+            return {
+                "warning": True,
+                "metrics": {
+                    "search_calls": 0,
+                    "search_results": 0,
+                    "http_requests": 0,
+                    "real_network_fetches": 0,
+                    "fetched": 0,
+                    "failed": 0,
+                    "document_versions": 0,
+                },
+                "recommendations": ["930 queue is missing; existing task was not rebuilt"],
+            }
+
+        queue = read_parquet_snapshot(queue_path)
+        requested_ids = {str(value) for value in request.episode_queue_item_ids if value}
+        if requested_ids:
+            selected = queue.filter(pl.col("queue_item_id").cast(pl.String).is_in(sorted(requested_ids)))
+        else:
+            selected = queue.filter(pl.col("status").is_in(["RUNNING", "RETRY_WAIT", "PENDING"])).head(
+                request.episode_city_limit
+            )
+        selected_rows = selected.to_dicts()
+        if not selected_rows:
+            return {
+                "warning": False,
+                "metrics": {
+                    "search_calls": 0,
+                    "search_results": 0,
+                    "http_requests": 0,
+                    "real_network_fetches": 0,
+                    "fetched": 0,
+                    "failed": 0,
+                    "document_versions": 0,
+                },
+                "recommendations": ["no claimed 930 queue items"],
+            }
+
+        registry = load_registry(self.settings)
+
+        def _domain(value: object) -> str:
+            text = str(value or "").strip().lower()
+            if "://" not in text:
+                text = "https://" + text
+            return urlsplit(text).netloc.split(":", 1)[0].removeprefix("www.")
+
+        def _source_for_url(url: str, city_id: str | None):
+            host = _domain(url)
+            candidates = []
+            for source in registry:
+                source_host = _domain(source.domain)
+                if not source_host or not (host == source_host or host.endswith("." + source_host)):
+                    continue
+                if city_id and source.city_ids and city_id not in {str(value) for value in source.city_ids}:
+                    continue
+                candidates.append(source)
+            candidates.sort(key=lambda source: (not source.crawl_enabled, source.priority, source.source_id))
+            return candidates[0] if candidates else None
+
+        provider = build_search_fallback(self.settings)
+        if getattr(provider, "name", "None") == "None":
+            # The project already ships a keyless DDG HTML provider.  Use it
+            # as the bounded episode fallback so a missing paid-search
+            # preference cannot silently turn queue execution into a no-op.
+            provider = build_search_provider("DuckDuckGoHTML", None)
+        search_path = output / "930_QUEUE_SEARCH_EXECUTION.parquet"
+        http_path = output / "930_QUEUE_HTTP_AUDIT.parquet"
+        search_rows: list[dict] = []
+        candidates: list[dict] = []
+        search_calls = 0
+        now = datetime.now(UTC)
+        for index, row in enumerate(selected_rows, 1):
+            if cancel_check and cancel_check():
+                raise InterruptedError("930 task cancellation requested")
+            queue_item_id = str(row.get("queue_item_id") or "")
+            query = str(row.get("query_text") or "").strip()
+            started = datetime.now(UTC)
+            search_calls += 1
+            results = []
+            error_type = None
+            error_message = None
+            try:
+                if progress:
+                    progress("discovering", index, len(selected_rows), f"930 search {index}/{len(selected_rows)}", {"queue_item_id": queue_item_id})
+                results = provider.search(
+                    query,
+                    start_date=_coerce_date(row.get("window_start")),
+                    end_date=_coerce_date(row.get("window_end")),
+                    max_results=min(5, request.max_candidates_per_source),
+                )
+            except Exception as exc:
+                error_type = type(exc).__name__
+                error_message = str(exc)[:500]
+            finished = datetime.now(UTC)
+            attempts_json = json.dumps(getattr(provider, "last_attempts", []), ensure_ascii=False)
+            if not results:
+                search_rows.append(
+                    {
+                        "search_execution_id": stable_id(request.episode_id, queue_item_id, started.isoformat(), prefix="930SEARCH"),
+                        "episode_id": request.episode_id or "EP_2016_930_TIGHTENING",
+                        "queue_item_id": queue_item_id,
+                        "city_id": row.get("city_id"),
+                        "query_type": row.get("query_type"),
+                        "query_text": query,
+                        "provider": getattr(provider, "name", "unknown"),
+                        "provider_attempts_json": attempts_json,
+                        "status": "FAILED" if error_type else "NO_RESULTS",
+                        "result_index": 0,
+                        "result_url": None,
+                        "canonical_url": None,
+                        "title": None,
+                        "snippet": None,
+                        "search_started_at": started.isoformat(),
+                        "search_finished_at": finished.isoformat(),
+                        "error_type": error_type,
+                        "error_message": error_message,
+                    }
+                )
+            for result_index, result in enumerate(results, 1):
+                url = str(getattr(result, "url", "") or "").strip()
+                if not url.startswith(("http://", "https://")):
+                    continue
+                canonical = canonicalize_url(url)
+                source = _source_for_url(url, str(row.get("city_id") or "") or None)
+                source_id = source.source_id if source else f"930_DISCOVERY_{_domain(url)}"
+                search_rows.append(
+                    {
+                        "search_execution_id": stable_id(request.episode_id, queue_item_id, canonical, prefix="930SEARCH"),
+                        "episode_id": request.episode_id or "EP_2016_930_TIGHTENING",
+                        "queue_item_id": queue_item_id,
+                        "city_id": row.get("city_id"),
+                        "query_type": row.get("query_type"),
+                        "query_text": query,
+                        "provider": getattr(provider, "name", "unknown"),
+                        "provider_attempts_json": attempts_json,
+                        "status": "RESULT",
+                        "result_index": result_index,
+                        "result_url": url,
+                        "canonical_url": canonical,
+                        "title": str(getattr(result, "title", "") or ""),
+                        "snippet": str(getattr(result, "snippet", "") or ""),
+                        "search_started_at": started.isoformat(),
+                        "search_finished_at": finished.isoformat(),
+                        "error_type": None,
+                        "error_message": None,
+                    }
+                )
+                candidates.append(
+                    {
+                        "queue_item_id": queue_item_id,
+                        "episode_id": request.episode_id or "EP_2016_930_TIGHTENING",
+                        "city_id": row.get("city_id"),
+                        "query_type": row.get("query_type"),
+                        "url": url,
+                        "canonical_url": canonical,
+                        "source_id": source_id,
+                        "published_at": getattr(result, "published_at", None),
+                    }
+                )
+
+        if search_rows:
+            append_unique(search_path, search_rows, "search_execution_id")
+        # Keep one URL per queue item in the formal crawl input.  Search
+        # evidence remains complete in the execution table above.
+        unique_candidates = {}
+        for candidate in candidates:
+            unique_candidates.setdefault(
+                (candidate["queue_item_id"], candidate["canonical_url"]), candidate
+            )
+        candidates = list(unique_candidates.values())
+        if request.max_candidates_total is not None:
+            candidates = candidates[: min(request.max_candidates_total, request.global_safety_limit)]
+        crawl_run_id = stable_id(
+            request.episode_id or "EP_2016_930_TIGHTENING",
+            request.episode_run_id or "",
+            now.isoformat(),
+            prefix="CRAWLRUN",
+        )
+        planned = self.pipeline.plan_external_candidates(
+            crawl_run_id,
+            candidates,
+            start_date=_coerce_date(request.start_date) or date(2016, 9, 1),
+            end_date=_coerce_date(request.end_date) or date(2016, 10, 31),
+        )
+        audit_context = {
+            str(link["crawl_item_id"]): {
+                "episode_id": request.episode_id or "EP_2016_930_TIGHTENING",
+                "queue_item_id": link.get("queue_item_id"),
+                "city_id": link.get("city_id"),
+            }
+            for link in planned.get("links", [])
+        }
+        if planned.get("links"):
+            append_unique(output / "930_QUEUE_CRAWL_LINKS.parquet", planned["links"], "link_id")
+        fetched = self.pipeline.run(
+            crawl_run_id,
+            max_fetches=selected_batch_fetch_limit(request, len(planned.get("links", []))),
+            max_attachment_attempts=request.max_attachment_attempts,
+            cancel_check=cancel_check,
+            progress=progress,
+            audit_path=http_path,
+            audit_context=audit_context,
+            fetch_concurrency=request.fetch_concurrency or self.settings.max_concurrency,
+            per_host_concurrency=request.per_host_concurrency,
+        )
+        http = read_parquet_snapshot(http_path) if http_path.exists() else pl.DataFrame()
+        if not http.is_empty() and "crawl_run_id" in http.columns:
+            http = http.filter(pl.col("crawl_run_id").cast(pl.String) == crawl_run_id)
+        real_fetches = int(http.filter(pl.col("real_network_fetch")).height) if http.height and "real_network_fetch" in http.columns else 0
+        successful = int(http.filter((pl.col("http_status") == 200) & (pl.col("response_bytes") > 0)).height) if http.height else 0
+        document_versions = int(http.filter(pl.col("document_version_id").is_not_null()).height) if http.height and "document_version_id" in http.columns else 0
+        metrics = {
+            **dict(fetched),
+            "search_calls": search_calls,
+            "search_results": len(candidates),
+            "http_requests": http.height,
+            "real_network_fetches": real_fetches,
+            "successful_http_200": successful,
+            "cache_hits": int(http.filter(pl.col("cache_hit")).height) if http.height and "cache_hit" in http.columns else 0,
+            "document_versions": document_versions,
+            "queue_http_audit_path": str(http_path),
+            "queue_search_audit_path": str(search_path),
+            "queue_crawl_links_path": str(output / "930_QUEUE_CRAWL_LINKS.parquet"),
+            "queue_item_ids": [str(row.get("queue_item_id")) for row in selected_rows],
+        }
+        return {
+            "run_id": crawl_run_id,
+            "metrics": metrics,
+            "search": {"provider": getattr(provider, "name", "unknown"), "calls": search_calls, "results": len(candidates)},
+            "planned": planned,
+            "table_paths": self._result_paths(),
+            "recommendations": [] if successful or real_fetches else ["930 search/fetch produced no live HTTP response; queue remains retryable"],
         }
 
     def _web_discovery(self, request: CrawlJobRequest, progress=None) -> dict:

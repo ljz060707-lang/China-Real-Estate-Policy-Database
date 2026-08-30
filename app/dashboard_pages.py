@@ -159,10 +159,50 @@ def _render_metric_row(snapshot: DashboardSnapshot) -> None:
         render_progress_metric(metrics["enabled_slots"])
 
 
+def _render_stage_progress(snapshot: DashboardSnapshot) -> None:
+    progress = snapshot.system.get("progress_snapshot") or {}
+    recent = progress.get("recent_30d") or {}
+    rolling = progress.get("rolling_24m") or {}
+    historical = progress.get("historical") or {}
+    st.subheader("分阶段抓取进度")
+    columns = st.columns(3)
+    with columns[0]:
+        st.metric("最近 30 天", f"{recent.get('completed', 0)} / {recent.get('total', 0)}")
+        st.caption(f"已检查城市：{recent.get('cities_checked', 0)} / 105；来源缺失：{recent.get('source_incomplete', 0)}")
+    with columns[1]:
+        completed = rolling.get("completed")
+        total = rolling.get("total")
+        label = f"{completed} / {total}" if completed is not None and total is not None else "暂无队列"
+        st.metric("近 24 个月", label)
+        st.caption(f"已检查城市：{rolling.get('cities_checked', 0)} / {rolling.get('cities_total', 105)}；来源缺失：{rolling.get('source_incomplete', 0)}")
+    with columns[2]:
+        st.metric("历史全量待处理", format_value(historical.get("pending_shards")))
+        st.caption(f"来源不完整：{format_value(historical.get('source_incomplete'))}；可重试：{format_value(historical.get('retryable'))}")
+    stage = progress.get("stage") or snapshot.crawler.get("stage")
+    if stage:
+        st.caption(f"权威阶段：{format_stage(stage)} · 最近真实进度：{format_datetime(progress.get('last_real_progress_at'))}")
+    position = " · ".join(
+        str(value)
+        for value in (
+            progress.get("current_city"),
+            progress.get("current_source"),
+            (progress.get("current_window") or {}).get("rolling_start") if str(stage or "").startswith("ROLLING") else (progress.get("current_window") or {}).get("recent_start"),
+            (progress.get("current_window") or {}).get("rolling_end") if str(stage or "").startswith("ROLLING") else (progress.get("current_window") or {}).get("recent_end"),
+        )
+        if value
+    )
+    if position:
+        st.caption(f"当前抓取位置：{position}")
+    watchdog = snapshot.system.get("progress_watchdog") or {}
+    if watchdog.get("status") == "NO_REAL_PROGRESS":
+        st.warning("检测到超过阈值未产生真实业务进展；活动 worker 不会被强杀，系统将在安全边界复用恢复路径。")
+
+
 @st.fragment(run_every=f"{REFRESH_SECONDS}s")
 def render_overview_page(settings: Settings) -> None:
     snapshot = _snapshot(settings)
     _status_strip(snapshot)
+    _render_stage_progress(snapshot)
     _render_metric_row(snapshot)
 
     left, right = st.columns([1.08, 1], gap="large")
@@ -292,6 +332,12 @@ def _policy_filters(service: DashboardPolicyData) -> tuple[dict[str, Any], bool]
             instrument = row2[2].selectbox("政策工具", ["全部", *options.get("instruments", [])])
             official = row2[3].selectbox("官方状态", ["全部", *options.get("statuses", [])])
             pdf = row2[4].selectbox("PDF", ["全部", "有 PDF", "无 PDF"])
+            episodes = options.get("episodes", [])
+            episode_labels = ["全部", *[f"{item['episode_id']} · {item['episode_name']}" for item in episodes]]
+            episode_label = st.selectbox("历史 Episode", episode_labels)
+            episode_id = None if episode_label == "全部" else episode_label.split(" · ", 1)[0]
+        if "episode_id" not in locals():
+            episode_id = None
         submitted = st.form_submit_button("查询政策", type="primary")
     try:
         start = date.fromisoformat(start_text)
@@ -299,6 +345,11 @@ def _policy_filters(service: DashboardPolicyData) -> tuple[dict[str, Any], bool]
     except ValueError:
         st.error("日期格式应为 YYYY-MM-DD；本次查询使用 2018-01-01 至今天。")
         start, end = date(2018, 1, 1), date.today()
+    # Keep the current-data default for the normal policy center, but do not
+    # hide a selected historical episode behind that explicit date filter.
+    # A user-entered date still takes precedence over this compatibility rule.
+    if episode_id and start_text.strip() == "2018-01-01":
+        start = date(2016, 1, 1)
     return {
         "start_date": start,
         "end_date": end,
@@ -311,6 +362,7 @@ def _policy_filters(service: DashboardPolicyData) -> tuple[dict[str, Any], bool]
         "instrument_type": None if instrument == "全部" else instrument,
         "official_status": None if official == "全部" else official,
         "has_pdf": None if pdf == "全部" else pdf == "有 PDF",
+        "episode_id": episode_id,
     }, submitted
 
 
@@ -388,6 +440,51 @@ def render_policy_center_page(settings: Settings) -> None:
     navigation[2].download_button(
         "导出当前页 CSV", csv, file_name="crpd_policy_page.csv", mime="text/csv"
     )
+
+    if active_filters.get("episode_id"):
+        from policydb.episode_930 import episode_930_actions_for_dashboard
+
+        episode_actions = episode_930_actions_for_dashboard(
+            service.settings,
+            episode_id=str(active_filters["episode_id"]),
+        )
+        if not episode_actions.is_empty():
+            st.subheader("Episode 动作级导出")
+            st.caption(
+                "该导出保留 announcement/publication/effective/implementation 日期、机制标签和官方证据；AI 字段仍是 advisory。"
+            )
+            export_columns = [
+                column
+                for column in (
+                    "episode_id",
+                    "city",
+                    "document_id",
+                    "action_id",
+                    "policy_type",
+                    "policy_subtype",
+                    "mechanism_labels",
+                    "action_direction",
+                    "announcement_date",
+                    "publication_date",
+                    "effective_date",
+                    "implementation_date",
+                    "old_value",
+                    "new_value",
+                    "unit",
+                    "official_url",
+                    "source_confidence",
+                    "date_confidence",
+                    "classification_confidence",
+                )
+                if column in episode_actions.columns
+            ]
+            safe_dataframe(episode_actions.select(export_columns).head(100), height=280)
+            navigation[2].download_button(
+                "导出 Episode 动作级 CSV",
+                episode_actions.select(export_columns).write_csv().encode("utf-8-sig"),
+                file_name=f"{active_filters['episode_id']}_action_export.csv",
+                mime="text/csv",
+            )
 
     choices = {
         f"{row.get('record_date') or '日期未标注'} · {row.get('title') or '标题未标注'}": row[
@@ -467,6 +564,43 @@ def _enqueue_operation(
 def render_collection_page(settings: Settings) -> None:
     snapshot = _snapshot(settings)
     _status_strip(snapshot)
+    episode = snapshot.system.get("episode_930_progress") or {}
+    if episode:
+        st.subheader("2016 年 930 楼市调控潮专项")
+        episode_columns = st.columns(5)
+        episode_columns[0].metric("专项状态", format_value(episode.get("status")))
+        episode_columns[1].metric("当前阶段", format_value(episode.get("stage")))
+        episode_columns[2].metric("文档", format_count(episode.get("documents_found")))
+        episode_columns[3].metric("动作", format_count(episode.get("actions_extracted")))
+        episode_columns[4].metric("正式动作", format_count(episode.get("formal_actions_promoted")))
+        st.info(
+            "总体状态："
+            f"{format_value(episode.get('status'))} · "
+            "上一 micro-batch："
+            f"{format_value(episode.get('last_micro_batch_status'))} · "
+            "下一批："
+            f"{format_value(episode.get('next_batch_status'))}"
+        )
+        safe_dataframe(
+            [
+                {"指标": "Queue", "值": f"{format_count(episode.get('queue_completed'))} / {format_count(episode.get('queue_total'))}"},
+                {"指标": "API Pass1 / Pass2", "值": f"{format_count(episode.get('api_pass1_success'))} / {format_count(episode.get('api_pass2_success'))}"},
+                {"指标": "API失败 / Deferred", "值": f"{format_count(episode.get('api_failed'))} / {format_count(episode.get('api_deferred'))}"},
+                {"指标": "API当前状态 / 余额状态", "值": f"{format_value(episode.get('api_provider_status') or episode.get('api_status'))} / {format_value(episode.get('api_balance_status'))}"},
+                {"指标": "API Recovery Queue", "值": format_value(episode.get('api_recovery_queue'))},
+                {"指标": "生效日期证据", "值": format_value(episode.get("effective_date_metrics"))},
+                {"指标": "Gap分类", "值": format_value(episode.get("gap_type_counts"))},
+                {"指标": "附件状态", "值": format_value(episode.get("attachment_status"))},
+                {"指标": "AUTORUN lock", "值": format_value((episode.get("autorun") or {}).get("lock_present"))},
+                {"指标": "Active worker/fetch/writer", "值": f"{format_value((episode.get('autorun') or {}).get('active_worker'))} / {format_value((episode.get('autorun') or {}).get('active_fetch'))} / {format_value((episode.get('autorun') or {}).get('active_writer'))}"},
+                {"指标": "Runner PID", "值": format_value((episode.get("autorun") or {}).get("runner_pid"))},
+            ],
+            height=320,
+        )
+        st.caption(
+            "930 专项仅展示真实 production snapshot；heartbeat 不计为业务进度。"
+            f" 最近真实进度：{format_datetime(episode.get('last_real_progress_at'))}"
+        )
     tabs = st.tabs(["实时采集", "处理流水线", "城市×来源角色", "城市×年份", "运行历史", "操作中心"])
     with tabs[0]:
         progress = snapshot.coverage["metrics"]["batch_shard_progress"]

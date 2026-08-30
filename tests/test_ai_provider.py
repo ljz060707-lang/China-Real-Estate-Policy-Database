@@ -6,8 +6,9 @@ from types import SimpleNamespace
 import pytest
 from pydantic import BaseModel
 
-from policydb.ai import SiliconFlowProvider
+from policydb.ai import SiliconFlowProvider, validate_structured_payload
 from policydb.config.preferences import PreferencesStore
+from policydb.episode_930 import ActionClassificationPayload
 from policydb.settings import Settings
 
 
@@ -49,6 +50,23 @@ def test_siliconflow_models_and_structured_output(tmp_path):
     )
     assert result.label == "D06"
     assert trace.trace_id == "trace-1"
+    assert trace.configured_read_timeout == 30.0
+    assert trace.configured_connect_timeout == 10.0
+    assert trace.max_retries == 3
+
+
+def test_siliconflow_timeout_override_is_auditable_without_network(tmp_path):
+    provider = SiliconFlowProvider(
+        Settings(root=tmp_path),
+        client=FakeClient(),
+        request_timeout_override=300,
+        connect_timeout_override=10,
+        max_retries_override=0,
+    )
+
+    assert provider.configured_read_timeout == 300.0
+    assert provider.configured_connect_timeout == 10.0
+    assert provider.configured_max_retries == 0
 
 
 def test_siliconflow_model_test_reports_unavailable(tmp_path, monkeypatch):
@@ -62,3 +80,40 @@ def test_preferences_cannot_store_siliconflow_key(tmp_path):
     with pytest.raises(ValueError):
         store.save({"siliconflow_api_key": "secret"})
     assert not store.path.exists()
+
+
+def test_episode_schema_normalizes_saved_structural_wrapper() -> None:
+    payload = {
+        "classification_output": {
+            "actions": [
+                {
+                    "action_id": "A1",
+                    "policy_type": "LIMIT_PURCHASE",
+                    "direction": "TIGHTENING",
+                }
+            ]
+        }
+    }
+
+    parsed = validate_structured_payload(payload, ActionClassificationPayload)
+
+    assert parsed.actions[0].action_id == "A1"
+    assert parsed.actions[0].policy_type == "LIMIT_PURCHASE"
+
+
+def test_episode_schema_normalizes_saved_classified_actions_wrapper() -> None:
+    payload = {
+        "classified_actions": [
+            {
+                "action_id": "A2",
+                "policy_type": "CREDIT_TIGHTENING",
+                "direction": "TIGHTENING",
+                "confidence": 0.9,
+            }
+        ]
+    }
+
+    parsed = validate_structured_payload(payload, ActionClassificationPayload)
+
+    assert parsed.actions[0].action_id == "A2"
+    assert parsed.actions[0].confidence == 0.9
