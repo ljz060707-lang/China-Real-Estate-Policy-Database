@@ -26,15 +26,15 @@ if ([string]::IsNullOrWhiteSpace($ProjectRoot)) {
 }
 
 $ProjectRoot = [System.IO.Path]::GetFullPath($ProjectRoot)
-$PolicyDbExe = Join-Path $ProjectRoot ".venv\Scripts\policydb.exe"
 $PythonExe = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
+$PolicyDbEntrypoint = Join-Path $ProjectRoot "scripts\policydb_entrypoint.py"
 $CityFile = Join-Path $ProjectRoot "data\reference\cities_105.csv"
 
-if (-not (Test-Path $PolicyDbExe)) {
-    throw "未找到CLI入口：$PolicyDbExe。请先在项目根目录运行 uv sync --all-extras。"
-}
 if (-not (Test-Path $PythonExe)) {
     throw "未找到项目Python：$PythonExe"
+}
+if (-not (Test-Path $PolicyDbEntrypoint)) {
+    throw "未找到项目CLI入口：$PolicyDbEntrypoint"
 }
 if (-not (Test-Path $CityFile)) {
     throw "未找到105城市清单：$CityFile"
@@ -82,7 +82,7 @@ function Invoke-PolicyDb {
     try {
         $ErrorActionPreference = "Continue"
         $Output = @(
-            & $PolicyDbExe @Arguments 2>&1 |
+            & $PythonExe $PolicyDbEntrypoint @Arguments 2>&1 |
                 Tee-Object -FilePath $LogFile -Append |
                 ForEach-Object {
                     Write-Host $_

@@ -178,7 +178,11 @@ try {
                 -ExistingSourcesOnly `
                 -SkipAI
             $resultCode = [int]$LASTEXITCODE
-            if ($resultCode -eq 0) {
+            if (Test-StopRequested) {
+                Write-State -Status "PAUSED" -Reason "safe_stop_after_checkpoint" -ExitCode $resultCode
+                Write-RunLog "Formal crawler reached a safe stop boundary; checkpoint retained and run can resume." "WARN"
+            }
+            elseif ($resultCode -eq 0) {
                 Write-State -Status "COMPLETED" -Reason "formal_backfill_exit_zero" -ExitCode $resultCode
                 Write-RunLog "Recent-5Y formal crawler exited successfully."
             }
