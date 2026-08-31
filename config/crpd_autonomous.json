@@ -2,7 +2,7 @@
   "automation_id_prefix": "AUTO",
   "task_name": "CRPD_Autonomous_Database_Completion",
   "scheduler_interval_minutes": 30,
-  "start_date": "2018-01-01",
+  "start_date": "2021-09-01",
   "end_date": "today",
   "max_recovery_fetches": 20,
   "pdf_limit": 30,
@@ -20,6 +20,16 @@
     "max_fetches_per_shard": 5000,
     "max_attempts": 3,
     "pdf_discovery_limit": 30
+  },
+  "crawl": {
+    "start_date": "2021-09-01",
+    "end_date": "today",
+    "max_pages_per_source": 3000,
+    "max_candidates_per_shard": 100000,
+    "max_fetches_per_shard": 100000,
+    "network_retry_passes": 2,
+    "existing_sources_only": true,
+    "skip_ai": true
   },
   "watchdog": {
     "no_progress_minutes": 15,

@@ -56,6 +56,19 @@ def _now() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
+def _stop_requested(settings: Settings) -> bool:
+    """Return whether a rolling session should yield at its next safe boundary."""
+
+    return any(
+        path.exists()
+        for path in (
+            settings.automation / "STOP",
+            settings.data_root / "control" / "STOP_FULL_SYNC",
+            settings.data_root / "control" / "STOP_AUTOPILOT",
+        )
+    )
+
+
 def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
@@ -545,6 +558,20 @@ def run_rolling_24m(
         }
         if not config.apply:
             return _summary(settings, queue, state)
+        if _stop_requested(settings):
+            state.update(
+                {
+                    "status": "PAUSED_BUDGET",
+                    "stage_status": "PAUSED",
+                    "batch_status": "STOP_REQUESTED",
+                    "last_event": "STOP_REQUESTED",
+                    "updated_at": _now(),
+                }
+            )
+            summary = _summary(settings, queue, state)
+            summary.update({"run_id": run_id, "processed_items": 0, "blocking_error": None, "exit_code": 0})
+            _atomic_json(_root(settings) / f"ROLLING_24M_RUN_SUMMARY_{run_id}.json", summary)
+            return summary
         candidates = [
             (index, row)
             for index, row in enumerate(queue.iter_rows(named=True))
@@ -553,6 +580,7 @@ def run_rolling_24m(
         ][: config.max_items]
         processed = 0
         blocking: str | None = None
+        stop_seen = False
         for _index, row in candidates:
             item_id = str(row["queue_item_id"])
             acquired = _now()
@@ -673,15 +701,19 @@ def run_rolling_24m(
             })
             _atomic_json(_state_path(settings), state)
             _write_progress_snapshot(settings, queue, state)
+            if _stop_requested(settings):
+                stop_seen = True
+                break
             if blocking:
                 state.update({"status": "BLOCKED", "stage_status": "BLOCKED", "blocking_reason": blocking})
                 break
         counts = _counts(queue)
         complete = counts["pending"] == 0 and counts["running"] == 0 and counts["retryable"] == 0
         state.update({
-            "status": "BLOCKED" if blocking else ("COMPLETE" if complete else "PARTIAL"),
-            "stage_status": "BLOCKED" if blocking else ("COMPLETE" if complete else "RUNNING"),
-            "batch_status": "BLOCKED" if blocking else "COMPLETED",
+            "status": "PAUSED_BUDGET" if stop_seen else ("BLOCKED" if blocking else ("COMPLETE" if complete else "PARTIAL")),
+            "stage_status": "PAUSED" if stop_seen else ("BLOCKED" if blocking else ("COMPLETE" if complete else "RUNNING")),
+            "batch_status": "STOP_REQUESTED" if stop_seen else ("BLOCKED" if blocking else "COMPLETED"),
+            "last_event": "STOP_REQUESTED" if stop_seen else state.get("last_event"),
             "current_queue_item": None,
             "current_city": None,
             "current_source": None,
