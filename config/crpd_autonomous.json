@@ -30,7 +30,7 @@
     "stop_free_gb": 20
   },
   "paths": {
-    "project_root": "D:\\Codex\\projects\\Documents-Codex\\2026-07-13\\text-20260705-xlsx-text-data-raw\\policy-database",
+    "project_root": "E:\\policy-database",
     "data_root": "E:\\Data Set\\CRPD",
     "database": "E:\\Data Set\\CRPD\\database\\policydb.duckdb",
     "curated": "E:\\Data Set\\CRPD\\curated",
