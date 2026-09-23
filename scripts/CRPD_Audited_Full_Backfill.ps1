@@ -8,6 +8,10 @@
     [int]$MaxCandidatesPerShard = 100000,
     [int]$MaxFetchesPerShard = 100000,
     [int]$NetworkRetryPasses = 2,
+    [ValidateRange(1, 16)][int]$FetchConcurrency = 6,
+    [ValidateRange(1, 2)][int]$PerHostConcurrency = 1,
+    [ValidateRange(1, 4)][int]$ApiConcurrency = 4,
+    [ValidateRange(1, 64)][int]$CheckpointInterval = 32,
 
     [switch]$DiscoverSources,
     [switch]$ApplyDiscoveredSources,
@@ -21,11 +25,21 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 
+# The active production objective is fast, complete collection.  Preserve
+# archive, database-build, validation, and progress work, but never enter the
+# semantic/API classification lane during this phase.
+$SkipAI = $true
+$FetchConcurrency = [Math]::Max($FetchConcurrency, 12)
+
 if ([string]::IsNullOrWhiteSpace($ProjectRoot)) {
     $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 }
 
 $ProjectRoot = [System.IO.Path]::GetFullPath($ProjectRoot)
+$env:POLICYDB_ROOT = $ProjectRoot
+$env:CRPD_DATA_ROOT = $DataRoot
+$env:CRPD_GOVERNMENT_ROUTE = "direct"
+$env:POLICYDB_ADAPTIVE_THROTTLE = "1"
 $PythonExe = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $PolicyDbEntrypoint = Join-Path $ProjectRoot "scripts\policydb_entrypoint.py"
 $CityFile = Join-Path $ProjectRoot "data\reference\cities_105.csv"
@@ -208,6 +222,9 @@ function Run-City {
         "--max-pages-per-source", [string]$MaxPagesPerSource,
         "--max-candidates-per-shard", [string]$MaxCandidatesPerShard,
         "--max-fetches-per-shard", [string]$MaxFetchesPerShard,
+        "--fetch-concurrency", [string]$FetchConcurrency,
+        "--per-host-concurrency", [string]$PerHostConcurrency,
+        "--checkpoint-interval", [string]$CheckpointInterval,
         "--resume",
         "--no-run-ai",
         "--archive"
@@ -258,7 +275,10 @@ function Run-City {
                 "crawl", "exhaustive-resume",
                 "--city", $CityName,
                 "--from", $StartDate,
-                "--to", $EndDate
+                "--to", $EndDate,
+                "--fetch-concurrency", [string]$FetchConcurrency,
+                "--per-host-concurrency", [string]$PerHostConcurrency,
+                "--checkpoint-interval", [string]$CheckpointInterval
             ) `
             -Stage ("crawl_{0}_resume_{1:D2}" -f $CityId, $Pass) `
             -ContinueOnError)
@@ -281,7 +301,10 @@ function Run-City {
                 "crawl", "exhaustive-retry",
                 "--city", $CityName,
                 "--from", $StartDate,
-                "--to", $EndDate
+                "--to", $EndDate,
+                "--fetch-concurrency", [string]$FetchConcurrency,
+                "--per-host-concurrency", [string]$PerHostConcurrency,
+                "--checkpoint-interval", [string]$CheckpointInterval
             ) `
             -Stage ("crawl_{0}_retry_{1:D2}" -f $CityId, $Retry) `
             -ContinueOnError)
@@ -389,6 +412,9 @@ else {
         "--max-pages-per-source", [string]$MaxPagesPerSource,
         "--max-candidates-per-shard", [string]$MaxCandidatesPerShard,
         "--max-fetches-per-shard", [string]$MaxFetchesPerShard,
+        "--fetch-concurrency", [string]$FetchConcurrency,
+        "--per-host-concurrency", [string]$PerHostConcurrency,
+        "--checkpoint-interval", [string]$CheckpointInterval,
         "--resume",
         "--no-run-ai",
         "--archive"
@@ -434,20 +460,11 @@ if (Test-SafeStopRequested) {
     exit 0
 }
 
-# 全局归档与后处理。当前exhaustive-city的--run-ai只记录请求，故在这里显式执行。
+# 全局归档与后处理；收集阶段不执行语义/API分类。
 [void](Invoke-PolicyDb -Arguments @("archive", "sync") -Stage "90_archive_sync" -ContinueOnError)
 [void](Invoke-PolicyDb -Arguments @("archive", "recover-missing") -Stage "91_archive_recover" -ContinueOnError)
 
-if (-not $SkipAI) {
-    [void](Invoke-PolicyDb -Arguments @("ai", "classify") -Stage "92_ai_classify" -ContinueOnError)
-    [void](Invoke-PolicyDb -Arguments @("ai", "verify") -Stage "93_ai_verify" -ContinueOnError)
-}
-
-[void](Invoke-PolicyDb -Arguments @("taxonomy", "build") -Stage "94_taxonomy" -ContinueOnError)
-[void](Invoke-PolicyDb -Arguments @("ai", "deduplicate") -Stage "95_deduplicate" -ContinueOnError)
-[void](Invoke-PolicyDb -Arguments @("ai", "route-pools") -Stage "96_route_pools" -ContinueOnError)
-[void](Invoke-PolicyDb -Arguments @("confidence", "build") -Stage "97_confidence" -ContinueOnError)
-[void](Invoke-PolicyDb -Arguments @("coverage", "build") -Stage "98_coverage" -ContinueOnError)
+Write-RunLog "当前为CRAWL_ONLY：跳过AI分类、AI验证、taxonomy、pool和confidence；保留归档、数据库构建、校验和进度导出。"
 [void](Invoke-PolicyDb -Arguments @("build-database") -Stage "99_build_database" -ContinueOnError)
 [void](Invoke-PolicyDb -Arguments @("validate") -Stage "100_validate" -ContinueOnError)
 [void](Invoke-PolicyDb -Arguments @("audit", "exhaustive") -Stage "101_acceptance" -ContinueOnError)

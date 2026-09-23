@@ -58,7 +58,8 @@ def test_crawl_pipeline_fetches_versions_and_resumes(tmp_path):
     )
     first = pipeline.run(plan["run_id"])
     second = pipeline.run(plan["run_id"])
-    assert first == {"run_id": plan["run_id"], "fetched": 1, "failed": 0}
+    assert {k: first[k] for k in ("run_id", "fetched", "failed")} == {"run_id": plan["run_id"], "fetched": 1, "failed": 0}
+    assert first["reused"] == 0
     assert second["fetched"] == 0
     versions = pl.read_parquet(root / "data" / "curated" / "policy_document_versions.parquet")
     assert versions.height == 1
@@ -130,7 +131,8 @@ def test_completion_window_uses_finalized_run_status(tmp_path):
 
     windows = pl.read_parquet(root / "data" / "curated" / "crawl_source_windows.parquet")
     evidence = json.loads(windows[0, "completion_evidence"])
-    assert result == {"run_id": plan["run_id"], "fetched": 1, "failed": 0}
+    assert {k: result[k] for k in ("run_id", "fetched", "failed")} == {"run_id": plan["run_id"], "fetched": 1, "failed": 0}
+    assert result["extraction"]["main_parsed"] == 1
     assert windows[0, "is_complete"] is True
     assert evidence["transaction_committed"] is True
     assert evidence["completion_invariants_passed"] is True

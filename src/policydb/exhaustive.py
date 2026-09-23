@@ -183,6 +183,28 @@ def completion_status(row: dict) -> str:
     )
 
 
+def pending_fetch_count(row: dict) -> int:
+    """Local version reuse satisfies fetch, but not parsing/quality certification."""
+    available = max(int(row.get("fetched", 0) or 0), int(row.get("document_versions", 0) or 0))
+    return max(0, int(row.get("unique_candidate_count", 0) or 0) - available - int(row.get("failed", 0) or 0))
+
+
+def text_extraction_percentage(rows: list[dict]) -> float | None:
+    """Unknown historical extraction evidence is not zero or pagination success."""
+    parsed = pending = 0
+    for row in rows:
+        try:
+            evidence = json.loads(row.get("completion_evidence_json") or "{}")
+        except (ValueError, TypeError):
+            return None
+        extraction = evidence.get("text_extraction")
+        if not isinstance(extraction, dict):
+            return None
+        parsed += int(extraction.get("main_parsed", 0))
+        pending += int(extraction.get("main_pending", 0))
+    return round(100 * parsed / (parsed + pending), 2) if parsed + pending else None
+
+
 def can_certify_city_year(metrics: dict) -> bool:
     return all(
         (
@@ -408,25 +430,31 @@ class ExhaustiveCrawler:
         _atomic_parquet(pl.DataFrame(updated, infer_schema_length=None), path)
         return unknown, rejected
 
+    @staticmethod
+    def _event_row(
+        batch_id: str, shard_id: str, stage: str, message: str, **counts
+    ) -> dict:
+        now = datetime.now(UTC).isoformat()
+        return {
+            "event_id": stable_id(shard_id, stage, now, prefix="PROGEVT"),
+            "batch_id": batch_id,
+            "shard_id": shard_id,
+            "stage": stage,
+            "message": message,
+            "counts_json": _json(counts),
+            "created_at": now,
+        }
+
     def _event(
         self, batch_id: str, shard_id: str, stage: str, message: str, **counts
     ) -> None:
-        row = pl.DataFrame(
-            [
-                {
-                    "event_id": stable_id(
-                        shard_id, stage, datetime.now(UTC).isoformat(), prefix="PROGEVT"
-                    ),
-                    "batch_id": batch_id,
-                    "shard_id": shard_id,
-                    "stage": stage,
-                    "message": message,
-                    "counts_json": _json(counts),
-                    "created_at": datetime.now(UTC).isoformat(),
-                }
-            ]
+        _upsert(
+            pl.DataFrame(
+                [self._event_row(batch_id, shard_id, stage, message, **counts)]
+            ),
+            self.events_path,
+            "event_id",
         )
-        _upsert(row, self.events_path, "event_id")
 
     def run_city(
         self,
@@ -442,7 +470,19 @@ class ExhaustiveCrawler:
         resume: bool = True,
         retry_errors: bool = False,
         progress=None,
+        fetch_concurrency: int | None = None,
+        per_host_concurrency: int = 1,
+        checkpoint_interval: int = 8,
+        reuse_existing_documents: bool = True,
     ) -> dict:
+        effective_fetch_concurrency = (
+            self.settings.max_concurrency
+            if fetch_concurrency is None
+            else int(fetch_concurrency)
+        )
+        effective_fetch_concurrency = max(1, min(effective_fetch_concurrency, 16))
+        effective_per_host_concurrency = max(1, min(int(per_host_concurrency), 2))
+        effective_checkpoint_interval = max(1, min(int(checkpoint_interval), 64))
         plan = self.plan_city(
             city,
             start_date=start_date,
@@ -463,7 +503,52 @@ class ExhaustiveCrawler:
         completed = 0
         run_ids: list[str] = []
         run_metrics: dict[str, dict[str, int]] = {}
+        pending_shard_updates: dict[str, dict] = {}
+        pending_evidence: dict[str, dict] = {}
+        pending_events: dict[str, dict] = {}
+
+        def flush_checkpoint() -> bool:
+            changed = bool(
+                pending_shard_updates or pending_evidence or pending_events
+            )
+            if pending_shard_updates:
+                _upsert(
+                    pl.DataFrame(
+                        list(pending_shard_updates.values()),
+                        infer_schema_length=None,
+                    ),
+                    self.shards_path,
+                    "shard_id",
+                )
+                pending_shard_updates.clear()
+            if pending_evidence:
+                _upsert(
+                    pl.DataFrame(
+                        list(pending_evidence.values()),
+                        infer_schema_length=None,
+                    ),
+                    self.evidence_path,
+                    "evidence_id",
+                )
+                pending_evidence.clear()
+            if pending_events:
+                _upsert(
+                    pl.DataFrame(
+                        list(pending_events.values()),
+                        infer_schema_length=None,
+                    ),
+                    self.events_path,
+                    "event_id",
+                )
+                pending_events.clear()
+            if changed:
+                self.rebuild_progress()
+            return changed
+
         for index, shard in enumerate(pending.iter_rows(named=True), 1):
+            if any((self.settings.control_root / name).exists() for name in ("STOP_FULL_SYNC", "STOP_AUTOPILOT")):
+                # Yield only between committed shards. Never kill a fetch/write.
+                break
             if resume and shard["status"] in {
                 "complete_policy_found",
                 "confirmed_zero",
@@ -471,12 +556,13 @@ class ExhaustiveCrawler:
                 continue
             shard_start = date.fromisoformat(str(shard["start_date"]))
             shard_end = date.fromisoformat(str(shard["end_date"]))
-            self._event(
+            discovering_event = self._event_row(
                 plan["batch_id"],
                 shard["shard_id"],
                 "discovering",
                 f"{shard['city_name']} {shard_start}—{shard_end}",
             )
+            pending_events[discovering_event["event_id"]] = discovering_event
             run_plan = self.pipeline.plan(
                 run_type="exhaustive_city",
                 start_date=shard_start,
@@ -495,11 +581,16 @@ class ExhaustiveCrawler:
                 run_plan["run_id"], shard_start, shard_end
             )
             run_result = self.pipeline.run(
-                run_plan["run_id"], max_fetches=max_fetches_per_shard
+                run_plan["run_id"],
+                max_fetches=max_fetches_per_shard,
+                fetch_concurrency=effective_fetch_concurrency,
+                per_host_concurrency=effective_per_host_concurrency,
+                reuse_existing_documents=reuse_existing_documents,
             )
             run_ids.append(str(run_plan["run_id"]))
             run_metrics[str(run_plan["run_id"])] = {
                 "fetched": int(run_result.get("fetched", 0) or 0),
+                "reused": int(run_result.get("reused", 0) or 0),
                 "ai_pending_count": int(run_result.get("fetched", 0) or 0),
                 "dedup_pending_count": int(run_result.get("fetched", 0) or 0),
                 "archive_missing_count": 0,
@@ -544,7 +635,7 @@ class ExhaustiveCrawler:
                 "page_cap_hit": "max_pages" in stop_reasons,
                 "global_safety_limit_hit": False,
                         "network_error_count": int(run_result.get("failed", 0) or 0),
-                "parser_error_count": 0,
+                "parser_error_count": int(run_result.get("extraction", {}).get("main_pending", 0)),
                         "retryable_errors": int(run_result.get("failed", 0) or 0),
                 "pending_fetch": max(
                     0,
@@ -553,7 +644,8 @@ class ExhaustiveCrawler:
                         int(run_plan["item_count"]) - unknown - rejected,
                     )
                             - int(run_result.get("fetched", 0) or 0)
-                            - int(run_result.get("failed", 0) or 0),
+                            - int(run_result.get("failed", 0) or 0)
+                            - int(run_result.get("reused", 0) or 0),
                 ),
                 "date_unknown_count": unknown,
                 "archive_missing_count": 0,
@@ -582,7 +674,11 @@ class ExhaustiveCrawler:
                         "fetched": int(run_result.get("fetched", 0) or 0),
                         "failed": int(run_result.get("failed", 0) or 0),
                         "retryable_errors": metrics["retryable_errors"],
-                        "document_versions": int(run_result.get("fetched", 0) or 0),
+                        "permanent_errors": metrics["parser_error_count"],
+                        "document_versions": (
+                            int(run_result.get("fetched", 0) or 0)
+                            + int(run_result.get("reused", 0) or 0)
+                        ),
                         "ai_pending_count": int(run_result.get("fetched", 0) or 0),
                         "dedup_pending_count": int(run_result.get("fetched", 0) or 0),
                         "date_unknown_count": unknown,
@@ -591,6 +687,7 @@ class ExhaustiveCrawler:
                         "completion_evidence_json": _json(
                             {
                                 **metrics,
+                                "text_extraction": run_result.get("extraction"),
                                 "run_id": run_plan["run_id"],
                                 "stop_reasons": stop_reasons,
                             }
@@ -602,7 +699,6 @@ class ExhaustiveCrawler:
                 ],
                 infer_schema_length=None,
             )
-            _upsert(update, self.shards_path, "shard_id")
             evidence = pl.DataFrame(
                 [
                     {
@@ -638,7 +734,12 @@ class ExhaustiveCrawler:
                 ],
                 infer_schema_length=None,
             )
-            _upsert(evidence, self.evidence_path, "evidence_id")
+            pending_shard_updates[shard["shard_id"]] = update.row(
+                0, named=True
+            )
+            pending_evidence[evidence[0, "evidence_id"]] = evidence.row(
+                0, named=True
+            )
             if cap_hit and shard_start < shard_end:
                 children = split_window(shard_start, shard_end)
                 child_rows = []
@@ -691,11 +792,8 @@ class ExhaustiveCrawler:
                     child["started_at"] = None
                     child["finished_at"] = None
                     child_rows.append(child)
-                _upsert(
-                    pl.DataFrame(child_rows, infer_schema_length=None),
-                    self.shards_path,
-                    "shard_id",
-                )
+                for child in child_rows:
+                    pending_shard_updates[child["shard_id"]] = child
                 parent = update.with_columns(
                     pl.lit("split_parent").alias("status"),
                     pl.lit(
@@ -711,18 +809,24 @@ class ExhaustiveCrawler:
                         )
                     ).alias("completion_evidence_json"),
                 )
-                _upsert(parent, self.shards_path, "shard_id")
+                pending_shard_updates[shard["shard_id"]] = parent.row(
+                    0, named=True
+                )
                 status = "split_parent"
             completed += 1
-            self._event(
+            completed_event = self._event_row(
                 plan["batch_id"],
                 shard["shard_id"],
                 status,
                 f"候选 {run_plan['item_count']}，成功 {run_result.get('fetched', 0)}，失败 {run_result.get('failed', 0)}",
             )
+            pending_events[completed_event["event_id"]] = completed_event
             if progress:
                 progress(index, total, status, shard)
-        self.rebuild_progress()
+            if completed % effective_checkpoint_interval == 0:
+                flush_checkpoint()
+        if not flush_checkpoint():
+            self.rebuild_progress()
         return {
             **plan,
             "processed_shards": completed,
@@ -785,12 +889,7 @@ class ExhaustiveCrawler:
                     "source_verified": bool(row.get("source_verified", False)),
                     "network_error_count": int(row.get("failed", 0) or 0),
                     "parser_error_count": int(row.get("permanent_errors", 0) or 0),
-                    "pending_fetch": max(
-                        0,
-                        int(row.get("unique_candidate_count", 0) or 0)
-                        - int(row.get("fetched", 0) or 0)
-                        - int(row.get("failed", 0) or 0),
-                    ),
+                    "pending_fetch": pending_fetch_count(row),
                 }
                 row["source_verified"] = metrics["source_verified"]
                 row["status"] = completion_status(metrics)
@@ -873,9 +972,7 @@ class ExhaustiveCrawler:
                     if archive_total
                     else (100.0 if temporal_complete == expected and expected else 0.0)
                 ),
-                "text_extraction_pct": (
-                    100.0 if temporal_complete == expected and expected else 0.0
-                ),
+                "text_extraction_pct": text_extraction_percentage(runnable.to_dicts()),
                 "ai_processing_pct": pct(
                     int((runnable["ai_pending_count"] == 0).sum())
                     if expected

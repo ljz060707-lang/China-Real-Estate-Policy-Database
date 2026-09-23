@@ -7,20 +7,29 @@ from urllib.parse import urljoin
 
 import fitz
 import trafilatura
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, NavigableString, Tag
 from openpyxl import load_workbook
 
 _END_PUNCTUATION = set("。！？；.!?;：:")
 _ATTACHMENT_SUFFIXES = (".pdf", ".doc", ".docx", ".xls", ".xlsx", ".zip", ".rar")
+PARSER_VERSION = "3"
 _MAIN_SELECTORS = (
-    "article",
     "#UCAP-CONTENT",
     ".TRS_Editor",
     ".article-content",
     ".article_content",
-    ".content",
+    ".conBox",
+    "article",
     "main",
+    "#content",
+    ".content",
 )
+_NOISE_SELECTORS = (
+    "script,style,noscript,nav,footer,header,head,form,"
+    ".nav,.navbar,.breadcrumb,.crumb,.related,.share-box,.wza-box,"
+    "[role=navigation],.print-button,.print-btn"
+)
+_MAX_OFFICE_UNCOMPRESSED = 64 * 1024 * 1024
 
 
 def _normalise_block(value: str) -> str:
@@ -81,7 +90,7 @@ def merge_semantic_blocks(blocks: list[dict | str], min_chars: int = 24) -> dict
         continues_sentence = previous["text"][-1:] not in _END_PUNCTUATION
         short_fragment = len(text) < min_chars or len(previous["text"]) < min_chars
         heading = item.get("kind") == "heading"
-        if not heading and (continues_sentence or (cross_page and short_fragment)):
+        if not heading and item.get("kind") != "table" and previous.get("kind") not in {"heading", "table"} and (continues_sentence or (cross_page and short_fragment)):
             separator = "" if cross_page or continues_sentence else "\n"
             previous["text"] += separator + text
             repairs.append(
@@ -111,28 +120,41 @@ def merge_semantic_blocks(blocks: list[dict | str], min_chars: int = 24) -> dict
     }
 
 
+def _dom_blocks(root: Tag) -> list[dict]:
+    """Visit content once, including bare div text; never duplicate nested p/tr nodes."""
+    blocks: list[dict] = []
+    for child in root.children:
+        if isinstance(child, NavigableString):
+            text = str(child).strip()
+            if text:
+                blocks.append({"text": text, "page": 1, "kind": "text"})
+        elif isinstance(child, Tag):
+            if child.name in {"p", "li", "tr", "h1", "h2", "h3", "h4"}:
+                text = child.get_text(" | " if child.name == "tr" else " ", strip=True)
+                if text:
+                    blocks.append({"text": text, "page": 1, "kind": "table" if child.name == "tr" else "heading" if child.name.startswith("h") else "text"})
+            else:
+                blocks.extend(_dom_blocks(child))
+    return blocks
+
+
+def _empty_parse(kind: str, status: str, reason: str) -> dict:
+    return {
+        "document_type": kind, "title": None, "full_text": "", "page_count": None,
+        "parse_status": status, "text_blocks": [], "repair_actions": [],
+        "attachments": [], "dynamic_page_hint": False, "completeness_score": 0.0,
+        "parser_error": reason,
+    }
+
+
 def _html_parse(body: bytes, base_url: str | None) -> dict:
     html = _decode_html(body)
     soup = BeautifulSoup(html, "html.parser")
-    for node in soup.select("script,style,noscript,nav,footer,header"):
-        node.decompose()
     title = soup.title.get_text(" ", strip=True) if soup.title else None
-    candidates = [soup.select_one(selector) for selector in _MAIN_SELECTORS]
-    candidates = [node for node in candidates if node is not None]
-    root = max(candidates, key=lambda node: len(node.get_text(" ", strip=True))) if candidates else soup
-    blocks: list[dict] = []
-    for node in root.select("h1,h2,h3,p,li,tr"):
-        text = node.get_text(" ", strip=True)
-        if text:
-            blocks.append(
-                {
-                    "text": text,
-                    "page": 1,
-                    "kind": "heading" if node.name.startswith("h") else "table" if node.name == "tr" else "text",
-                }
-            )
-    repaired = merge_semantic_blocks(blocks)
-    extracted = repaired["text"] or trafilatura.extract(html) or root.get_text("\n", strip=True)
+    if re.search(r"^(?:404\b|页面不存在|页面未找到|访问出错|access denied|403 forbidden)", title or "", re.I):
+        result = _empty_parse("html", "soft_error", "HTTP_200_ERROR_PAGE")
+        result["title"] = title
+        return result
     attachments = []
     for link in soup.select("a[href]"):
         href = str(link.get("href") or "").strip()
@@ -143,6 +165,22 @@ def _html_parse(body: bytes, base_url: str | None) -> dict:
                 {"url": urljoin(base_url or "", href), "label": label or href, "source": "html_link"}
             )
     script_text = " ".join(node.get_text(" ", strip=True) for node in soup.select("script"))
+    for node in soup.select(_NOISE_SELECTORS):
+        node.decompose()
+    root = None
+    selector_used = None
+    for selector in _MAIN_SELECTORS:
+        candidates = [node for node in soup.select(selector) if node.get_text(strip=True)]
+        if candidates:
+            root = max(candidates, key=lambda node: len(node.get_text(strip=True)))
+            selector_used = selector
+            break
+    repaired = merge_semantic_blocks(_dom_blocks(root or soup))
+    # A known site body is authoritative. Generic pages use the installed main-text
+    # extractor first, instead of concatenating every menu and sidebar paragraph.
+    extracted = repaired["text"]
+    if root is None:
+        extracted = trafilatura.extract(str(soup), include_tables=True, include_comments=False, favor_precision=True) or extracted
     dynamic_hint = bool(
         re.search(r"(__NEXT_DATA__|webpack|ajax|iframe|加载中|请开启JavaScript)", html + script_text, re.I)
     )
@@ -161,6 +199,7 @@ def _html_parse(body: bytes, base_url: str | None) -> dict:
         "attachments": attachments,
         "dynamic_page_hint": dynamic_hint,
         "completeness_score": round(completeness, 4),
+        "body_selector": selector_used,
     }
 
 
@@ -214,6 +253,9 @@ def extract_pdf_embedded(body: bytes) -> list[tuple[str, bytes]]:
 
 
 def _office_parse(body: bytes, content_type: str) -> dict:
+    with zipfile.ZipFile(BytesIO(body)) as archive:
+        if sum(info.file_size for info in archive.infolist()) > _MAX_OFFICE_UNCOMPRESSED:
+            return _empty_parse("office", "deferred_unsupported", "OFFICE_SIZE_LIMIT")
     blocks: list[dict] = []
     if "spreadsheet" in content_type or "excel" in content_type:
         workbook = load_workbook(BytesIO(body), read_only=True, data_only=False)
@@ -222,6 +264,7 @@ def _office_parse(body: bytes, content_type: str) -> dict:
                 values = [str(value).strip() for value in row if value not in (None, "")]
                 if values:
                     blocks.append({"text": " | ".join(values), "page": None, "kind": "table"})
+        workbook.close()
         document_type = "xlsx"
     else:
         with zipfile.ZipFile(BytesIO(body)) as archive:
@@ -249,23 +292,32 @@ def _office_parse(body: bytes, content_type: str) -> dict:
 
 def parse_document(body: bytes, content_type: str | None, base_url: str | None = None) -> dict:
     content_type = (content_type or "").lower()
+    kind = "binary"
     try:
-        if "pdf" in content_type or body.startswith(b"%PDF"):
+        # Magic precedes MIME: government download endpoints frequently report HTML
+        # or octet-stream for Office files, and may serve RAR under a .zip URL.
+        if body.startswith(b"%PDF"):
+            kind = "pdf"
             return _pdf_parse(body)
-        if any(token in content_type for token in ("wordprocessingml", "spreadsheetml", "ms-excel")):
-            return _office_parse(body, content_type)
+        if body.startswith(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"):
+            return _empty_parse("ole", "deferred_unsupported", "LEGACY_OFFICE_CONVERTER_REQUIRED")
+        if body.startswith(b"Rar!"):
+            return _empty_parse("rar", "deferred_unsupported", "ARCHIVE_MEMBER_EXTRACTION_REQUIRED")
+        if body.startswith((b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")):
+            kind = "zip"
+            with zipfile.ZipFile(BytesIO(body)) as archive:
+                names = set(archive.namelist())
+            if "word/document.xml" in names:
+                return _office_parse(body, "wordprocessingml")
+            if "xl/workbook.xml" in names:
+                return _office_parse(body, "spreadsheetml")
+            return _empty_parse("zip", "deferred_unsupported", "ARCHIVE_MEMBER_EXTRACTION_REQUIRED")
+        if body.startswith((b"MZ", b"7z\xbc\xaf\x27\x1c", b"\x89PNG", b"\xff\xd8\xff", b"GIF8")) or b"\0" in body[:4096]:
+            return _empty_parse("binary", "deferred_unsupported", "NON_TEXT_BINARY")
+        looks_html = bool(re.search(br"<(?:!doctype|html|head|body|article|div|p|title)\b", body[:4096], re.I))
+        if not looks_html and any(token in content_type for token in ("pdf", "msword", "wordprocessingml", "spreadsheetml", "ms-excel", "zip", "rar", "octet-stream", "image/")):
+            return _empty_parse("binary", "deferred_unsupported", "UNSUPPORTED_OR_INVALID_SIGNATURE")
+        kind = "html"
         return _html_parse(body, base_url)
-    except (RuntimeError, ValueError, TypeError) as error:
-        return {
-            "document_type": "pdf" if body.startswith(b"%PDF") else "html",
-            "title": None,
-            "full_text": "",
-            "page_count": None,
-            "parse_status": "parser_error",
-            "text_blocks": [],
-            "repair_actions": [],
-            "attachments": [],
-            "dynamic_page_hint": False,
-            "completeness_score": 0.0,
-            "parser_error": f"{type(error).__name__}: {error}",
-        }
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, zipfile.BadZipFile, RecursionError) as error:
+        return _empty_parse(kind, "parser_error", f"{type(error).__name__}: {error}")

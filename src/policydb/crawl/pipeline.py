@@ -33,9 +33,13 @@ from policydb.crawl.fetcher import (
     RespectfulFetcher,
 )
 from policydb.crawl.models import DiscoveryRequest
-from policydb.crawl.parser import extract_pdf_embedded, parse_document
+from policydb.crawl.parser import PARSER_VERSION, extract_pdf_embedded, parse_document
 from policydb.crawl.registry import load_registry
-from policydb.parquet_store import atomic_write_parquet, read_parquet_snapshot
+from policydb.parquet_store import (
+    atomic_write_parquet,
+    merge_and_replace_parquet,
+    read_parquet_snapshot,
+)
 from policydb.scope import load_cities_105
 from policydb.settings import Settings
 from policydb.transform.normalization import stable_id
@@ -57,6 +61,47 @@ def _safe_query_year(value: object) -> int | None:
     except (TypeError, ValueError):
         return None
     return year if 1900 <= year <= 2100 else None
+
+
+def _is_reusable_document_version(row: dict[str, Any]) -> bool:
+    """Return whether a stored version is safe to reuse without HTTP fetch."""
+
+    digest = str(row.get("content_sha256") or "").strip()
+    if not digest:
+        return False
+    try:
+        http_status = int(row.get("http_status"))
+    except (TypeError, ValueError):
+        return False
+    if not 200 <= http_status < 300:
+        return False
+    parse_status = str(row.get("parse_status") or "").strip().lower()
+    if parse_status in {"failed", "error", "parse_failed", "unparsed"}:
+        return False
+    return bool(
+        row.get("has_extracted_text")
+        or
+        str(row.get("extracted_text") or "").strip()
+        or str(row.get("title") or "").strip()
+        or str(row.get("local_path") or "").strip()
+    )
+
+
+def read_document_metadata(path: Path) -> pl.DataFrame:
+    """Load the reuse index without materializing archived full text in Python."""
+    columns = [name for name in pl.read_parquet_schema(path) if name != "extracted_text"]
+    frame = read_parquet_snapshot(path, columns=columns)
+    if {"title", "local_path", "document_version_id"} <= set(columns):
+        missing = frame.filter(
+            (pl.col("title").fill_null("").str.strip_chars() == "")
+            & (pl.col("local_path").fill_null("").str.strip_chars() == "")
+        )
+        if missing.height and "extracted_text" in pl.read_parquet_schema(path):
+            flags = pl.scan_parquet(path).filter(
+                pl.col("document_version_id").is_in(missing["document_version_id"].to_list())
+            ).select("document_version_id", (pl.col("extracted_text").fill_null("").str.strip_chars().str.len_chars() > 0).alias("has_extracted_text")).collect()
+            frame = frame.join(flags, on="document_version_id", how="left")
+    return frame
 
 
 def _apply_item_updates(
@@ -123,6 +168,7 @@ class CrawlPipeline:
         topics: list[str] | None = None,
         source_ids: list[str] | None = None,
         source_roles: list[str] | None = None,
+        scope_types: list[str] | None = None,
         max_candidates_total: int | None = None,
         max_candidates_per_source: int = 50,
         max_pages_per_source: int = 20,
@@ -157,6 +203,28 @@ class CrawlPipeline:
                 if source.source_role in selected_source_roles
                 or source.agency_type in selected_source_roles
             ]
+        selected_scope_types = {
+            str(scope).strip().lower()
+            for scope in (scope_types or [])
+            if str(scope).strip()
+        }
+        if selected_scope_types:
+            invalid_scope_types = selected_scope_types - {
+                "national",
+                "provincial",
+                "municipal",
+                "county",
+                "multi_region",
+                "unknown",
+            }
+            if invalid_scope_types:
+                raise ValueError(
+                    "Unsupported source scope type(s): "
+                    + ", ".join(sorted(invalid_scope_types))
+                )
+            sources = [
+                source for source in sources if source.scope_type in selected_scope_types
+            ]
         requested_cities = {
             str(city).strip() for city in (cities or []) if str(city).strip()
         }
@@ -167,6 +235,7 @@ class CrawlPipeline:
         }
         city_frame = pl.DataFrame()
         selected_city_ids: set[str] = set()
+        selected_province_codes: set[str] = set()
         if requested_cities or requested_provinces:
             city_frame = load_cities_105(self.settings)
             if requested_cities:
@@ -259,7 +328,10 @@ class CrawlPipeline:
                 )
             else:
                 keyword_groups = all_keyword_groups
-            if not requested_cities and not requested_provinces:
+            # Jurisdiction-only plans must not expand a national/provincial
+            # source into 105 city x year x keyword rows. The list/seed
+            # entries are crawled once at their declared scope.
+            if not requested_cities and not requested_provinces and not selected_scope_types:
                 city_frame = load_cities_105(self.settings)
         years = range(start_date.year, end_date.year + 1)
         source_buckets: list[deque[dict]] = []
@@ -273,7 +345,11 @@ class CrawlPipeline:
         for source in sources:
             source_items: list[dict] = []
             scoped_ids = selected_city_ids & set(source.city_ids)
-            if not scoped_ids and city_frame.height == 1:
+            if (
+                not scoped_ids
+                and city_frame.height == 1
+                and source.scope_type not in {"national", "provincial"}
+            ):
                 scoped_ids = {str(city_frame[0, "city_id"])}
             scoped_city_id = next(iter(scoped_ids)) if len(scoped_ids) == 1 else None
             seed_source = source.model_copy(
@@ -380,6 +456,41 @@ class CrawlPipeline:
                     source, run_id, city_frame, years, keyword_groups
                 )
             )
+            jurisdiction_level = (
+                "national"
+                if source.scope_type == "national"
+                else "provincial"
+                if source.scope_type == "provincial"
+                else None
+            )
+            province_codes_json = (
+                json.dumps(sorted(set(source.province_codes)), ensure_ascii=False)
+                if source.province_codes
+                else None
+            )
+            province_name = None
+            if source.scope_type == "national":
+                province_name = "全国"
+            elif source.province_codes:
+                province_lookup = city_frame
+                if province_lookup.is_empty() and self.settings.root.joinpath(
+                    "data", "reference", "cities_105.csv"
+                ).exists():
+                    province_lookup = load_cities_105(self.settings)
+                province_rows = province_lookup.filter(
+                    pl.col("province_code")
+                    .cast(pl.String)
+                    .is_in([str(value) for value in source.province_codes])
+                )
+                if province_rows.height:
+                    province_name = str(province_rows[0, "province_name"])
+            for source_item in source_items:
+                source_item.setdefault("jurisdiction_level", jurisdiction_level)
+                source_item.setdefault("jurisdiction_scope_type", source.scope_type)
+                source_item.setdefault(
+                    "jurisdiction_province_codes_json", province_codes_json
+                )
+                source_item.setdefault("jurisdiction_province_name", province_name)
             unique_source_items = {
                 item["canonical_url"]: item for item in source_items
             }
@@ -468,7 +579,12 @@ class CrawlPipeline:
             {
                 "run_id": run_id,
                 "run_type": run_type,
-                "scope_id": "large-cities-105",
+                "scope_id": (
+                    "jurisdiction-"
+                    + "-".join(sorted(selected_scope_types))
+                    if selected_scope_types
+                    else "large-cities-105"
+                ),
                 "period_start": start_date.isoformat(),
                 "period_end": end_date.isoformat(),
                 "status": "planned" if sources else "blocked_no_enabled_sources",
@@ -749,6 +865,7 @@ class CrawlPipeline:
         audit_context: dict[str, dict[str, Any]] | None = None,
         fetch_concurrency: int = 1,
         per_host_concurrency: int = 1,
+        reuse_existing_documents: bool = False,
     ) -> dict:
         pipeline_started = time.perf_counter()
         fetch_concurrency = max(1, min(int(fetch_concurrency), 16))
@@ -762,31 +879,76 @@ class CrawlPipeline:
             pending = pending.head(max_fetches)
         source_index = {source.source_id: source for source in load_registry(self.settings)}
         versions_path = self._path("policy_document_versions")
-        existing_versions = (
-            read_parquet_snapshot(versions_path)
+        existing_version_rows = (
+            read_document_metadata(versions_path).to_dicts()
             if versions_path.exists()
-            else None
+            else []
         )
-        existing_version_ids = (
-            set(existing_versions["document_version_id"].to_list())
-            if existing_versions is not None
-            else set()
-        )
+        initial_existing_version_ids = {
+            str(row.get("document_version_id") or "") for row in existing_version_rows
+        }
+        known_version_ids = set(initial_existing_version_ids)
+        reusable_versions_by_url: dict[str, dict[str, Any]] = {}
+        existing_hashes_by_url: dict[str, set[str]] = {}
+        for row in existing_version_rows:
+            canonical_url = str(row.get("canonical_url") or "")
+            if canonical_url:
+                existing_hashes_by_url.setdefault(canonical_url, set()).add(
+                    str(row.get("content_sha256") or "")
+                )
+                if _is_reusable_document_version(row):
+                    previous = reusable_versions_by_url.get(canonical_url)
+                    previous_stamp = str(
+                        (previous or {}).get("updated_at")
+                        or (previous or {}).get("last_seen_at")
+                        or ""
+                    )
+                    current_stamp = str(
+                        row.get("updated_at") or row.get("last_seen_at") or ""
+                    )
+                    if previous is None or current_stamp >= previous_stamp:
+                        reusable_versions_by_url[canonical_url] = row
+        version_updates: dict[str, dict[str, Any]] = {}
         versions: list[dict] = []
         dedup_decisions: list[dict] = []
         errors: list[dict] = []
         attachment_records: dict[str, dict] = {}
         http_audit: list[dict[str, Any]] = []
         fetched = 0
+        reused = 0
+        main_text_parsed = 0
+        main_text_pending = 0
+        attachment_text_pending = 0
         item_updates: dict[str, dict[str, str | None]] = {}
         cancelled = False
         budget_paused = False
         processed_count = 0
         last_item_id: str | None = None
         pending_rows = pending.to_dicts()
+
+        def reusable_version_for(item: dict[str, Any]) -> dict[str, Any] | None:
+            version = reusable_versions_by_url.get(
+                str(item.get("canonical_url") or "")
+            )
+            if version is None:
+                return None
+            existing_source_id = str(version.get("source_id") or "")
+            item_source_id = str(item.get("source_id") or "")
+            if existing_source_id and item_source_id and existing_source_id != item_source_id:
+                return None
+            return version
+
+        network_pending_rows = [
+            item
+            for item in pending_rows
+            if not (
+                reuse_existing_documents
+                and _is_reusable_document_version(reusable_version_for(item) or {})
+            )
+        ]
         fetch_pool: HostAwareFetchPool | None = None
         fetch_metrics: dict[str, int | float | None] | None = None
-        if fetch_concurrency > 1 and len(pending_rows) > 1:
+        if fetch_concurrency > 1 and len(network_pending_rows) > 1:
             fetch_pool = HostAwareFetchPool(
                 self.fetcher,
                 [
@@ -801,7 +963,7 @@ class CrawlPipeline:
                             else None
                         ),
                     )
-                    for item in pending_rows
+                    for item in network_pending_rows
                 ],
                 max_workers=fetch_concurrency,
                 per_host_concurrency=per_host_concurrency,
@@ -837,6 +999,101 @@ class CrawlPipeline:
             fetch_started_at = now
             context = dict((audit_context or {}).get(str(item["item_id"]), {}))
             try:
+                reusable_version = (
+                    reusable_version_for(item)
+                    if reuse_existing_documents
+                    else None
+                )
+                if reusable_version is not None and _is_reusable_document_version(
+                    reusable_version
+                ):
+                    version_id = str(reusable_version["document_version_id"])
+                    final_url = str(
+                        reusable_version.get("final_url")
+                        or reusable_version.get("canonical_url")
+                        or item["url"]
+                    )
+                    reused_http_status = reusable_version.get("http_status")
+                    http_audit.append(
+                        {
+                            "http_audit_id": stable_id(
+                                run_id,
+                                item["item_id"],
+                                version_id,
+                                "CACHE_REUSE",
+                                prefix="HTTPAUDIT",
+                            ),
+                            "episode_id": context.get("episode_id"),
+                            "queue_item_id": context.get("queue_item_id"),
+                            "crawl_run_id": run_id,
+                            "crawl_item_id": item["item_id"],
+                            "requested_url": item["url"],
+                            "final_url": final_url,
+                            "hostname": (
+                                final_url.split("/", 3)[2]
+                                if "/" in final_url
+                                else None
+                            ),
+                            "http_status": reused_http_status,
+                            "content_type": reusable_version.get("content_type"),
+                            "response_bytes": 0,
+                            "content_sha256": reusable_version.get("content_sha256"),
+                            "raw_path": reusable_version.get("local_path"),
+                            "document_version_id": version_id,
+                            "document_version_created": False,
+                            "request_started_at": now.isoformat(),
+                            "request_finished_at": now.isoformat(),
+                            "cache_hit": True,
+                            "network_source": "LOCAL_DOCUMENT_VERSION",
+                            "real_network_fetch": False,
+                            "fetch_status": "CACHE_REUSE",
+                            "error_type": None,
+                            "error_message": None,
+                            "created_at": now.isoformat(),
+                            **context,
+                        }
+                    )
+                    item_updates[str(item["item_id"])] = {
+                        "status": "unchanged",
+                        "final_url": final_url,
+                        "last_checked_at": now.isoformat(),
+                    }
+                    dedup_decisions.append(
+                        {
+                            "decision_id": stable_id(
+                                run_id,
+                                item["item_id"],
+                                version_id,
+                                "L3",
+                                prefix="DEDUP",
+                            ),
+                            "run_id": run_id,
+                            "crawl_item_id": item["item_id"],
+                            "document_version_id": version_id,
+                            "candidate_document_version_id": None,
+                            "dedup_level": "L3",
+                            "decision": "unchanged",
+                            "reason": "valid local DocumentVersion reused",
+                            "score": 1.0,
+                            "threshold": 1.0,
+                            "rules_version": RULES_VERSION,
+                            "evidence_json": json.dumps(
+                                {
+                                    "content_sha256": reusable_version.get(
+                                        "content_sha256"
+                                    ),
+                                    "source": "policy_document_versions",
+                                }
+                            ),
+                            "created_at": now.isoformat(),
+                        }
+                    )
+                    reused += 1
+                    if reusable_version.get("parse_status") == "parsed":
+                        main_text_parsed += 1
+                    else:
+                        main_text_pending += 1
+                    continue
                 source = source_index.get(str(item.get("source_id") or ""))
                 if source is not None and fetch_pool is None:
                     self.fetcher.rate_limit = source.rate_limit
@@ -897,11 +1154,15 @@ class CrawlPipeline:
                     )
                     continue
                 parsed = parse_document(result.body, result.content_type, result.final_url)
+                if parsed["parse_status"] == "parsed":
+                    main_text_parsed += 1
+                else:
+                    main_text_pending += 1
                 text_hash = normalized_text_hash(parsed["full_text"] or "")
                 text_simhash = simhash64(parsed["full_text"] or "")
                 identity_key = policy_identity_key(title=parsed["title"])
-                extension = ".pdf" if parsed["document_type"] == "pdf" else ".html"
-                archive_kind = "pdf" if extension == ".pdf" else "html"
+                extension = {"pdf": ".pdf", "html": ".html", "docx": ".docx", "xlsx": ".xlsx", "rar": ".rar", "zip": ".zip", "ole": ".ole"}.get(parsed["document_type"], ".bin")
+                archive_kind = parsed["document_type"] if parsed["document_type"] in {"pdf", "html"} else "attachments"
                 raw_dir = self.settings.archive_root / archive_kind / result.response_sha256[:2]
                 raw_dir.mkdir(parents=True, exist_ok=True)
                 raw_path = raw_dir / f"{result.response_sha256}{extension}"
@@ -942,6 +1203,10 @@ class CrawlPipeline:
                                 "redirect_chain": result.redirect_chain,
                                 "resolved_addresses": result.resolved_addresses,
                                 "fallback_used": result.fallback_used,
+                                "parser_version": PARSER_VERSION,
+                                "parse_status": parsed["parse_status"],
+                                "parser_reason": parsed.get("parser_error"),
+                                "body_selector": parsed.get("body_selector"),
                             },
                             ensure_ascii=False,
                             indent=2,
@@ -965,12 +1230,9 @@ class CrawlPipeline:
                         "extracted_text": parsed["full_text"],
                         "parse_status": parsed["parse_status"],
                         "is_material_change": any(
-                            row["canonical_url"] == item["canonical_url"]
-                            and row["content_sha256"] != result.response_sha256
-                            for row in (
-                                existing_versions.iter_rows(named=True)
-                                if existing_versions is not None
-                                else []
+                            digest != result.response_sha256
+                            for digest in existing_hashes_by_url.get(
+                                str(item.get("canonical_url") or ""), set()
                             )
                         ),
                         "first_seen_at": now.isoformat(),
@@ -980,25 +1242,30 @@ class CrawlPipeline:
                         "normalized_text_hash": text_hash,
                         "simhash64": text_simhash,
                         "policy_identity_key": identity_key,
-                        "parser_version": "2",
+                        "parser_version": PARSER_VERSION,
                         "network_route": result.network_route,
                         "redirect_chain_json": json.dumps(
                             result.redirect_chain, ensure_ascii=False
                         ),
                         "protocol": result.protocol,
+                        "jurisdiction_level": item.get("jurisdiction_level"),
+                        "jurisdiction_scope_type": item.get("jurisdiction_scope_type"),
+                        "jurisdiction_province_codes_json": item.get(
+                            "jurisdiction_province_codes_json"
+                        ),
+                        "jurisdiction_province_name": item.get(
+                            "jurisdiction_province_name"
+                        ),
                     }
-                if version_id in existing_version_ids and existing_versions is not None:
-                    existing_versions = existing_versions.with_columns(
-                        pl.when(pl.col("document_version_id") == version_id)
-                        .then(pl.lit(now.isoformat()))
-                        .otherwise(pl.col("last_seen_at"))
-                        .alias("last_seen_at")
-                    )
+                version_was_known = version_id in known_version_ids
+                if version_was_known:
+                    if version_id in initial_existing_version_ids:
+                        version_updates[version_id] = {"document_version_id": version_id, "last_seen_at": now.isoformat()}
                     item_status = "unchanged"
                     decision = "duplicate_content"
                 else:
                     versions.append(version_row)
-                    existing_version_ids.add(version_id)
+                    known_version_ids.add(version_id)
                     item_status = "fetched"
                     decision = "new_document"
                 http_audit.append(
@@ -1017,11 +1284,7 @@ class CrawlPipeline:
                         "content_sha256": result.response_sha256,
                         "raw_path": self._stored_path(raw_path),
                         "document_version_id": version_id,
-                        "document_version_created": version_id not in (
-                            set(existing_versions["document_version_id"].to_list())
-                            if existing_versions is not None and "document_version_id" in existing_versions.columns
-                            else set()
-                        ),
+                        "document_version_created": not version_was_known,
                         "request_started_at": (result.request_started_at or fetch_started_at).isoformat(),
                         "request_finished_at": (result.request_finished_at or datetime.now(UTC)).isoformat(),
                         "cache_hit": bool(result.cache_hit),
@@ -1089,6 +1352,8 @@ class CrawlPipeline:
                             attachment_result.content_type,
                             attachment_result.final_url,
                         )
+                        if attachment_parsed["parse_status"] != "parsed":
+                            attachment_text_pending += 1
                         attachment_extension = (
                             ".pdf"
                             if attachment_parsed["document_type"] == "pdf"
@@ -1118,7 +1383,7 @@ class CrawlPipeline:
                             attachment_result.response_sha256,
                             prefix="DOCVER",
                         )
-                        if attachment_version_id not in existing_version_ids:
+                        if attachment_version_id not in known_version_ids:
                             versions.append(
                                 {
                                     "document_version_id": attachment_version_id,
@@ -1142,10 +1407,10 @@ class CrawlPipeline:
                                     "normalized_text_hash": normalized_text_hash(attachment_parsed["full_text"] or ""),
                                     "simhash64": simhash64(attachment_parsed["full_text"] or ""),
                                     "policy_identity_key": policy_identity_key(title=attachment.get("label") or attachment_parsed["title"]),
-                                    "parser_version": "2",
+                                    "parser_version": PARSER_VERSION,
                                 }
                             )
-                            existing_version_ids.add(attachment_version_id)
+                            known_version_ids.add(attachment_version_id)
                     except HttpBudgetExceeded:
                         raise
                     except Exception as attachment_error:
@@ -1245,13 +1510,13 @@ class CrawlPipeline:
         self._atomic_parquet(items_path, items)
         if audit_path is not None and http_audit:
             append_unique(audit_path, http_audit, "http_audit_id")
-        version_rows = existing_versions.to_dicts() if existing_versions is not None else []
-        version_rows.extend(versions)
-        if version_rows:
-            append_unique(
+        if version_updates or versions:
+            merge_and_replace_parquet(
                 self._path("policy_document_versions"),
-                version_rows,
-                "document_version_id",
+                pl.DataFrame(versions, infer_schema_length=None),
+                ("document_version_id",),
+                {"module": "crawl.pipeline", "run_id": run_id},
+                column_updates=pl.DataFrame(list(version_updates.values()), infer_schema_length=None) if version_updates else None,
             )
         if errors:
             append_unique(self._path("fetch_errors"), errors, "error_id")
@@ -1269,6 +1534,8 @@ class CrawlPipeline:
             processed_count=processed_count,
             budget_paused=budget_paused,
         )
+        final_result["reused"] = reused
+        final_result["extraction"] = {"main_parsed": main_text_parsed, "main_pending": main_text_pending, "attachment_pending": attachment_text_pending, "parser_version": PARSER_VERSION}
         if fetch_metrics is not None:
             pipeline_seconds = time.perf_counter() - pipeline_started
             writer_batch_rows = (

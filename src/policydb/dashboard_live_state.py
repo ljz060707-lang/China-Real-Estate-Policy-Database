@@ -471,13 +471,23 @@ def _cached_backfill_log(path_text: str, mtime_ns: int, size: int) -> dict[str, 
     latest = matches[-1]
     index, total = int(latest.group(1)), int(latest.group(2))
     event = latest.group(3)
-    return {
+    line_start = text.rfind("\n", 0, latest.start()) + 1
+    line_end = text.find("\n", latest.end())
+    line = text[line_start:] if line_end == -1 else text[line_start:line_end]
+    city_match = re.search(r"(?:开始|城市阶段结束)[：:]\s*([^\r\n（(]+)", line)
+    city_id_match = re.search(r"[（(](CITY_[A-Z0-9]+)[）)]", line)
+    progress = {
         "city_index": index,
         "city_total": total,
         "completed_cities": index if event == "城市阶段结束" else max(0, index - 1),
         "event": event,
         "path": str(path),
     }
+    if city_match:
+        progress["city_name"] = city_match.group(1).strip()
+    if city_id_match:
+        progress["city_id"] = city_id_match.group(1)
+    return progress
 
 
 def _backfill_log_progress(settings: Settings) -> dict[str, Any]:
@@ -582,12 +592,131 @@ def _dashboard_runtime_status(master: dict[str, Any]) -> str:
     return AUTOMATION_STATUS_MAP.get(raw, raw)
 
 
+def _merge_recent5y_runtime(
+    master: dict[str, Any],
+    recent_state: dict[str, Any],
+    *,
+    process_state: dict[str, Any] | None = None,
+    log_progress: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], dict[str, Any], bool]:
+    """Prefer the newer recent-5-year run over an obsolete generic state file.
+
+    The recent-5-year launcher writes its own atomic state and log, while the
+    legacy controller may leave ``MASTER_STATE.json`` at an older stage.  The
+    newer state is authoritative when it has a live crawler or a timestamp
+    newer than the legacy heartbeat.  A paused run is still surfaced, but it
+    is never presented as actively running without a live process.
+    """
+
+    master = dict(master) if isinstance(master, dict) else {}
+    recent_state = recent_state if isinstance(recent_state, dict) else {}
+    process_state = process_state if isinstance(process_state, dict) else {}
+    log_progress = log_progress if isinstance(log_progress, dict) else {}
+    if not recent_state:
+        return master, {}, False
+
+    recent_timestamp = next(
+        (
+            parse_datetime(recent_state.get(name))
+            for name in ("last_heartbeat_at", "updated_at", "completed_at")
+            if parse_datetime(recent_state.get(name)) is not None
+        ),
+        None,
+    )
+    master_timestamp = next(
+        (
+            parse_datetime(master.get(name))
+            for name in ("last_heartbeat_at", "updated_at")
+            if parse_datetime(master.get(name)) is not None
+        ),
+        None,
+    )
+    has_active_process = bool(process_state.get("crawler_processes"))
+    if not has_active_process and recent_timestamp is None:
+        return master, {}, False
+    if (
+        not has_active_process
+        and master_timestamp is not None
+        and recent_timestamp is not None
+        and recent_timestamp <= master_timestamp
+    ):
+        return master, {}, False
+
+    status = str(recent_state.get("status") or master.get("status") or "UNKNOWN")
+    status_upper = status.upper()
+    if recent_state.get("stage"):
+        stage = str(recent_state["stage"])
+    elif status_upper in {"COMPLETE", "COMPLETED"}:
+        stage = "COMPLETE"
+    else:
+        stage = "CRAWL"
+    heartbeat = (
+        recent_state.get("last_heartbeat_at")
+        or recent_state.get("updated_at")
+        or master.get("last_heartbeat_at")
+    )
+    merged = {
+        **master,
+        "automation_id": recent_state.get("automation_id") or "RECENT_5Y_FULL_CRAWL",
+        "run_id": recent_state.get("run_id") or master.get("run_id"),
+        "status": status,
+        "stage": stage,
+        "worker_pid": recent_state.get("worker_pid") or master.get("worker_pid"),
+        "next_stage": recent_state.get("next_stage") or master.get("next_stage"),
+        "last_heartbeat_at": heartbeat,
+        # ``current_run_active`` is a legacy flag whose true value means
+        # "wait for another controller run".  It would turn this authoritative
+        # recent-5-year RUNNING state into WAIT_CURRENT_RUN, so process activity
+        # is reported separately through the normal crawler fields instead.
+        "current_run_active": False,
+        "source_of_truth": "RECENT_5Y_FULL_CRAWL_STATE",
+        "recent_5y_reason": recent_state.get("reason"),
+    }
+
+    def first_value(*values: Any) -> Any:
+        return next((value for value in values if value not in (None, "")), None)
+
+    position = {
+        "batch_id": first_value(recent_state.get("batch_id"), log_progress.get("batch_id")),
+        "shard_id": first_value(recent_state.get("shard_id"), log_progress.get("shard_id")),
+        "shard_city_id": first_value(
+            recent_state.get("current_city_id"), log_progress.get("city_id")
+        ),
+        "shard_city_name": first_value(
+            recent_state.get("current_city"), log_progress.get("city_name")
+        ),
+        "shard_source_role": first_value(
+            recent_state.get("current_source_role"), log_progress.get("source_role")
+        ),
+        "shard_source_id": first_value(
+            recent_state.get("current_source_id"),
+            recent_state.get("current_source"),
+            log_progress.get("source_id"),
+        ),
+        "shard_start_date": first_value(
+            recent_state.get("start_date"), recent_state.get("from_date")
+        ),
+        "shard_end_date": first_value(recent_state.get("end_date"), recent_state.get("to_date")),
+        "message": first_value(
+            recent_state.get("current_step"),
+            recent_state.get("reason"),
+            f"recent 5-year crawl {status.lower()}",
+        ),
+        "created_at": heartbeat,
+    }
+    return merged, {key: value for key, value in position.items() if value is not None}, (
+        has_active_process or status_upper == "RUNNING"
+    )
+
+
 def _automation_live_state(
     master: dict[str, Any],
     latest: dict[str, Any],
     *,
     now: datetime,
     progress_snapshot: dict[str, Any] | None = None,
+    runtime_position: dict[str, Any] | None = None,
+    runtime_position_active: bool = False,
     event_fresh_seconds: int = 180,
 ) -> dict[str, Any]:
     """Derive current position only when the authoritative state permits it."""
@@ -614,6 +743,14 @@ def _automation_live_state(
             "end_date": (progress_snapshot.get("current_window") or {}).get("rolling_end"),
             "message": "rolling 24-month source session",
         }
+    if runtime_position:
+        position = {
+            **position,
+            **{key: value for key, value in runtime_position.items() if value is not None},
+        }
+        current_position_available = current_position_available or (
+            runtime_position_active and stage in AUTOMATION_CRAWL_STAGES
+        )
     heartbeat_age = (
         (now - master_heartbeat.astimezone(UTC)).total_seconds()
         if master_heartbeat
@@ -640,6 +777,10 @@ def _automation_live_state(
         "event_at": latest.get("created_at"),
         "fresh": event_fresh,
     }
+    if runtime_position:
+        last_position.update(
+            {key: value for key, value in runtime_position.items() if value is not None}
+        )
     return {
         "status": _dashboard_runtime_status(master),
         "raw_status": master.get("status"),
@@ -862,6 +1003,11 @@ def _build_dashboard_snapshot(
         value, meta = _read_json(settings.data_root / "automation" / f"{name}.json")
         automation[name] = value
         availability[f"automation/{name}"] = meta
+    recent_5y_state, recent_5y_meta = _read_json(
+        settings.data_root / "automation" / "RECENT_5Y_FULL_CRAWL_STATE.json"
+    )
+    automation["RECENT_5Y_FULL_CRAWL_STATE"] = recent_5y_state
+    availability["automation/RECENT_5Y_FULL_CRAWL_STATE"] = recent_5y_meta
     episode_930, episode_930_meta = _episode_930_progress(settings)
     availability["special_projects/2016_930/930_PROGRESS_SNAPSHOT"] = episode_930_meta
 
@@ -875,12 +1021,38 @@ def _build_dashboard_snapshot(
     process_state = _process_inventory(settings.root)
     database = database_health(settings)
     log_progress = _backfill_log_progress(settings)
-    master = automation["MASTER_STATE"]
+    master, recent_5y_position, recent_5y_position_active = _merge_recent5y_runtime(
+        automation["MASTER_STATE"],
+        recent_5y_state,
+        process_state=process_state,
+        log_progress=log_progress,
+    )
+    progress_snapshot = dict(automation["PROGRESS_SNAPSHOT"])
+    if master.get("source_of_truth") == "RECENT_5Y_FULL_CRAWL_STATE":
+        progress_snapshot.update(
+            {
+                "status": master.get("status"),
+                "stage": master.get("stage"),
+                "run_id": master.get("run_id"),
+                "current_city": recent_5y_position.get("shard_city_name"),
+                "current_source": recent_5y_position.get("shard_source_id"),
+                "current_step": recent_5y_position.get("message"),
+                "last_real_progress_at": log_progress.get("updated_at")
+                or master.get("last_heartbeat_at"),
+                "current_window": {
+                    "recent_start": recent_5y_position.get("shard_start_date"),
+                    "recent_end": recent_5y_position.get("shard_end_date"),
+                },
+                "source_of_truth": "RECENT_5Y_FULL_CRAWL_STATE",
+            }
+        )
     live_state = _automation_live_state(
         master,
         latest,
         now=now,
-        progress_snapshot=automation["PROGRESS_SNAPSHOT"],
+        progress_snapshot=progress_snapshot,
+        runtime_position=recent_5y_position,
+        runtime_position_active=recent_5y_position_active,
     )
     current_position = live_state["current_position"]
     crawler_processes = process_state["crawler_processes"]
@@ -935,7 +1107,7 @@ def _build_dashboard_snapshot(
         "curated_root_exists": settings.curated.exists(),
         "crawler_running": crawler_running,
         "backfill_log_progress": log_progress,
-        "progress_snapshot": automation["PROGRESS_SNAPSHOT"],
+        "progress_snapshot": progress_snapshot,
         "progress_watchdog": automation["PROGRESS_WATCHDOG"],
         "episode_930_progress": episode_930,
     }

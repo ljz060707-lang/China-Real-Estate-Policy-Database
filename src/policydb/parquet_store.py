@@ -429,6 +429,7 @@ def merge_and_replace_parquet(
     context: Mapping[str, Any] | None = None,
     *,
     expected_schema: Mapping[str, Any] | None = None,
+    column_updates: pl.DataFrame | None = None,
 ) -> pl.DataFrame:
     """Serialize read/merge/validate/replace for one keyed Parquet table."""
 
@@ -437,6 +438,20 @@ def merge_and_replace_parquet(
     write_context = dict(context or {})
     with parquet_write_lock(target, write_context) as lease:
         current = read_parquet_snapshot(target) if target.exists() else pl.DataFrame()
+        if column_updates is not None and column_updates.height:
+            # Patch metadata under the same write lease as append. Callers need not
+            # deserialize large text blobs just to update last_seen_at.
+            _validate_frame(column_updates, key_columns=key_columns)
+            if not set(column_updates.columns) <= set(current.columns):
+                raise ParquetWriteError("column update contains unknown fields")
+            fields = [name for name in column_updates.columns if name not in key_columns]
+            patches = column_updates.rename({name: f"__patch_{name}" for name in fields})
+            patches = patches.with_columns(pl.lit(True).alias("__patch_present"))
+            current = current.join(patches, on=list(key_columns), how="left").with_columns([
+                pl.when(pl.col("__patch_present").fill_null(False))
+                .then(pl.col(f"__patch_{name}")).otherwise(pl.col(name)).alias(name)
+                for name in fields
+            ]).drop(["__patch_present", *[f"__patch_{name}" for name in fields]])
         if current.is_empty() and not current.columns:
             merged = additions
         elif additions.is_empty() and not additions.columns:

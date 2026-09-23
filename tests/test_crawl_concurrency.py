@@ -176,3 +176,112 @@ def test_pipeline_uses_bounded_fetch_lane_and_keeps_single_commit(tmp_path: Path
     assert fetcher.max_active >= 2
     assert versions.height == 4
     assert versions["document_version_id"].n_unique() == 4
+
+
+def test_pipeline_audits_batch_duplicate_as_not_created_twice(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    _write_registry(root)
+    fetcher = _TrackingFetcher()
+    pipeline = CrawlPipeline(Settings(root=root), fetcher=fetcher)
+    now = date(2018, 1, 1)
+    planned = pipeline.plan_external_candidates(
+        "RUN_DUPLICATE_BATCH",
+        [
+            {
+                "queue_item_id": "Q1",
+                "episode_id": "EP_TEST",
+                "source_id": "SRC_0",
+                "city_id": "CITY_0",
+                "canonical_url": "https://a.gov.cn/policy",
+                "url": "https://a.gov.cn/policy",
+                "query_type": "policy",
+                "published_at": "2018-01-01",
+            },
+            {
+                "queue_item_id": "Q2",
+                "episode_id": "EP_TEST",
+                "source_id": "SRC_0",
+                "city_id": "CITY_0",
+                "canonical_url": "https://a.gov.cn/policy",
+                "url": "https://a.gov.cn/policy",
+                "query_type": "policy",
+                "published_at": "2018-01-01",
+            },
+        ],
+        start_date=now,
+        end_date=date(2018, 12, 31),
+    )
+    audit_path = root / "data" / "curated" / "http_audit.parquet"
+
+    pipeline.run(planned["run_id"], audit_path=audit_path)
+
+    audit = pl.read_parquet(audit_path).sort("crawl_item_id")
+    assert audit.height == 2
+    assert audit["document_version_created"].to_list() == [True, False]
+
+
+def test_pipeline_reuses_valid_document_version_without_network_fetch(tmp_path: Path) -> None:
+    """Historical backfill should reuse a valid local version by explicit opt-in."""
+    root = tmp_path / "repo"
+    _write_registry(root)
+    fetch_calls: list[str] = []
+
+    class _CountingFetcher(_TrackingFetcher):
+        def fetch(self, url: str, *, etag=None, last_modified=None):
+            fetch_calls.append(url)
+            return super().fetch(url, etag=etag, last_modified=last_modified)
+
+    fetcher = _CountingFetcher()
+    pipeline = CrawlPipeline(Settings(root=root), fetcher=fetcher)
+    first = pipeline.plan_external_candidates(
+        "RUN_REUSE_FIRST",
+        [
+            {
+                "queue_item_id": "Q1",
+                "episode_id": "EP_TEST",
+                "source_id": "SRC_0",
+                "city_id": "CITY_0",
+                "canonical_url": "https://a.gov.cn/reuse",
+                "url": "https://a.gov.cn/reuse",
+                "query_type": "policy",
+                "published_at": "2018-01-01",
+            }
+        ],
+        start_date=date(2018, 1, 1),
+        end_date=date(2018, 12, 31),
+    )
+    pipeline.run(first["run_id"])
+
+    second = pipeline.plan_external_candidates(
+        "RUN_REUSE_SECOND",
+        [
+            {
+                "queue_item_id": "Q2",
+                "episode_id": "EP_TEST",
+                "source_id": "SRC_0",
+                "city_id": "CITY_0",
+                "canonical_url": "https://a.gov.cn/reuse",
+                "url": "https://a.gov.cn/reuse",
+                "query_type": "policy",
+                "published_at": "2018-01-01",
+            }
+        ],
+        start_date=date(2018, 1, 1),
+        end_date=date(2018, 12, 31),
+    )
+    audit_path = root / "data" / "curated" / "http_audit.parquet"
+    pipeline.run(
+        second["run_id"],
+        audit_path=audit_path,
+        reuse_existing_documents=True,
+    )
+
+    assert len(fetch_calls) == 1
+    reused = pl.read_parquet(audit_path).filter(
+        pl.col("crawl_run_id") == second["run_id"]
+    )
+    assert reused.height == 1
+    assert reused[0, "fetch_status"] == "CACHE_REUSE"
+    assert reused[0, "real_network_fetch"] is False
+    assert reused[0, "cache_hit"] is True
+    assert reused[0, "document_version_id"]

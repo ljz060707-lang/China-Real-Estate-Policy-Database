@@ -1,0 +1,104 @@
+# National and provincial supplemental scope.  Secrets are read from the
+# existing SecretStore/environment and never belong in this file.
+scope_version: jurisdiction-v1
+levels:
+  - national
+  - provincial
+start_date: 2021-09-01
+end_date: today
+collection_mode: FAST_COLLECTION_ONLY
+run_ai: false
+classification: disabled
+postprocess_mode: archive_build_validate
+
+api:
+  use_for_source_discovery: true
+  use_for_classification: false
+
+performance:
+  fetch_concurrency: 12
+  per_host_concurrency: 1
+  api_concurrency: 6
+  max_pages_per_source: 3000
+  max_candidates_per_source: 100000
+  max_candidates_total: 300000
+  max_fetches: 300000
+
+# These entries are authoritative official starting points only.  They are
+# crawled once at national scope and are not copied to the 105 city rows.
+national_sources:
+  - source_name: 国务院政策文件库（部门文件）
+    source_role: national_policy
+    agency_type: state_council
+    domain: www.gov.cn
+    priority: 0
+    list_page_urls:
+      - https://www.gov.cn/zhengce/zhengceku/bmwj/home.htm
+    seed_urls:
+      - https://www.gov.cn/zhengce/zhengceku/
+  - source_name: 中国人民银行政策发布
+    source_role: national_monetary_policy
+    agency_type: central_bank
+    domain: www.pbc.gov.cn
+    priority: 0
+    list_page_urls:
+      - https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/index.html
+    seed_urls:
+      - https://www.pbc.gov.cn/
+  - source_name: 财政部政策发布
+    source_role: national_fiscal_policy
+    agency_type: ministry
+    domain: www.mof.gov.cn
+    priority: 0
+    list_page_urls:
+      - https://www.mof.gov.cn/zhengwuxinxi/zhengcefabu/
+    seed_urls:
+      - https://www.mof.gov.cn/
+  - source_name: 住房和城乡建设部政府信息公开
+    source_role: national_housing_policy
+    agency_type: ministry
+    domain: www.mohurd.gov.cn
+    priority: 0
+    list_page_urls:
+      - https://www.mohurd.gov.cn/gongkai/fdzdgknr/
+    seed_urls:
+      - https://www.mohurd.gov.cn/
+  - source_name: 自然资源部政府信息公开
+    source_role: national_natural_resources_policy
+    agency_type: ministry
+    domain: www.mnr.gov.cn
+    priority: 0
+    list_page_urls:
+      - https://www.mnr.gov.cn/gk/
+    seed_urls:
+      - https://www.mnr.gov.cn/
+
+# Existing reviewed provincial official entries are cloned into explicit
+# province scope.  The original municipal/source records are never changed.
+provincial_source_seeds:
+  - source_id: SRC_02F6A2907A9C214C4D4B
+    province_codes: ["37"]
+  - source_id: SRC_3C42A45337672EBB49B7
+    province_codes: ["23"]
+  - source_id: SRC_AF2C8044D9797C7EF400
+    province_codes: ["23"]
+  - source_id: SRC_51CA8092A3B72706D6BA
+    province_codes: ["34"]
+  - source_id: SRC_EC9AC1CEB6DE93E558D7
+    province_codes: ["65"]
+  - source_id: SRC_391B95A271BBD03DDDE9
+    province_codes: ["65"]
+  - source_id: SRC_2945B180D302511F7116
+    province_codes: ["52"]
+  - source_id: SRC_4DCB259D118AD7B813C7
+    province_codes: ["13"]
+  - source_id: SRC_E1418D8093774D773926
+    province_codes: ["21"]
+
+# Search is evidence generation only.  A result must be an official gov.cn
+# stable entry before it can become a supplemental source.
+provincial_search_queries:
+  - source_role: housing_department
+    query: "{province_name} 住房和城乡建设厅 政策文件 通知公告 site:gov.cn"
+  - source_role: natural_resources_department
+    query: "{province_name} 自然资源厅 政策文件 通知公告 site:gov.cn"

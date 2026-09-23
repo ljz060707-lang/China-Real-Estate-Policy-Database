@@ -18,6 +18,7 @@ from policydb.dashboard_live_state import (
     _automation_live_state,
     _database_error_status,
     _episode_930_progress,
+    _merge_recent5y_runtime,
     _read_frame,
     clear_dashboard_caches,
     load_dashboard_snapshot,
@@ -245,6 +246,40 @@ def test_master_stage_is_authoritative_over_fresh_non_crawl_event() -> None:
     assert state["stage"] == "ARCHIVE"
     assert state["current_position_available"] is False
     assert state["last_crawl_position"]["city_name"] == "南京市"
+
+
+def test_newer_recent5y_state_overrides_stale_master_without_claiming_active_work() -> None:
+    merged, position, position_active = _merge_recent5y_runtime(
+        {
+            "automation_id": "AUTO_AUGUST",
+            "status": "RETRY_WAIT",
+            "stage": "ROLLING_24M_FULL_CITY_BACKFILL",
+            "run_id": "RUN_AUGUST",
+            "last_heartbeat_at": "2026-08-31T08:31:43Z",
+        },
+        {
+            "run_id": "RECENT5Y_SEPTEMBER",
+            "status": "PAUSED",
+            "reason": "safe_stop_after_checkpoint",
+            "start_date": "2021-09-01",
+            "end_date": "today",
+            "updated_at": "2026-09-14T00:15:09Z",
+        },
+        process_state={"crawler_processes": []},
+        log_progress={"city_name": "佛山市", "city_id": "CITY_440600"},
+    )
+
+    assert merged["automation_id"] == "RECENT_5Y_FULL_CRAWL"
+    assert merged["run_id"] == "RECENT5Y_SEPTEMBER"
+    assert merged["status"] == "PAUSED"
+    assert merged["stage"] == "CRAWL"
+    assert merged["last_heartbeat_at"] == "2026-09-14T00:15:09Z"
+    assert merged["current_run_active"] is False
+    assert position["shard_city_name"] == "佛山市"
+    assert position["shard_city_id"] == "CITY_440600"
+    assert position["shard_start_date"] == "2021-09-01"
+    assert position["shard_end_date"] == "today"
+    assert position_active is False
 
 
 def test_parquet_read_retries_an_atomic_replace_before_reporting_unavailable(

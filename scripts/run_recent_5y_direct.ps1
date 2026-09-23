@@ -7,7 +7,11 @@ param(
     [int]$MaxPagesPerSource = 3000,
     [int]$MaxCandidatesPerShard = 100000,
     [int]$MaxFetchesPerShard = 100000,
-    [int]$NetworkRetryPasses = 2
+    [int]$NetworkRetryPasses = 2,
+    [ValidateRange(1, 16)][int]$FetchConcurrency = 6,
+    [ValidateRange(1, 2)][int]$PerHostConcurrency = 1,
+    [ValidateRange(1, 4)][int]$ApiConcurrency = 4,
+    [switch]$SkipAI
 )
 
 Set-StrictMode -Version Latest
@@ -19,6 +23,13 @@ if ([string]::IsNullOrWhiteSpace($ProjectRoot)) {
 }
 $ProjectRoot = [System.IO.Path]::GetFullPath($ProjectRoot)
 $DataRoot = [System.IO.Path]::GetFullPath($DataRoot)
+
+# Recent-5Y production is collection-only.  Keep the switch for backward
+# compatibility, but never enter the semantic/API classification lane here.
+$SkipAI = $true
+# Cross-source concurrency is raised only for the next safe resume.  Per-host
+# concurrency remains capped at one to preserve government-site politeness.
+$FetchConcurrency = [Math]::Max($FetchConcurrency, 12)
 
 $fullScript = Join-Path $ProjectRoot "scripts\CRPD_Audited_Full_Backfill.ps1"
 $resumeScript = Join-Path $ProjectRoot "scripts\CRPD_Autonomous_Resume.ps1"
@@ -47,6 +58,7 @@ New-Item -ItemType Directory -Force -Path $runLogRoot, $automationRoot, $control
 $env:POLICYDB_ROOT = $ProjectRoot
 $env:CRPD_DATA_ROOT = $DataRoot
 $env:CRPD_GOVERNMENT_ROUTE = "direct"
+$env:POLICYDB_ADAPTIVE_THROTTLE = "1"
 $env:NO_PROXY = "*"
 foreach ($name in @(
         "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy",
@@ -82,11 +94,16 @@ function Write-State {
         network_route = "direct"
         proxy_inheritance = "disabled_for_process"
         existing_sources_only = $true
-        skip_ai = $true
         max_pages_per_source = $MaxPagesPerSource
         max_candidates_per_shard = $MaxCandidatesPerShard
         max_fetches_per_shard = $MaxFetchesPerShard
         network_retry_passes = $NetworkRetryPasses
+        fetch_concurrency = $FetchConcurrency
+        per_host_concurrency = $PerHostConcurrency
+        api_concurrency = $ApiConcurrency
+        skip_ai = $true
+        classification_enabled = $false
+        postprocess_mode = "CRAWL_ONLY"
         exit_code = $ExitCode
         updated_at = (Get-Date).ToUniversalTime().ToString("o")
     }
@@ -106,7 +123,8 @@ function Get-ProductionProcesses {
         return @(Get-CimInstance Win32_Process | Where-Object {
             $_.Name -match "^python(w)?\.exe$" -and $_.CommandLine -and (
                 $_.CommandLine.IndexOf("crpd_autonomous_controller.py", [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -or
-                $_.CommandLine.IndexOf("policydb.autopilot_cli", [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+                $_.CommandLine.IndexOf("policydb.autopilot_cli", [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -or
+                $_.CommandLine.IndexOf("policydb_entrypoint.py", [System.StringComparison]::OrdinalIgnoreCase) -ge 0
             )
         } | Select-Object ProcessId, ParentProcessId, Name, CommandLine)
     }
@@ -164,19 +182,26 @@ try {
             }
 
             Write-State -Status "RUNNING" -Reason "official_recent_5y_full_backfill_started"
-            Write-RunLog "Starting formal audited crawler with direct government route."
-            & powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass `
-                -File $fullScript `
-                -ProjectRoot $ProjectRoot `
-                -DataRoot $DataRoot `
-                -StartDate $StartDate `
-                -EndDate $EndDate `
-                -MaxPagesPerSource $MaxPagesPerSource `
-                -MaxCandidatesPerShard $MaxCandidatesPerShard `
-                -MaxFetchesPerShard $MaxFetchesPerShard `
-                -NetworkRetryPasses $NetworkRetryPasses `
-                -ExistingSourcesOnly `
-                -SkipAI
+            $flowDescription = "crawl-only"
+            Write-RunLog "Starting formal audited crawler with direct government route ($flowDescription)."
+            $fullScriptArguments = @(
+                "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                "-File", $fullScript,
+                "-ProjectRoot", $ProjectRoot,
+                "-DataRoot", $DataRoot,
+                "-StartDate", $StartDate,
+                "-EndDate", $EndDate,
+                "-MaxPagesPerSource", [string]$MaxPagesPerSource,
+                "-MaxCandidatesPerShard", [string]$MaxCandidatesPerShard,
+                "-MaxFetchesPerShard", [string]$MaxFetchesPerShard,
+                "-NetworkRetryPasses", [string]$NetworkRetryPasses,
+                "-FetchConcurrency", [string]$FetchConcurrency,
+                "-PerHostConcurrency", [string]$PerHostConcurrency,
+                "-ApiConcurrency", [string]$ApiConcurrency,
+                "-ExistingSourcesOnly"
+            )
+            $fullScriptArguments += "-SkipAI"
+            & powershell.exe @fullScriptArguments
             $resultCode = [int]$LASTEXITCODE
             if (Test-StopRequested) {
                 Write-State -Status "PAUSED" -Reason "safe_stop_after_checkpoint" -ExitCode $resultCode

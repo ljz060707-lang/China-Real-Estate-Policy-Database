@@ -24,6 +24,7 @@ STATUS_LABELS = {
     "UNKNOWN": "状态未知",
     "SUCCESS": "成功",
     "COMPLETED": "已完成",
+    "PAUSED": "已暂停",
     "completed": "已完成",
     "complete_policy_found": "已完成并发现政策",
     "complete_unverified": "采集完成，完整性待核验",

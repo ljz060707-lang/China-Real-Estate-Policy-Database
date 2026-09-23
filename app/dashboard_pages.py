@@ -616,8 +616,8 @@ def render_collection_page(settings: Settings) -> None:
         columns[3].metric("当前 worker PID", format_value(snapshot.crawler.get("worker_pid")))
         live = snapshot.system.get("automation_live_state") or {}
         st.caption(
-            "MASTER_STATE authoritative state: status, stage, run_id, worker PID, and heartbeat "
-            "come from the autonomous controller; pipeline_progress_events is only position evidence."
+            "运行态优先读取当前任务的原子状态；旧 MASTER_STATE 仅在没有更新的活动任务状态时作为回退。"
+            " pipeline_progress_events 用于补充位置证据。"
         )
         safe_dataframe(
             [

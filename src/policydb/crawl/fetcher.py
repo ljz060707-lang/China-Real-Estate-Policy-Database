@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import threading
 import time
 from collections import Counter
@@ -315,7 +316,14 @@ class RespectfulFetcher:
         check_robots: bool = True,
         max_response_bytes: int = 50 * 1024 * 1024,
         attempt_callback: Callable[[dict[str, Any]], Any] | None = None,
+        adaptive_throttle: bool | None = None,
+        adaptive_min_delay: float = 0.2,
+        adaptive_max_delay: float = 8.0,
     ) -> None:
+        if adaptive_min_delay < 0:
+            raise ValueError("adaptive_min_delay must be non-negative")
+        if adaptive_max_delay < adaptive_min_delay:
+            raise ValueError("adaptive_max_delay must be >= adaptive_min_delay")
         self._state_lock = threading.Lock()
         self._callback_lock = threading.Lock()
         self._origin_locks: dict[str, threading.Lock] = {}
@@ -338,6 +346,15 @@ class RespectfulFetcher:
         self.max_response_bytes = max_response_bytes
         self._robots: dict[str, RobotFileParser] = {}
         self._last_request: dict[str, float] = {}
+        env_adaptive = os.getenv("POLICYDB_ADAPTIVE_THROTTLE", "0").strip().lower()
+        self.adaptive_throttle = (
+            env_adaptive in {"1", "true", "yes", "on"}
+            if adaptive_throttle is None
+            else bool(adaptive_throttle)
+        )
+        self.adaptive_min_delay = float(adaptive_min_delay)
+        self.adaptive_max_delay = float(adaptive_max_delay)
+        self._origin_delays: dict[str, float] = {}
 
     def _attempt_event(self, event: dict[str, Any]) -> Any:
         if self.attempt_callback is None:
@@ -348,6 +365,43 @@ class RespectfulFetcher:
     def _origin_lock(self, origin: str) -> threading.Lock:
         with self._state_lock:
             return self._origin_locks.setdefault(origin, threading.Lock())
+
+    def throttle_state(self) -> dict[str, dict[str, float]]:
+        """Expose sanitized per-origin throttle state for monitoring and tests."""
+
+        with self._state_lock:
+            return {
+                origin: {"delay_seconds": round(delay, 3)}
+                for origin, delay in sorted(self._origin_delays.items())
+            }
+
+    def _effective_rate_limit(self, origin: str, configured: float) -> float:
+        if not self.adaptive_throttle:
+            return configured
+        with self._state_lock:
+            current = self._origin_delays.get(origin, configured)
+        # Never accelerate below the caller's explicit source politeness floor.
+        return max(configured, min(current, self.adaptive_max_delay))
+
+    def _record_throttle(
+        self,
+        origin: str,
+        configured: float,
+        *,
+        success: bool,
+        latency_seconds: float,
+    ) -> None:
+        if not self.adaptive_throttle:
+            return
+        with self._state_lock:
+            current = self._origin_delays.get(origin, configured)
+            floor = max(configured, self.adaptive_min_delay)
+            if success:
+                target = max(floor, min(self.adaptive_max_delay, latency_seconds * 0.25))
+                next_delay = max(floor, current * 0.75 + target * 0.25)
+            else:
+                next_delay = max(floor * 2, current * 2, self.adaptive_min_delay)
+            self._origin_delays[origin] = min(self.adaptive_max_delay, next_delay)
 
     def _allowed(self, url: str) -> bool:
         if not self.check_robots:
@@ -404,14 +458,16 @@ class RespectfulFetcher:
         effective_rate_limit = self.rate_limit if rate_limit is None else max(rate_limit, 0.0)
         with self._origin_lock(origin):
             elapsed = time.monotonic() - self._last_request.get(origin, 0)
-            if elapsed < effective_rate_limit:
-                time.sleep(effective_rate_limit - elapsed)
+            adaptive_rate_limit = self._effective_rate_limit(origin, effective_rate_limit)
+            if elapsed < adaptive_rate_limit:
+                time.sleep(adaptive_rate_limit - elapsed)
             self._last_request[origin] = time.monotonic()
         error: Exception | None = None
         request_started_at = datetime.now(UTC)
         for attempt in range(self.retries):
             response = None
             injected_attempt_id = None
+            attempt_started = time.perf_counter()
             try:
                 headers = {}
                 if etag:
@@ -455,6 +511,12 @@ class RespectfulFetcher:
                     else str(response.url)
                 )
                 if status_code == 304:
+                    self._record_throttle(
+                        origin,
+                        effective_rate_limit,
+                        success=True,
+                        latency_seconds=time.perf_counter() - attempt_started,
+                    )
                     return FetchResult(
                         requested_url=url,
                         final_url=response_url,
@@ -485,6 +547,12 @@ class RespectfulFetcher:
                     )
                 if status_code == 429:
                     error = Http429(f"HTTP 429 for {url}")
+                    self._record_throttle(
+                        origin,
+                        effective_rate_limit,
+                        success=False,
+                        latency_seconds=time.perf_counter() - attempt_started,
+                    )
                     if attempt + 1 < self.retries:
                         if response is not None:
                             time.sleep(self._retry_delay(response, attempt))
@@ -509,6 +577,12 @@ class RespectfulFetcher:
                 )
                 if any(marker in sample for marker in ("请输入验证码", "captcha", "访问验证")):
                     raise CaptchaDetected(f"captcha detected for {url}")
+                self._record_throttle(
+                    origin,
+                    effective_rate_limit,
+                    success=True,
+                    latency_seconds=time.perf_counter() - attempt_started,
+                )
                 return FetchResult(
                     requested_url=url,
                     final_url=response_url,
@@ -563,6 +637,12 @@ class RespectfulFetcher:
                         }
                     )
                 error = classify_fetch_error(exc, url)
+                self._record_throttle(
+                    origin,
+                    effective_rate_limit,
+                    success=False,
+                    latency_seconds=time.perf_counter() - attempt_started,
+                )
                 if attempt + 1 < self.retries:
                     time.sleep(min(2**attempt, 8))
         assert error is not None

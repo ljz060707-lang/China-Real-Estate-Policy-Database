@@ -52,7 +52,8 @@ def archive_document_versions(
             "The archive will not fall back to another drive."
         )
     versions_path = settings.curated / "policy_document_versions.parquet"
-    versions = read_parquet_snapshot(versions_path) if versions_path.exists() else pl.DataFrame()
+    # Archival validates binary assets and metadata, never the full text column.
+    versions = read_parquet_snapshot(versions_path, columns=[c for c in pl.read_parquet_schema(versions_path) if c != "extracted_text"]) if versions_path.exists() else pl.DataFrame()
     scope = "all_versions"
     if run_id:
         scope = f"run:{run_id}"

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime
+from threading import Lock
 from typing import Literal
 
 import httpx
@@ -132,6 +134,7 @@ class GLMEnricher:
         api_key: str | None | object = _UNSET,
         model: str | None = None,
         retries: int = 2,
+        concurrency: int | None = None,
     ) -> None:
         self.settings = settings or Settings.discover()
         resolved_key = self.settings.glm_api_key if api_key is _UNSET else api_key
@@ -144,6 +147,17 @@ class GLMEnricher:
             verify=True,
         )
         self.retries = retries
+        configured_concurrency = (
+            self.settings.ai_concurrency if concurrency is None else concurrency
+        )
+        # The default remains four; jurisdictional stages may use a bounded
+        # eight-request lane while cache and Parquet writes stay serialized.
+        self.concurrency = min(max(int(configured_concurrency), 1), 8)
+        # Network calls may overlap, but a single enricher instance remains the
+        # only cache writer.  parquet_store adds the cross-process lock.
+        self._cache_write_lock = Lock()
+        self._extraction_cache: dict[str, str] | None = None
+        self._verification_cache: dict[str, str] | None = None
         self.cache_path = self.settings.curated / "llm_extractions.parquet"
         self.verification_cache_path = self.settings.curated / "llm_verifications.parquet"
 
@@ -192,19 +206,48 @@ class GLMEnricher:
             if excerpt != action.evidence_excerpt or text.count(action.evidence_excerpt) != 1:
                 raise ValueError("policy action evidence must uniquely match source text")
 
+    def _cached_extraction(self, cache_key: str) -> str | None:
+        with self._cache_write_lock:
+            if self._extraction_cache is None:
+                self._extraction_cache = {}
+                if self.cache_path.exists():
+                    cached = read_parquet_snapshot(self.cache_path)
+                    required = {"cache_key", "status", "output_json"}
+                    if required.issubset(cached.columns):
+                        for row in cached.iter_rows(named=True):
+                            if (
+                                str(row.get("status") or "") == "complete"
+                                and row.get("output_json") is not None
+                            ):
+                                self._extraction_cache[str(row["cache_key"])] = str(
+                                    row["output_json"]
+                                )
+            return self._extraction_cache.get(cache_key)
+
+    def _cached_verification(self, verification_id: str) -> str | None:
+        with self._cache_write_lock:
+            if self._verification_cache is None:
+                self._verification_cache = {}
+                if self.verification_cache_path.exists():
+                    cached = read_parquet_snapshot(self.verification_cache_path)
+                    required = {"verification_id", "status", "output_json"}
+                    if required.issubset(cached.columns):
+                        for row in cached.iter_rows(named=True):
+                            if (
+                                str(row.get("status") or "") == "complete"
+                                and row.get("output_json") is not None
+                            ):
+                                self._verification_cache[str(row["verification_id"])] = str(
+                                    row["output_json"]
+                                )
+            return self._verification_cache.get(verification_id)
+
     def extract(self, content_sha256: str, text: str) -> GLMExtraction | None:
         text_hash = normalized_text_hash(text)
         cache_key = glm_cache_key(text_hash, self.model, self.prompt_version, self.schema_version)
-        if self.cache_path.exists():
-            cached = read_parquet_snapshot(self.cache_path).filter(
-                (pl.col("cache_key") == cache_key)
-                & (pl.col("model_name") == self.model)
-                & (pl.col("prompt_version") == self.prompt_version)
-                & (pl.col("schema_version") == self.schema_version)
-                & (pl.col("status") == "complete")
-            )
-            if cached.height:
-                return GLMExtraction.model_validate_json(cached[-1, "output_json"])
+        cached_output = self._cached_extraction(cache_key)
+        if cached_output is not None:
+            return GLMExtraction.model_validate_json(cached_output)
         now = datetime.now(UTC).isoformat()
         if not self.api_key:
             result = None
@@ -242,7 +285,12 @@ class GLMEnricher:
             "updated_at": now,
             "cache_key": cache_key,
         }
-        append_unique(self.cache_path, [row], "extraction_id")
+        with self._cache_write_lock:
+            append_unique(self.cache_path, [row], "extraction_id")
+            if status == "complete" and output is not None:
+                if self._extraction_cache is None:
+                    self._extraction_cache = {}
+                self._extraction_cache[cache_key] = output
         return result
 
     def verify(
@@ -256,13 +304,9 @@ class GLMEnricher:
             text_hash, self.model, self.prompt_version + ":verify", self.schema_version
         )
         verification_id = stable_id(cache_key, prefix="LLMVERIFY")
-        if self.verification_cache_path.exists():
-            cached = read_parquet_snapshot(self.verification_cache_path).filter(
-                (pl.col("verification_id") == verification_id)
-                & (pl.col("status") == "complete")
-            )
-            if cached.height:
-                return GLMVerification.model_validate_json(cached[-1, "output_json"])
+        cached_output = self._cached_verification(verification_id)
+        if cached_output is not None:
+            return GLMVerification.model_validate_json(cached_output)
         now = datetime.now(UTC).isoformat()
         result: GLMVerification | None = None
         error_type = None
@@ -317,7 +361,12 @@ class GLMEnricher:
             "updated_at": now,
             "cache_key": cache_key,
         }
-        append_unique(self.verification_cache_path, [row], "verification_id")
+        with self._cache_write_lock:
+            append_unique(self.verification_cache_path, [row], "verification_id")
+            if status == "complete" and result is not None:
+                if self._verification_cache is None:
+                    self._verification_cache = {}
+                self._verification_cache[verification_id] = row["output_json"]
         return result
 
     @staticmethod
@@ -392,18 +441,66 @@ class GLMEnricher:
         if versions.is_empty():
             return {"pending": 0, "completed": 0, "awaiting_api_key": 0, "failed": 0, "irrelevant": 0}
         completed = awaiting = failed = irrelevant = 0
+        work_by_cache_key: dict[str, list[tuple[str, str]]] = {}
         for row in versions.iter_rows(named=True):
             text = row.get("extracted_text") or ""
             if not self._likely_relevant(text):
                 irrelevant += 1
                 continue
-            result = self.extract(row["content_sha256"], text)
+            text_hash = normalized_text_hash(text)
+            cache_key = glm_cache_key(
+                text_hash, self.model, self.prompt_version, self.schema_version
+            )
+            work_by_cache_key.setdefault(cache_key, []).append(
+                (row["content_sha256"], text)
+            )
+
+        def process(group: list[tuple[str, str]]) -> tuple[int, str]:
+            content_sha256, text = group[0]
+            try:
+                result = self.extract(content_sha256, text)
+            except Exception:
+                return len(group), "failed"
             if result:
-                completed += 1
-            elif self.api_key:
-                failed += 1
+                return len(group), "completed"
+            return len(group), "failed" if self.api_key else "awaiting"
+
+        groups = list(work_by_cache_key.values())
+        cached_completed = 0
+        uncached_groups: list[list[tuple[str, str]]] = []
+        for group in groups:
+            cache_key = glm_cache_key(
+                normalized_text_hash(group[0][1]),
+                self.model,
+                self.prompt_version,
+                self.schema_version,
+            )
+            cached_output = self._cached_extraction(cache_key)
+            if cached_output is None:
+                uncached_groups.append(group)
+                continue
+            try:
+                GLMExtraction.model_validate_json(cached_output)
+            except ValidationError:
+                uncached_groups.append(group)
             else:
-                awaiting += 1
+                cached_completed += len(group)
+        completed += cached_completed
+        groups = uncached_groups
+        if self.concurrency == 1:
+            outcomes = [process(group) for group in groups]
+        else:
+            with ThreadPoolExecutor(
+                max_workers=self.concurrency, thread_name_prefix="policydb-ai"
+            ) as executor:
+                outcomes = list(executor.map(process, groups))
+        for count, status in outcomes:
+            if status == "completed":
+                completed += count
+            elif status == "failed":
+                failed += count
+            else:
+                awaiting += count
         return {
             "pending": versions.height,
             "completed": completed,
@@ -431,14 +528,52 @@ class GLMEnricher:
         )
         work = extractions.join(versions, on="content_sha256", how="inner")
         completed = awaiting = failed = 0
-        for row in work.iter_rows(named=True):
+
+        def process(row: dict) -> str:
             extraction = GLMExtraction.model_validate_json(row["output_json"])
-            result = self.verify(
-                row["content_sha256"], row.get("extracted_text") or "", extraction
-            )
+            try:
+                result = self.verify(
+                    row["content_sha256"], row.get("extracted_text") or "", extraction
+                )
+            except Exception:
+                return "failed"
             if result:
+                return "completed"
+            return "failed" if self.api_key else "awaiting"
+
+        rows = list(work.iter_rows(named=True))
+        uncached_rows: list[dict] = []
+        for row in rows:
+            text = row.get("extracted_text") or ""
+            verification_key = glm_cache_key(
+                normalized_text_hash(text),
+                self.model,
+                self.prompt_version + ":verify",
+                self.schema_version,
+            )
+            verification_id = stable_id(verification_key, prefix="LLMVERIFY")
+            cached_output = self._cached_verification(verification_id)
+            if cached_output is None:
+                uncached_rows.append(row)
+                continue
+            try:
+                GLMVerification.model_validate_json(cached_output)
+            except ValidationError:
+                uncached_rows.append(row)
+            else:
                 completed += 1
-            elif self.api_key:
+        rows = uncached_rows
+        if self.concurrency == 1:
+            outcomes = [process(row) for row in rows]
+        else:
+            with ThreadPoolExecutor(
+                max_workers=self.concurrency, thread_name_prefix="policydb-ai"
+            ) as executor:
+                outcomes = list(executor.map(process, rows))
+        for status in outcomes:
+            if status == "completed":
+                completed += 1
+            elif status == "failed":
                 failed += 1
             else:
                 awaiting += 1

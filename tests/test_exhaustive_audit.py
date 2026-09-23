@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import httpx
 import polars as pl
 
+from policydb import exhaustive as exhaustive_module
 from policydb.crawl.fetcher import TlsError, classify_fetch_error
 from policydb.exhaustive import (
     CandidateDate,
@@ -473,7 +474,7 @@ def test_plan_city_reassigns_reused_shards_to_current_batch(tmp_path):
         def plan(self, **_kwargs):
             return {"run_id": "RUN_REUSED_SHARD", "item_count": 0}
 
-        def run(self, _run_id, *, max_fetches):
+        def run(self, _run_id, *, max_fetches, **_kwargs):
             assert max_fetches > 0
             return {"fetched": 0, "failed": 0}
 
@@ -505,3 +506,192 @@ def test_plan_city_reassigns_reused_shards_to_current_batch(tmp_path):
         max_fetches_per_shard=1,
     )
     assert result["processed_shards"] == 1
+
+
+def test_exhaustive_city_forwards_bounded_fetch_concurrency(tmp_path):
+    """The exhaustive scheduler must use the existing single-writer fetch lane."""
+    settings = _source_root(tmp_path)
+    crawler = ExhaustiveCrawler(settings)
+    crawler.plan_city = lambda *_args, **_kwargs: {
+        "batch_id": "BATCH-1",
+        "city_id": "CITY-1",
+        "city_name": "测试市",
+        "shards": 1,
+        "runnable": 1,
+        "source_incomplete": 0,
+    }
+    crawler.rebuild_progress = lambda: {"city_year_rows": 1}
+    crawler.city_status = lambda _city=None: {"rows": 0, "data": []}
+
+    shard = {
+        "shard_id": "SHARD-1",
+        "batch_id": "BATCH-1",
+        "city_id": "CITY-1",
+        "city_name": "测试市",
+        "province_name": "测试省",
+        "source_id": "SRC-1",
+        "source_role": "municipal_government",
+        "start_date": "2024-01-01",
+        "end_date": "2024-01-31",
+        "status": "pending",
+        "source_verified": True,
+    }
+    pl.DataFrame([shard]).write_parquet(crawler.shards_path)
+    seen = {}
+
+    class _Pipeline:
+        def plan(self, **_kwargs):
+            return {"run_id": "RUN-1", "item_count": 0}
+
+        def run(
+            self,
+            _run_id,
+            *,
+            max_fetches,
+            fetch_concurrency,
+            per_host_concurrency,
+            reuse_existing_documents,
+        ):
+            seen.update(
+                {
+                    "max_fetches": max_fetches,
+                    "fetch_concurrency": fetch_concurrency,
+                    "per_host_concurrency": per_host_concurrency,
+                    "reuse_existing_documents": reuse_existing_documents,
+                }
+            )
+            return {"fetched": 0, "failed": 0}
+
+    crawler.pipeline = _Pipeline()
+    result = crawler.run_city(
+        "测试市",
+        start_date=date(2024, 1, 1),
+        end_date=date(2024, 1, 31),
+        source_roles=["municipal_government"],
+        max_fetches_per_shard=7,
+        fetch_concurrency=6,
+        per_host_concurrency=1,
+    )
+
+    assert result["processed_shards"] == 1
+    assert seen == {
+        "max_fetches": 7,
+        "fetch_concurrency": 6,
+        "per_host_concurrency": 1,
+        "reuse_existing_documents": True,
+    }
+
+
+def test_exhaustive_city_refreshes_progress_at_checkpoint_boundaries(tmp_path):
+    """Long city runs must publish live progress before the city finishes."""
+    settings = _source_root(tmp_path)
+    crawler = ExhaustiveCrawler(settings)
+    crawler.plan_city = lambda *_args, **_kwargs: {
+        "batch_id": "BATCH-1",
+        "city_id": "CITY-1",
+        "city_name": "测试市",
+        "shards": 3,
+        "runnable": 3,
+        "source_incomplete": 0,
+    }
+    progress_refreshes = []
+    crawler.rebuild_progress = lambda: progress_refreshes.append(True)
+    crawler.city_status = lambda _city=None: {"rows": 0, "data": []}
+
+    shards = [
+        {
+            "shard_id": f"SHARD-{index}",
+            "batch_id": "BATCH-1",
+            "city_id": "CITY-1",
+            "city_name": "测试市",
+            "province_name": "测试省",
+            "source_id": "SRC-1",
+            "source_role": "municipal_government",
+            "start_date": f"2024-0{index}-01",
+            "end_date": f"2024-0{index}-28",
+            "status": "pending",
+            "source_verified": True,
+        }
+        for index in range(1, 4)
+    ]
+    pl.DataFrame(shards).write_parquet(crawler.shards_path)
+
+    class _Pipeline:
+        def plan(self, **_kwargs):
+            return {"run_id": "RUN-1", "item_count": 0}
+
+        def run(self, _run_id, *, max_fetches, **_kwargs):
+            assert max_fetches > 0
+            return {"fetched": 0, "failed": 0}
+
+    crawler.pipeline = _Pipeline()
+    result = crawler.run_city(
+        "测试市",
+        start_date=date(2024, 1, 1),
+        end_date=date(2024, 3, 31),
+        source_roles=["municipal_government"],
+        max_fetches_per_shard=1,
+        checkpoint_interval=2,
+    )
+
+    assert result["processed_shards"] == 3
+    assert len(progress_refreshes) == 2
+
+
+def test_exhaustive_city_batches_checkpoint_writes(tmp_path, monkeypatch):
+    """Checkpoint persistence should not rewrite each large city shard separately."""
+    settings = _source_root(tmp_path)
+    crawler = ExhaustiveCrawler(settings)
+    crawler.plan_city = lambda *_args, **_kwargs: {
+        "batch_id": "BATCH-1",
+        "city_id": "CITY-1",
+        "city_name": "测试市",
+        "shards": 3,
+        "runnable": 3,
+        "source_incomplete": 0,
+    }
+    crawler.rebuild_progress = lambda: {"city_year_rows": 1}
+    crawler.city_status = lambda _city=None: {"rows": 0, "data": []}
+    shards = [
+        {
+            "shard_id": f"SHARD-{index}",
+            "batch_id": "BATCH-1",
+            "city_id": "CITY-1",
+            "city_name": "测试市",
+            "province_name": "测试省",
+            "source_id": "SRC-1",
+            "source_role": "municipal_government",
+            "start_date": f"2024-0{index}-01",
+            "end_date": f"2024-0{index}-28",
+            "status": "pending",
+            "source_verified": True,
+        }
+        for index in range(1, 4)
+    ]
+    pl.DataFrame(shards).write_parquet(crawler.shards_path)
+
+    class _Pipeline:
+        def plan(self, **_kwargs):
+            return {"run_id": "RUN-1", "item_count": 0}
+
+        def run(self, _run_id, *, max_fetches, **_kwargs):
+            assert max_fetches > 0
+            return {"fetched": 0, "failed": 0}
+
+    crawler.pipeline = _Pipeline()
+    write_counts = {"event_id": 0, "shard_id": 0, "evidence_id": 0}
+
+    def _record_upsert(frame, _path, key):
+        write_counts[key] += 1
+
+    monkeypatch.setattr(exhaustive_module, "_upsert", _record_upsert)
+    crawler.run_city(
+        "测试市",
+        start_date=date(2024, 1, 1),
+        end_date=date(2024, 3, 31),
+        source_roles=["municipal_government"],
+        max_fetches_per_shard=1,
+        checkpoint_interval=2,
+    )
+
+    assert write_counts == {"event_id": 2, "shard_id": 2, "evidence_id": 2}

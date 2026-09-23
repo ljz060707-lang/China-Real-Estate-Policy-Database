@@ -578,3 +578,11 @@ class Settings(BaseModel):
             max(int(self._preference("max_concurrency", "POLICYDB_MAX_CONCURRENCY", 4)), 1),
             16,
         )
+
+    @property
+    def ai_concurrency(self) -> int:
+        """Bounded concurrent AI requests; Parquet commits remain serialized."""
+        return min(
+            max(int(self._preference("ai_concurrency", "POLICYDB_AI_CONCURRENCY", 4)), 1),
+            8,
+        )

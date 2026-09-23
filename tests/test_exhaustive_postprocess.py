@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from policydb.cli import _execute_exhaustive_postprocess
+from policydb.cli import _execute_exhaustive_postprocess, _execute_jurisdictional_postprocess
 
 
 class _FakeEnricher:
@@ -85,3 +85,39 @@ def test_no_run_ai_keeps_explicit_pending_state():
     assert result["run_ai_executed"] is False
     assert crawler.persisted["RUN_1"]["ai_pending_count"] == 7
     assert crawler.persisted["RUN_1"]["dedup_pending_count"] == 7
+
+
+def test_jurisdictional_collection_only_archives_and_builds_without_ai(monkeypatch):
+    calls = []
+
+    monkeypatch.setattr(
+        "policydb.cli.archive_document_versions",
+        lambda settings, run_id=None: calls.append("archive") or {"ok": True},
+    )
+    monkeypatch.setattr(
+        "policydb.cli.build_city_source_month_coverage",
+        lambda settings: calls.append("coverage") or {"ok": True},
+    )
+    monkeypatch.setattr(
+        "policydb.cli.build_database",
+        lambda settings: calls.append("database") or {"ok": True},
+    )
+
+    class _UnexpectedEnricher:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("collection-only mode must not construct GLMEnricher")
+
+    monkeypatch.setattr("policydb.cli.GLMEnricher", _UnexpectedEnricher)
+    pipeline = SimpleNamespace(settings=SimpleNamespace())
+    result = _execute_jurisdictional_postprocess(
+        pipeline,
+        {"run_id": "RUN_JURISDICTIONAL_1"},
+        run_ai=False,
+        archive=True,
+        api_concurrency=6,
+        run_verification=True,
+    )
+
+    assert result["run_ai_executed"] is False
+    assert result["archive_executed"] is True
+    assert calls == ["archive", "coverage", "database"]

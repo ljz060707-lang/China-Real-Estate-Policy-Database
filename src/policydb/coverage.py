@@ -69,7 +69,10 @@ def build_source_matrix(settings: Settings | None = None) -> pl.DataFrame:
         elif source.scope_type == "provincial" and source.province_codes:
             province_column = "province_code" if "province_code" in cities.columns else None
             if province_column:
-                city_ids = cities.filter(pl.col(province_column).is_in(source.province_codes))["city_id"].to_list()
+                province_codes = [str(value) for value in source.province_codes]
+                city_ids = cities.filter(
+                    pl.col(province_column).cast(pl.String).is_in(province_codes)
+                )["city_id"].to_list()
         for city_id in city_ids:
             rows.append(
                 {

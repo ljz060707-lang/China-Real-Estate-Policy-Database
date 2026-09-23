@@ -35,6 +35,7 @@ ALLOWED_FIELDS = {
     "user_agent",
     "respect_robots",
     "max_concurrency",
+    "ai_concurrency",
     "tianditu_map_approval",
     "tianditu_qualification",
     "project_python_path",

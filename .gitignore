@@ -5,6 +5,7 @@ __pycache__/
 .test-tmp/
 .test-tmp-migration*/
 .pytest-final-*/
+.test_artifacts/
 .ruff_cache/
 .uv-cache/
 .env

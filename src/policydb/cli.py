@@ -27,6 +27,7 @@ from policydb.export.excel_compatible import export_excel_compatible
 from policydb.export.release import create_release
 from policydb.geography import materialize_geography
 from policydb.ingest.excel import import_excel, inventory_excel
+from policydb.ingest.external_reference import import_reference_folder
 from policydb.intensity.annotations import prepare_annotations
 from policydb.intensity.baselines import train_baselines
 from policydb.intensity.benchmark import build_benchmark
@@ -40,6 +41,7 @@ from policydb.intensity.service import PolicyIntensityService
 from policydb.intensity.transformer import train_transformer
 from policydb.jobs import CrawlJobRequest, JobManager
 from policydb.jobs.worker import run_job
+from policydb.jurisdiction import discover_jurisdiction_sources
 from policydb.migration_v2 import apply_migration, migration_plan, verify_migration
 from policydb.network import (
     audit_source_routes,
@@ -160,16 +162,18 @@ def ai_models():
 @ai_app.command("classify")
 def ai_classify(
     run_id: str | None = typer.Option(None, "--run-id"),
+    concurrency: int = typer.Option(4, "--concurrency", min=1, max=8),
 ):
-    result = GLMEnricher().enrich_pending(run_id=run_id)
+    result = GLMEnricher(concurrency=concurrency).enrich_pending(run_id=run_id)
     typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
 
 
 @ai_app.command("verify")
 def ai_verify(
     run_id: str | None = typer.Option(None, "--run-id"),
+    concurrency: int = typer.Option(4, "--concurrency", min=1, max=8),
 ):
-    result = GLMEnricher().verify_pending(run_id=run_id)
+    result = GLMEnricher(concurrency=concurrency).verify_pending(run_id=run_id)
     typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
 
 
@@ -394,6 +398,13 @@ def import_excel_cmd(path: Path):
     typer.echo(json.dumps(import_excel(path), ensure_ascii=False, indent=2, default=str))
 
 
+@app.command("import-reference-folder")
+def import_reference_folder_cmd(path: Path):
+    """归档外部政策参考资料并生成城市—年份对照；不分类、不晋升、不改抓取队列。"""
+    result = import_reference_folder(path)
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+
+
 @app.command("build-database")
 def build_database_cmd():
     typer.echo(build_database())
@@ -546,6 +557,27 @@ def sources_discover_all(
     city_limit: int | None = typer.Option(None, "--city-limit", min=1, max=105),
 ):
     typer.echo(json.dumps(discover_all_sources(apply=apply, city_limit=city_limit), ensure_ascii=False, indent=2))
+
+
+@sources_app.command("discover-jurisdictional")
+def sources_discover_jurisdictional(
+    levels: str = typer.Option(
+        "national,provincial",
+        "--levels",
+        help="逗号分隔的范围：national,provincial。",
+    ),
+    apply: bool = typer.Option(False, "--apply/--dry-run"),
+    use_search: bool = typer.Option(True, "--use-search/--no-use-search"),
+    max_results: int = typer.Option(5, "--max-results", min=1, max=20),
+):
+    """发现国家/省级官方入口；只在显式 --apply 时写入补充注册表。"""
+    result = discover_jurisdiction_sources(
+        levels=_split_option(levels),
+        apply=apply,
+        use_search=use_search,
+        max_results=max_results,
+    )
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2, default=str))
 
 
 @sources_app.command("complete-matrix")
@@ -1373,6 +1405,122 @@ def _execute_exhaustive_postprocess(
     return result
 
 
+def _execute_jurisdictional_postprocess(
+    pipeline: CrawlPipeline,
+    result: dict,
+    *,
+    run_ai: bool,
+    archive: bool,
+    api_concurrency: int,
+    run_verification: bool,
+) -> dict:
+    """Archive new jurisdictional runs and optionally run the separate AI lane."""
+    run_id = str(result.get("run_id") or "")
+    postprocess: dict[str, object] = {}
+    settings = pipeline.settings
+    if archive and run_id:
+        postprocess["archive"] = archive_document_versions(settings, run_id=run_id)
+    if run_ai and run_id:
+        enricher = GLMEnricher(settings, concurrency=api_concurrency)
+        classified = enricher.enrich_pending(run_id=run_id)
+        verified = (
+            enricher.verify_pending(run_id=run_id)
+            if run_verification
+            else {"skipped": True}
+        )
+        postprocess["ai"] = {"classify": classified, "verify": verified}
+        postprocess["taxonomy"] = materialize_action_classifications(settings)
+        try:
+            postprocess["dedup"] = materialize_policy_identity(settings, run_id=run_id)
+        except TypeError as exc:
+            if "run_id" not in str(exc):
+                raise
+            postprocess["dedup"] = materialize_policy_identity(settings)
+        postprocess["route_pools"] = materialize_policy_pools(settings)
+        postprocess["confidence"] = materialize_field_confidence(settings)
+        postprocess["coverage"] = build_city_source_month_coverage(settings)
+        postprocess["database"] = build_database(settings)
+    elif run_id:
+        # Collection-only runs still materialize newly crawled document
+        # versions into the curated database and refresh coverage.  They do
+        # not construct an enricher or enter the semantic/API classification
+        # lane.
+        postprocess["coverage"] = build_city_source_month_coverage(settings)
+        postprocess["database"] = build_database(settings)
+    result["postprocess"] = postprocess
+    result["run_ai_executed"] = bool(run_ai)
+    result["archive_executed"] = bool(archive)
+    result["jurisdictional_scope"] = True
+    return result
+
+
+@crawl_app.command("jurisdictional")
+def crawl_jurisdictional(
+    from_: str = typer.Option("2021-09-01", "--from"),
+    to: str = typer.Option("today", "--to"),
+    levels: str = typer.Option("national,provincial", "--levels"),
+    provinces: str = typer.Option("", "--provinces"),
+    source_ids: str = typer.Option("", "--source-ids"),
+    max_pages_per_source: int = typer.Option(3000, "--max-pages-per-source", min=1),
+    max_candidates_per_source: int = typer.Option(100000, "--max-candidates-per-source", min=1),
+    max_candidates_total: int = typer.Option(300000, "--max-candidates-total", min=1),
+    max_fetches: int = typer.Option(300000, "--max-fetches", min=1),
+    fetch_concurrency: int = typer.Option(12, "--fetch-concurrency", min=1, max=16),
+    per_host_concurrency: int = typer.Option(1, "--per-host-concurrency", min=1, max=2),
+    api_concurrency: int = typer.Option(6, "--api-concurrency", min=1, max=8),
+    resume: bool = typer.Option(True, "--resume/--no-resume"),
+    run_ai: bool = typer.Option(False, "--run-ai/--no-run-ai"),
+    run_verification: bool = typer.Option(True, "--run-verification/--no-run-verification"),
+    archive: bool = typer.Option(True, "--archive/--no-archive"),
+    reuse_existing_documents: bool = typer.Option(
+        True,
+        "--reuse-existing-documents/--refresh-existing-documents",
+        help="已有有效DocumentVersion只做本地复用，不重复请求详情页。",
+    ),
+):
+    """抓取已注册的国家/省级来源；不扩展为城市级重复任务。"""
+    settings = Settings.discover()
+    pipeline = CrawlPipeline(settings)
+    selected_levels = _split_option(levels)
+    plan = pipeline.plan(
+        run_type="jurisdictional_recent_5y",
+        start_date=_date(from_),
+        end_date=_date(to),
+        official_first=True,
+        official_only_sources=True,
+        scope_types=selected_levels,
+        provinces=_split_option(provinces),
+        source_ids=_split_option(source_ids),
+        max_candidates_total=max_candidates_total,
+        max_candidates_per_source=max_candidates_per_source,
+        max_pages_per_source=max_pages_per_source,
+        global_safety_limit=max_candidates_total,
+        resume=resume,
+    )
+    result = {"plan": plan}
+    if plan["status"] == "planned":
+        result.update(
+            pipeline.run(
+                plan["run_id"],
+                max_fetches=max_fetches,
+                fetch_concurrency=fetch_concurrency,
+                per_host_concurrency=per_host_concurrency,
+                reuse_existing_documents=reuse_existing_documents,
+            )
+        )
+        result = _execute_jurisdictional_postprocess(
+            pipeline,
+            result,
+            run_ai=run_ai,
+            archive=archive,
+            api_concurrency=api_concurrency,
+            run_verification=run_verification,
+        )
+    else:
+        result["jurisdictional_scope"] = True
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+
+
 @crawl_app.command("exhaustive-city")
 def crawl_exhaustive_city(
     city: str = typer.Option(..., "--city"),
@@ -1394,8 +1542,34 @@ def crawl_exhaustive_city(
     run_ai: bool = typer.Option(False, "--run-ai/--no-run-ai"),
     archive: bool = typer.Option(True, "--archive/--no-archive"),
     sequential: bool = typer.Option(True, "--sequential/--no-sequential"),
+    fetch_concurrency: int | None = typer.Option(
+        None,
+        "--fetch-concurrency",
+        min=1,
+        max=16,
+        help="并发网络抓取数；未指定时使用POLICYDB_MAX_CONCURRENCY。",
+    ),
+    per_host_concurrency: int = typer.Option(
+        1,
+        "--per-host-concurrency",
+        min=1,
+        max=2,
+        help="同一官方域名的并发数，默认1以遵守站点限速。",
+    ),
+    checkpoint_interval: int = typer.Option(
+        32,
+        "--checkpoint-interval",
+        min=1,
+        max=64,
+        help="每完成多少个分片写入一次批量checkpoint；仍保持原子写入。",
+    ),
+    reuse_existing_documents: bool = typer.Option(
+        True,
+        "--reuse-existing-documents/--refresh-existing-documents",
+        help="对已有有效DocumentVersion走本地复用，不重复请求详情页。",
+    ),
 ):
-    """逐城市、逐来源、逐月扫描；状态和检查点均写入D盘Curated层。"""
+    """逐城市、逐来源、逐月扫描；状态和检查点写入配置的数据根目录。"""
     if not sequential:
         raise typer.BadParameter("当前正式写入仅支持 --sequential，避免并发覆盖。")
     crawler = ExhaustiveCrawler()
@@ -1411,6 +1585,10 @@ def crawl_exhaustive_city(
         resume=resume,
         retry_errors=retry_errors,
         progress=_exhaustive_progress,
+        fetch_concurrency=fetch_concurrency,
+        per_host_concurrency=per_host_concurrency,
+        checkpoint_interval=checkpoint_interval,
+        reuse_existing_documents=reuse_existing_documents,
     )
     result["run_ai_requested"] = run_ai
     result["archive_requested"] = archive
@@ -1443,6 +1621,32 @@ def crawl_exhaustive_all(
     resume: bool = typer.Option(True, "--resume/--no-resume"),
     run_ai: bool = typer.Option(False, "--run-ai/--no-run-ai"),
     archive: bool = typer.Option(True, "--archive/--no-archive"),
+    fetch_concurrency: int | None = typer.Option(
+        None,
+        "--fetch-concurrency",
+        min=1,
+        max=16,
+        help="并发网络抓取数；未指定时使用POLICYDB_MAX_CONCURRENCY。",
+    ),
+    per_host_concurrency: int = typer.Option(
+        1,
+        "--per-host-concurrency",
+        min=1,
+        max=2,
+        help="同一官方域名的并发数，默认1以遵守站点限速。",
+    ),
+    checkpoint_interval: int = typer.Option(
+        32,
+        "--checkpoint-interval",
+        min=1,
+        max=64,
+        help="每完成多少个分片写入一次批量checkpoint；仍保持原子写入。",
+    ),
+    reuse_existing_documents: bool = typer.Option(
+        True,
+        "--reuse-existing-documents/--refresh-existing-documents",
+        help="对已有有效DocumentVersion走本地复用，不重复请求详情页。",
+    ),
 ):
     """105城市默认顺序执行；可用--cities先做小规模验收。"""
     crawler = ExhaustiveCrawler()
@@ -1466,6 +1670,10 @@ def crawl_exhaustive_all(
                 max_fetches_per_shard=max_fetches_per_shard,
                 resume=resume,
                 progress=_exhaustive_progress,
+                fetch_concurrency=fetch_concurrency,
+                per_host_concurrency=per_host_concurrency,
+                checkpoint_interval=checkpoint_interval,
+                reuse_existing_documents=reuse_existing_documents,
             )
         results.append(
             _execute_exhaustive_postprocess(
@@ -1506,6 +1714,17 @@ def crawl_exhaustive_resume(
     city: str = typer.Option(..., "--city"),
     from_: str = typer.Option("2018-01-01", "--from"),
     to: str = typer.Option("today", "--to"),
+    fetch_concurrency: int | None = typer.Option(None, "--fetch-concurrency", min=1, max=16),
+    per_host_concurrency: int = typer.Option(1, "--per-host-concurrency", min=1, max=2),
+    checkpoint_interval: int = typer.Option(
+        32, "--checkpoint-interval", min=1, max=64,
+        help="每完成多少个分片写入一次批量checkpoint；仍保持原子写入。",
+    ),
+    reuse_existing_documents: bool = typer.Option(
+        True,
+        "--reuse-existing-documents/--refresh-existing-documents",
+        help="对已有有效DocumentVersion走本地复用，不重复请求详情页。",
+    ),
 ):
     result = ExhaustiveCrawler().run_city(
         city,
@@ -1513,6 +1732,10 @@ def crawl_exhaustive_resume(
         end_date=_date(to),
         resume=True,
         progress=_exhaustive_progress,
+        fetch_concurrency=fetch_concurrency,
+        per_host_concurrency=per_host_concurrency,
+        checkpoint_interval=checkpoint_interval,
+        reuse_existing_documents=reuse_existing_documents,
     )
     typer.echo(json.dumps(result, ensure_ascii=False, indent=2, default=str))
 
@@ -1522,6 +1745,17 @@ def crawl_exhaustive_retry(
     city: str = typer.Option(..., "--city"),
     from_: str = typer.Option("2018-01-01", "--from"),
     to: str = typer.Option("today", "--to"),
+    fetch_concurrency: int | None = typer.Option(None, "--fetch-concurrency", min=1, max=16),
+    per_host_concurrency: int = typer.Option(1, "--per-host-concurrency", min=1, max=2),
+    checkpoint_interval: int = typer.Option(
+        32, "--checkpoint-interval", min=1, max=64,
+        help="每完成多少个分片写入一次批量checkpoint；仍保持原子写入。",
+    ),
+    reuse_existing_documents: bool = typer.Option(
+        True,
+        "--reuse-existing-documents/--refresh-existing-documents",
+        help="对已有有效DocumentVersion走本地复用，不重复请求详情页。",
+    ),
 ):
     result = ExhaustiveCrawler().run_city(
         city,
@@ -1530,6 +1764,10 @@ def crawl_exhaustive_retry(
         resume=True,
         retry_errors=True,
         progress=_exhaustive_progress,
+        fetch_concurrency=fetch_concurrency,
+        per_host_concurrency=per_host_concurrency,
+        checkpoint_interval=checkpoint_interval,
+        reuse_existing_documents=reuse_existing_documents,
     )
     typer.echo(json.dumps(result, ensure_ascii=False, indent=2, default=str))
 

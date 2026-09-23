@@ -1,6 +1,6 @@
 version: 2
-generated_at: '2026-08-09T09:46:04.216211+00:00'
-source_count: 513
+generated_at: '2026-09-17T22:03:55.193486+00:00'
+source_count: 527
 sources:
 - source_id: SRC_404201CEEE840150
   source_name: 北京市人民政府
@@ -22020,3 +22020,516 @@ sources:
   entry_evidence: reusable entry URL and live list probe
   pagination_evidence: '[]'
   historical_entry_urls: []
+- source_id: JURSRC_3A91073DF6BD5462E89F
+  source_name: 国务院政策文件库（部门文件）
+  domain: gov.cn
+  source_type: government
+  source_role: national_policy
+  official_status: official
+  seed_urls:
+  - https://www.gov.cn/zhengce/zhengceku/bmwj/home.htm
+  list_page_urls:
+  - https://www.gov.cn/zhengce/zhengceku/bmwj/home.htm
+  parser_adapter: generic_government
+  crawl_enabled: true
+  priority: 0
+  rate_limit: 0.5
+  recommended_enabled: false
+  city_ids: []
+  coverage_city_ids: []
+  province_codes: []
+  scope_type: national
+  agency_type: state_council
+  required_level: supplemental
+  expected_frequency: unknown
+  is_valid: true
+  parser_version: '1'
+  discovery_method: configured_official_source
+  discovery_provider: configured_official_registry
+  official_domain_verified: true
+  health_status: pending_evaluation
+  health_reason: registered by jurisdictional scope bootstrap; crawl validation pending
+  robots_status: unknown
+  tls_status: unknown
+  redirect_chain: []
+  consecutive_failures: 0
+  jurisdiction_mapping_id: JURMAP_1009F329D82ED20015EF
+  approval_status: supplemental_scope_bootstrap
+  notes: Separate national/provincial source; never fanned out as a municipal source.
+- source_id: JURSRC_E5BA20548E33E2830BF1
+  source_name: 中国人民银行政策发布
+  domain: pbc.gov.cn
+  source_type: government
+  source_role: national_monetary_policy
+  official_status: official
+  seed_urls:
+  - https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/index.html
+  list_page_urls:
+  - https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/index.html
+  parser_adapter: generic_government
+  crawl_enabled: true
+  priority: 0
+  rate_limit: 0.5
+  recommended_enabled: false
+  city_ids: []
+  coverage_city_ids: []
+  province_codes: []
+  scope_type: national
+  agency_type: central_bank
+  required_level: supplemental
+  expected_frequency: unknown
+  is_valid: true
+  parser_version: '1'
+  discovery_method: configured_official_source
+  discovery_provider: configured_official_registry
+  official_domain_verified: true
+  health_status: pending_evaluation
+  health_reason: registered by jurisdictional scope bootstrap; crawl validation pending
+  robots_status: unknown
+  tls_status: unknown
+  redirect_chain: []
+  consecutive_failures: 0
+  jurisdiction_mapping_id: JURMAP_477C897C3A4CC8510F5B
+  approval_status: supplemental_scope_bootstrap
+  notes: Separate national/provincial source; never fanned out as a municipal source.
+- source_id: JURSRC_9BBC1AF742DDAC326642
+  source_name: 财政部政策发布
+  domain: mof.gov.cn
+  source_type: government
+  source_role: national_fiscal_policy
+  official_status: official
+  seed_urls:
+  - https://www.mof.gov.cn/zhengwuxinxi/zhengcefabu/
+  list_page_urls:
+  - https://www.mof.gov.cn/zhengwuxinxi/zhengcefabu/
+  parser_adapter: generic_government
+  crawl_enabled: true
+  priority: 0
+  rate_limit: 0.5
+  recommended_enabled: false
+  city_ids: []
+  coverage_city_ids: []
+  province_codes: []
+  scope_type: national
+  agency_type: ministry
+  required_level: supplemental
+  expected_frequency: unknown
+  is_valid: true
+  parser_version: '1'
+  discovery_method: configured_official_source
+  discovery_provider: configured_official_registry
+  official_domain_verified: true
+  health_status: pending_evaluation
+  health_reason: registered by jurisdictional scope bootstrap; crawl validation pending
+  robots_status: unknown
+  tls_status: unknown
+  redirect_chain: []
+  consecutive_failures: 0
+  jurisdiction_mapping_id: JURMAP_5E26D5DA51AB3A02F2B4
+  approval_status: supplemental_scope_bootstrap
+  notes: Separate national/provincial source; never fanned out as a municipal source.
+- source_id: JURSRC_E28C62198DC86B846017
+  source_name: 住房和城乡建设部政府信息公开
+  domain: mohurd.gov.cn
+  source_type: government
+  source_role: national_housing_policy
+  official_status: official
+  seed_urls:
+  - https://www.mohurd.gov.cn/gongkai/fdzdgknr/
+  list_page_urls:
+  - https://www.mohurd.gov.cn/gongkai/fdzdgknr/
+  parser_adapter: generic_government
+  crawl_enabled: true
+  priority: 0
+  rate_limit: 0.5
+  recommended_enabled: false
+  city_ids: []
+  coverage_city_ids: []
+  province_codes: []
+  scope_type: national
+  agency_type: ministry
+  required_level: supplemental
+  expected_frequency: unknown
+  is_valid: true
+  parser_version: '1'
+  discovery_method: configured_official_source
+  discovery_provider: configured_official_registry
+  official_domain_verified: true
+  health_status: pending_evaluation
+  health_reason: registered by jurisdictional scope bootstrap; crawl validation pending
+  robots_status: unknown
+  tls_status: unknown
+  redirect_chain: []
+  consecutive_failures: 0
+  jurisdiction_mapping_id: JURMAP_4A80553B143F158C9500
+  approval_status: supplemental_scope_bootstrap
+  notes: Separate national/provincial source; never fanned out as a municipal source.
+- source_id: JURSRC_9790BEFD6D7602BCA1A9
+  source_name: 自然资源部政府信息公开
+  domain: mnr.gov.cn
+  source_type: government
+  source_role: national_natural_resources_policy
+  official_status: official
+  seed_urls:
+  - https://www.mnr.gov.cn/gk/
+  list_page_urls:
+  - https://www.mnr.gov.cn/gk/
+  parser_adapter: generic_government
+  crawl_enabled: true
+  priority: 0
+  rate_limit: 0.5
+  recommended_enabled: false
+  city_ids: []
+  coverage_city_ids: []
+  province_codes: []
+  scope_type: national
+  agency_type: ministry
+  required_level: supplemental
+  expected_frequency: unknown
+  is_valid: true
+  parser_version: '1'
+  discovery_method: configured_official_source
+  discovery_provider: configured_official_registry
+  official_domain_verified: true
+  health_status: pending_evaluation
+  health_reason: registered by jurisdictional scope bootstrap; crawl validation pending
+  robots_status: unknown
+  tls_status: unknown
+  redirect_chain: []
+  consecutive_failures: 0
+  jurisdiction_mapping_id: JURMAP_8B3F4B98F08E5633A7CF
+  approval_status: supplemental_scope_bootstrap
+  notes: Separate national/provincial source; never fanned out as a municipal source.
+- source_id: JURSRC_B2BE0E9E5208294082BF
+  source_name: 山东省住房和城乡建设厅 青岛市
+  domain: zjt.shandong.gov.cn
+  source_type: government
+  source_role: housing_department
+  official_status: official
+  seed_urls:
+  - http://zjt.shandong.gov.cn/col/col359043/index.html
+  list_page_urls:
+  - http://zjt.shandong.gov.cn/col/col359043/index.html
+  parser_adapter: generic_government
+  crawl_enabled: true
+  priority: 0
+  rate_limit: 0.5
+  recommended_enabled: false
+  city_ids: []
+  coverage_city_ids: []
+  province_codes:
+  - '37'
+  scope_type: provincial
+  agency_type: provincial_government
+  required_level: supplemental
+  expected_frequency: unknown
+  is_valid: true
+  parser_version: '1'
+  discovery_method: verified_source_scope_clone
+  discovery_provider: existing_verified_registry
+  official_domain_verified: true
+  health_status: pending_evaluation
+  health_reason: registered by jurisdictional scope bootstrap; crawl validation pending
+  robots_status: unknown
+  tls_status: unknown
+  redirect_chain: []
+  consecutive_failures: 0
+  jurisdiction_mapping_id: JURMAP_727A90556D6CB4B8F9C7
+  approval_status: supplemental_scope_bootstrap
+  notes: Separate national/provincial source; never fanned out as a municipal source.
+- source_id: JURSRC_33183946913D9DE4F29F
+  source_name: 省住房和城乡建设厅 - zfcxjst.hlj.gov.cn 省住房和城乡建设厅
+  domain: zfcxjst.hlj.gov.cn
+  source_type: government
+  source_role: housing_department
+  official_status: official
+  seed_urls:
+  - http://zfcxjst.hlj.gov.cn/zfcxjst/index.shtml
+  list_page_urls:
+  - http://zfcxjst.hlj.gov.cn/zfcxjst/index.shtml
+  parser_adapter: generic_government
+  crawl_enabled: true
+  priority: 0
+  rate_limit: 0.5
+  recommended_enabled: false
+  city_ids: []
+  coverage_city_ids: []
+  province_codes:
+  - '23'
+  scope_type: provincial
+  agency_type: provincial_government
+  required_level: supplemental
+  expected_frequency: unknown
+  is_valid: true
+  parser_version: '1'
+  discovery_method: verified_source_scope_clone
+  discovery_provider: existing_verified_registry
+  official_domain_verified: true
+  health_status: pending_evaluation
+  health_reason: registered by jurisdictional scope bootstrap; crawl validation pending
+  robots_status: unknown
+  tls_status: unknown
+  redirect_chain: []
+  consecutive_failures: 0
+  jurisdiction_mapping_id: JURMAP_C734495BE9B961AF82D2
+  approval_status: supplemental_scope_bootstrap
+  notes: Separate national/provincial source; never fanned out as a municipal source.
+- source_id: JURSRC_15D96C3ACC4CF60BE048
+  source_name: 黑龙江省自然资源厅 黑龙江省自然资源厅
+  domain: zrzyt.hlj.gov.cn
+  source_type: government
+  source_role: natural_resources_department
+  official_status: official
+  seed_urls:
+  - https://zrzyt.hlj.gov.cn/
+  list_page_urls:
+  - https://zrzyt.hlj.gov.cn/
+  parser_adapter: generic_government
+  crawl_enabled: true
+  priority: 0
+  rate_limit: 0.5
+  recommended_enabled: false
+  city_ids: []
+  coverage_city_ids: []
+  province_codes:
+  - '23'
+  scope_type: provincial
+  agency_type: provincial_government
+  required_level: supplemental
+  expected_frequency: unknown
+  is_valid: true
+  parser_version: '1'
+  discovery_method: verified_source_scope_clone
+  discovery_provider: existing_verified_registry
+  official_domain_verified: true
+  health_status: pending_evaluation
+  health_reason: registered by jurisdictional scope bootstrap; crawl validation pending
+  robots_status: unknown
+  tls_status: unknown
+  redirect_chain: []
+  consecutive_failures: 0
+  jurisdiction_mapping_id: JURMAP_0FACF5AE7E726B2B7FAC
+  approval_status: supplemental_scope_bootstrap
+  notes: Separate national/provincial source; never fanned out as a municipal source.
+- source_id: JURSRC_1238F243FFB50DA7CF8D
+  source_name: 合肥市_安徽省住房和城乡建设厅 合肥市_安徽省住房和城乡建设厅
+  domain: dohurd.ah.gov.cn
+  source_type: government
+  source_role: provident_fund_center
+  official_status: official
+  seed_urls:
+  - https://dohurd.ah.gov.cn/ztzl/gdzt/zfgjj30ncsp/hfs/index.html
+  list_page_urls:
+  - https://dohurd.ah.gov.cn/ztzl/gdzt/zfgjj30ncsp/hfs/index.html
+  parser_adapter: generic_government
+  crawl_enabled: true
+  priority: 0
+  rate_limit: 0.5
+  recommended_enabled: false
+  city_ids: []
+  coverage_city_ids: []
+  province_codes:
+  - '34'
+  scope_type: provincial
+  agency_type: provincial_government
+  required_level: supplemental
+  expected_frequency: unknown
+  is_valid: true
+  parser_version: '1'
+  discovery_method: verified_source_scope_clone
+  discovery_provider: existing_verified_registry
+  official_domain_verified: true
+  health_status: pending_evaluation
+  health_reason: registered by jurisdictional scope bootstrap; crawl validation pending
+  robots_status: unknown
+  tls_status: unknown
+  redirect_chain: []
+  consecutive_failures: 0
+  jurisdiction_mapping_id: JURMAP_69A52D0BB1BD6794DA6D
+  approval_status: supplemental_scope_bootstrap
+  notes: Separate national/provincial source; never fanned out as a municipal source.
+- source_id: JURSRC_6E72E84430837393503A
+  source_name: Xinjiang - 新疆维吾尔自治区住房和城乡建设厅 新疆维吾尔自治区住房和城乡建设厅
+  domain: zjt.xinjiang.gov.cn
+  source_type: government
+  source_role: housing_department
+  official_status: official
+  seed_urls:
+  - https://zjt.xinjiang.gov.cn/
+  list_page_urls:
+  - https://zjt.xinjiang.gov.cn/
+  parser_adapter: generic_government
+  crawl_enabled: true
+  priority: 0
+  rate_limit: 0.5
+  recommended_enabled: false
+  city_ids: []
+  coverage_city_ids: []
+  province_codes:
+  - '65'
+  scope_type: provincial
+  agency_type: provincial_government
+  required_level: supplemental
+  expected_frequency: unknown
+  is_valid: true
+  parser_version: '1'
+  discovery_method: verified_source_scope_clone
+  discovery_provider: existing_verified_registry
+  official_domain_verified: true
+  health_status: pending_evaluation
+  health_reason: registered by jurisdictional scope bootstrap; crawl validation pending
+  robots_status: unknown
+  tls_status: unknown
+  redirect_chain: []
+  consecutive_failures: 0
+  jurisdiction_mapping_id: JURMAP_5BA682D37E6E74679918
+  approval_status: supplemental_scope_bootstrap
+  notes: Separate national/provincial source; never fanned out as a municipal source.
+- source_id: JURSRC_8AC0255D4A59F469FE0B
+  source_name: Xinjiang - 新疆维吾尔自治区自然资源厅 新疆维吾尔自治区自然资源厅 新疆维吾尔自治区自然资源厅
+  domain: zrzyt.xinjiang.gov.cn
+  source_type: government
+  source_role: natural_resources_department
+  official_status: official
+  seed_urls:
+  - https://zrzyt.xinjiang.gov.cn/
+  list_page_urls:
+  - https://zrzyt.xinjiang.gov.cn/
+  parser_adapter: generic_government
+  crawl_enabled: true
+  priority: 0
+  rate_limit: 0.5
+  recommended_enabled: false
+  city_ids: []
+  coverage_city_ids: []
+  province_codes:
+  - '65'
+  scope_type: provincial
+  agency_type: provincial_government
+  required_level: supplemental
+  expected_frequency: unknown
+  is_valid: true
+  parser_version: '1'
+  discovery_method: verified_source_scope_clone
+  discovery_provider: existing_verified_registry
+  official_domain_verified: true
+  health_status: pending_evaluation
+  health_reason: registered by jurisdictional scope bootstrap; crawl validation pending
+  robots_status: unknown
+  tls_status: unknown
+  redirect_chain: []
+  consecutive_failures: 0
+  jurisdiction_mapping_id: JURMAP_44FCA763731F388A0E1A
+  approval_status: supplemental_scope_bootstrap
+  notes: Separate national/provincial source; never fanned out as a municipal source.
+- source_id: JURSRC_F3FF8AD134B1A4C4DE17
+  source_name: 在线服务-贵州省住房和城乡建设厅网站 在线服务-贵州省住房和城乡建设厅网站
+  domain: zfcxjst.guizhou.gov.cn
+  source_type: government
+  source_role: housing_department
+  official_status: official
+  seed_urls:
+  - http://zfcxjst.guizhou.gov.cn/zxfw
+  list_page_urls:
+  - http://zfcxjst.guizhou.gov.cn/zxfw
+  parser_adapter: generic_government
+  crawl_enabled: true
+  priority: 0
+  rate_limit: 0.5
+  recommended_enabled: false
+  city_ids: []
+  coverage_city_ids: []
+  province_codes:
+  - '52'
+  scope_type: provincial
+  agency_type: provincial_government
+  required_level: supplemental
+  expected_frequency: unknown
+  is_valid: true
+  parser_version: '1'
+  discovery_method: verified_source_scope_clone
+  discovery_provider: existing_verified_registry
+  official_domain_verified: true
+  health_status: pending_evaluation
+  health_reason: registered by jurisdictional scope bootstrap; crawl validation pending
+  robots_status: unknown
+  tls_status: unknown
+  redirect_chain: []
+  consecutive_failures: 0
+  jurisdiction_mapping_id: JURMAP_691A3A505B75646DEE11
+  approval_status: supplemental_scope_bootstrap
+  notes: Separate national/provincial source; never fanned out as a municipal source.
+- source_id: JURSRC_5943D58CE632B2CDED0A
+  source_name: 河北省自然资源厅 公开-河北省自然资源厅
+  domain: zrzy.hebei.gov.cn
+  source_type: government
+  source_role: municipal_government
+  official_status: official
+  seed_urls:
+  - https://zrzy.hebei.gov.cn/heb/gongk
+  list_page_urls:
+  - https://zrzy.hebei.gov.cn/heb/gongk
+  parser_adapter: generic_government
+  crawl_enabled: true
+  priority: 0
+  rate_limit: 0.5
+  recommended_enabled: false
+  city_ids: []
+  coverage_city_ids: []
+  province_codes:
+  - '13'
+  scope_type: provincial
+  agency_type: provincial_government
+  required_level: supplemental
+  expected_frequency: unknown
+  is_valid: true
+  parser_version: '1'
+  discovery_method: verified_source_scope_clone
+  discovery_provider: existing_verified_registry
+  official_domain_verified: true
+  health_status: pending_evaluation
+  health_reason: registered by jurisdictional scope bootstrap; crawl validation pending
+  robots_status: unknown
+  tls_status: unknown
+  redirect_chain: []
+  consecutive_failures: 0
+  jurisdiction_mapping_id: JURMAP_13D9CB89DEB52814118E
+  approval_status: supplemental_scope_bootstrap
+  notes: Separate national/provincial source; never fanned out as a municipal source.
+- source_id: JURSRC_C741EB4C51BD7ED74A48
+  source_name: 锦州市2025年自然资源工作会议召开 - zrzy.ln.gov.cn 锦州市2025年自然资源工作会议召开
+  domain: zrzy.ln.gov.cn
+  source_type: government
+  source_role: natural_resources_department
+  official_status: official
+  seed_urls:
+  - https://zrzy.ln.gov.cn/zrzy/ywbb/sxdt/2025031115172845569/index.shtml
+  list_page_urls:
+  - https://zrzy.ln.gov.cn/zrzy/ywbb/sxdt/2025031115172845569/index.shtml
+  parser_adapter: generic_government
+  crawl_enabled: true
+  priority: 0
+  rate_limit: 0.5
+  recommended_enabled: false
+  city_ids: []
+  coverage_city_ids: []
+  province_codes:
+  - '21'
+  scope_type: provincial
+  agency_type: provincial_government
+  required_level: supplemental
+  expected_frequency: unknown
+  is_valid: true
+  parser_version: '1'
+  discovery_method: verified_source_scope_clone
+  discovery_provider: existing_verified_registry
+  official_domain_verified: true
+  health_status: pending_evaluation
+  health_reason: registered by jurisdictional scope bootstrap; crawl validation pending
+  robots_status: unknown
+  tls_status: unknown
+  redirect_chain: []
+  consecutive_failures: 0
+  jurisdiction_mapping_id: JURMAP_7A03B9555800CA4BAF3E
+  approval_status: supplemental_scope_bootstrap
+  notes: Separate national/provincial source; never fanned out as a municipal source.

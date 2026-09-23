@@ -129,6 +129,10 @@ class CrawlItem(BaseModel):
     canonical_url: str
     status: Literal["pending", "fetched", "unchanged", "failed", "blocked"] = "pending"
     city_id: str | None = None
+    jurisdiction_level: str | None = None
+    jurisdiction_scope_type: str | None = None
+    jurisdiction_province_codes_json: str | None = None
+    jurisdiction_province_name: str | None = None
     query_year: int | None = None
     keyword_group: str | None = None
     retry_count: int = 0
