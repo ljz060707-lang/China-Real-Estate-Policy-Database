@@ -40,7 +40,7 @@ Archive-First 分四级：L1 抓取 Raw、附件与解析，L2 身份与 Canonic
 ## 文件和运行入口
 
 - 仓库 `src/policydb/` 管 Python 数据模型、抓取、治理、导入导出与读取契约。历史 Dashboard 的入口在 `app/`，调度和运维入口在 `scripts/`，数据库迁移与测试在 `migrations/` 和 `tests/`。
-- 现行本机环境由独立代码树与数据树组成。在 Windows 部署中，`policy-database` 是代码根，数据根含 `database/policydb.duckdb`、历史资料和 `PolicyHub/`。后者的 `main_agent.py`、`capture_pipeline.py`、`producer_contract.json`、`published_reader.mjs` 和 `vite.sql-preview.config.mjs` 对应交接、归档与 SQL 读面。
+- 现行本机环境由独立代码树与数据树组成。在 Windows 部署中，`policy-database` 是代码根，数据根含数据库快照、历史资料和 `PolicyHub/`。旧交接中的固定 DuckDB 文件路径属于历史定位线索。当前发布读取从 `PolicyHub` 的正式指针和 SQL 封存核对，Canonical 写入位置需从实际 owner 配置和原生回执确认。后者的 `main_agent.py`、`capture_pipeline.py`、`producer_contract.json`、`published_reader.mjs` 和 `vite.sql-preview.config.mjs` 对应交接、归档与 SQL 读面。
 - 数据根之外保留 Receiver、Publisher、维护证据及版本恢复资料。维护批次使用自身的冻结范围、原生回执及校验结果；截至本文日期，一部分本机实现及维护材料随工作区定位，公开 Git 仓库描述其接口。
 - 按现行工作区的接续说明定位原角色与最新回执。开发先检查相关 CodeGraph 模块、领域规则和既有测试。数据模型变更同步更新字典、迁移和测试；发布相关改动另核发布守卫和提交后的实际读回。
 - 旧版模块说明见 [架构文档](ARCHITECTURE.md)、[数据模型](data_model.md) 和 [E 盘迁移记录](MIGRATION_E_DRIVE.md)。涉及当前运行身份时，以实际监听、进程、当前指针和原回执交叉核对。
